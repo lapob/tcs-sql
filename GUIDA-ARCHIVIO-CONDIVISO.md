@@ -93,6 +93,15 @@ Tutto è dentro `D:\TopCashSQL`:
 `data` (database e backup) · `app` (programma Windows) · `server-app` / `server-update` (server) · `android` (app Android) · `src`, `server` (codice) · `.tools` (Gradle, Android SDK, librerie) · `.runtime` (cache e file temporanei, si può svuotare).
 Fuori restano solo il servizio Windows, la regola del firewall e il collegamento sul Desktop, che puntano a questa cartella.
 
+## Versioni del progetto (Git)
+
+Il codice è versionato con Git portatile (`.tools\git`): ogni modifica può essere confrontata o annullata.
+```
+powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\versioni.ps1                      (storico)
+powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\versioni.ps1 -Salva "cosa è cambiato"
+```
+Lo storico contiene solo codice, script e guide: **database, backup, chiavi e password non vengono mai salvati**. Lo storico resta su questo PC (nessun invio online).
+
 ## Dopo questo aggiornamento
 
 - L'app Windows ora tiene la sua cache dentro `D:\TopCashSQL\.runtime`: al primo avvio **accedi di nuovo** (server e, sulla postazione, MY Zucchetti). Le vecchie cache in `C:\Users\lapob\AppData\Local\TopCashStudio` non servono più e si possono eliminare.
