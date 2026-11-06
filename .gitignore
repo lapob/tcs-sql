@@ -1,0 +1,34 @@
+# Customer data and secrets: NEVER in version control
+# (database, backups, settings with the sync token, session keys, Android signing key)
+/data/
+/_backup-originale/
+android/topcash-release.keystore
+android/keystore-password.txt
+*.keystore
+*.jks
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+
+# Tools, caches, temporary files (re-creatable)
+/.tools/
+/.runtime/
+/.claude/
+
+# Build output and published apps (rebuilt from source)
+**/bin/
+**/obj/
+/app/
+/app-update/
+/server-app/
+/server-update/
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+android/legacy-webview/build/
+*.apk
+*.apk.idsig
+*.aab

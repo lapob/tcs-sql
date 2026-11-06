@@ -1,0 +1,20 @@
+{
+  "name": "Top Cash Studio",
+  "short_name": "Top Cash",
+  "description": "Clienti, licenze, scadenze e ordini Zucchetti di Top Cash Service S.r.l.",
+  "lang": "it",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f6f6f8",
+  "theme_color": "#0a6bda",
+  "icons": [
+    { "src": "assets/tcs-app.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
+    { "src": "assets/tcs-app@2x.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Clienti", "url": "./#clients" },
+    { "name": "Scadenze", "url": "./#expiry" }
+  ]
+}

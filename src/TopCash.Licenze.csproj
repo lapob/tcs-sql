@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>TopCash.Licenze</AssemblyName>
+    <Version>1.0.0</Version>
+    <ApplicationIcon>topcash.ico</ApplicationIcon>
+    <!-- Startup & runtime performance -->
+    <TieredPGO>true</TieredPGO>
+    <TieredCompilation>true</TieredCompilation>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <SatelliteResourceLanguages>it</SatelliteResourceLanguages>
+    <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>    <!-- Only Windows native libraries (drops Linux/macOS/WASM SQLite binaries) -->
+    <RuntimeIdentifiers>win-x64;win-arm64;win-x86</RuntimeIdentifiers>
+    <Product>Top Cash Studio</Product>
+    <Company>Top Cash Service S.r.l.</Company>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
+    <PackageReference Include="MySqlConnector" Version="2.4.0" />
+    <Content Include="ui\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Resource Include="topcash.ico" />
+  </ItemGroup>
+</Project>

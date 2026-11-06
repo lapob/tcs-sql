@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>TopCash.Server</RootNamespace>
+    <AssemblyName>TopCash.Server</AssemblyName>
+    <Version>1.0.0</Version>
+    <Product>Top Cash Studio Server</Product>
+    <Company>Top Cash Service S.r.l.</Company>
+    <ApplicationIcon>..\src\topcash.ico</ApplicationIcon>
+    <TieredPGO>true</TieredPGO>
+    <DefineConstants>$(DefineConstants);TOPCASH_SERVER</DefineConstants>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <SatelliteResourceLanguages>it</SatelliteResourceLanguages>
+    <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Same data layer as the Windows app: one source of truth for import rules and validation. -->
+    <Compile Include="..\src\Models.cs" Link="Shared\Models.cs" />
+    <Compile Include="..\src\Store.cs" Link="Shared\Store.cs" />
+    <Compile Include="..\src\Imports.cs" Link="Shared\Imports.cs" />
+    <Compile Include="..\src\Gestionale.cs" Link="Shared\Gestionale.cs" />
+    <Compile Include="..\src\Paths.cs" Link="Shared\Paths.cs" />
+    <Content Include="..\src\ui\**\*" LinkBase="ui" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.0" />
+  </ItemGroup>
+</Project>
