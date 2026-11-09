@@ -3,8 +3,8 @@
    App shell: network-first (code is always fresh when online) with cache fallback.
    /api/session and /api/state: network-first, last good copy kept for offline reading.
    Everything else under /api is never cached. */
-const SHELL='tcs-shell-v5',API='tcs-api';
-const SHELL_FILES=['./','index.html','app.js','warehouse.js','accounting.js','report.js','styles.css','manifest.webmanifest','assets/tcs-app.png','assets/tcs-app@2x.png','assets/tcs-logo.png'];
+const SHELL='tcs-shell-v6',API='tcs-api';
+const SHELL_FILES=['./','index.html','app.js','warehouse.js','accounting.js','report.js','styles.css','theme.css','manifest.webmanifest','assets/tcs-app.png','assets/tcs-app@2x.png','assets/tcs-logo.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(SHELL).then(c=>c.addAll(SHELL_FILES)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==SHELL&&k!==API).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',e=>{

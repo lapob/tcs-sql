@@ -1,0 +1,133 @@
+/* Top Cash Studio — visual layer 3.0 ("Luce")
+   Loaded after styles.css: it only restyles (colour, light, depth, motion). Sizes and layout stay in styles.css,
+   so the redesign cannot introduce overlaps. Modern CSS only where it degrades gracefully:
+   OKLCH colours, color-mix, @property, linear() springs, view transitions, @starting-style. */
+
+:root{
+ /* neutral surfaces with a cool, very light tint of the brand blue */
+ --bg:oklch(97.6% .006 255);--bg-2:oklch(95.4% .008 255);
+ --surface:oklch(100% 0 0);--surface-2:oklch(98.4% .004 255);
+ --glass:oklch(100% 0 0 / .66);
+ --line:oklch(25% .03 260 / .075);--line-2:oklch(25% .03 260 / .13);
+ --text:oklch(21% .025 265);--text-2:oklch(45% .025 265);--text-3:oklch(62% .02 265);
+ --accent:oklch(55% .19 255);--accent-2:oklch(40% .15 262);
+ --accent-soft:oklch(55% .19 255 / .09);--accent-ring:oklch(55% .19 255 / .3);
+ --glow:oklch(62% .2 255 / .16);
+ --shadow-sm:0 1px 1px oklch(20% .04 260 / .04),0 1px 3px oklch(20% .04 260 / .04);
+ --shadow:0 1px 2px oklch(20% .04 260 / .05),0 10px 28px -12px oklch(25% .06 260 / .14);
+ --shadow-lg:0 2px 6px oklch(20% .04 260 / .06),0 34px 70px -24px oklch(25% .08 260 / .32);
+ --hl:inset 0 1px 0 oklch(100% 0 0 / .9); /* top highlight: surfaces look lit from above */
+ /* motion tokens */
+ --spring-soft:linear(0,.006,.025 2.8%,.101 6.1%,.539 18.9%,.721 25.3%,.849 31.5%,.937 38.1%,.968 41.8%,.991 45.7%,1.006 50.1%,1.015 55%,1.017 63.9%,1.001 85.7%,1);
+ --out:cubic-bezier(.16,1,.3,1);
+ --r-lg:20px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+ --bg:oklch(15.5% .012 265);--bg-2:oklch(18% .014 265);--surface:oklch(20% .015 265);--surface-2:oklch(22.5% .016 265);
+ --glass:oklch(20% .015 265 / .62);--line:oklch(100% 0 0 / .07);--line-2:oklch(100% 0 0 / .12);
+ --text:oklch(95% .008 265);--text-2:oklch(76% .015 265);--text-3:oklch(60% .018 265);
+ --accent:oklch(70% .16 252);--accent-2:oklch(58% .19 258);--accent-soft:oklch(70% .16 252 / .13);--accent-ring:oklch(70% .16 252 / .36);
+ --glow:oklch(70% .17 252 / .14);
+ --shadow-sm:0 1px 2px oklch(0% 0 0 / .3);--shadow:0 1px 2px oklch(0% 0 0 / .35),0 14px 34px -14px oklch(0% 0 0 / .65);
+ --shadow-lg:0 2px 8px oklch(0% 0 0 / .4),0 40px 80px -24px oklch(0% 0 0 / .8);
+ --hl:inset 0 1px 0 oklch(100% 0 0 / .06);}}
+:root[data-theme="dark"]{
+ --bg:oklch(15.5% .012 265);--bg-2:oklch(18% .014 265);--surface:oklch(20% .015 265);--surface-2:oklch(22.5% .016 265);
+ --glass:oklch(20% .015 265 / .62);--line:oklch(100% 0 0 / .07);--line-2:oklch(100% 0 0 / .12);
+ --text:oklch(95% .008 265);--text-2:oklch(76% .015 265);--text-3:oklch(60% .018 265);
+ --accent:oklch(70% .16 252);--accent-2:oklch(58% .19 258);--accent-soft:oklch(70% .16 252 / .13);--accent-ring:oklch(70% .16 252 / .36);
+ --glow:oklch(70% .17 252 / .14);
+ --shadow-sm:0 1px 2px oklch(0% 0 0 / .3);--shadow:0 1px 2px oklch(0% 0 0 / .35),0 14px 34px -14px oklch(0% 0 0 / .65);
+ --shadow-lg:0 2px 8px oklch(0% 0 0 / .4),0 40px 80px -24px oklch(0% 0 0 / .8);
+ --hl:inset 0 1px 0 oklch(100% 0 0 / .06);}
+
+body{text-rendering:optimizeLegibility}
+
+/* ── ambient light: a soft grid fading into the page + slow aurora (GPU-only transforms) */
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+ background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:44px 44px;
+ mask-image:radial-gradient(ellipse 70% 55% at 60% 0%,#000 0%,transparent 75%);opacity:.55}
+
+/* ── surfaces: lit top edge, hairline border, depth on hover */
+.card,.sidebar,.drawer,.modal-box,.cmd-box{box-shadow:var(--hl),var(--shadow)}
+.card{position:relative;isolation:isolate;transition:box-shadow .35s var(--out),border-color .35s,transform .5s var(--spring-soft)}
+/* pointer spotlight: a soft light follows the cursor inside cards (position set by app.js, pure paint) */
+.card::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:-1;opacity:0;transition:opacity .4s;
+ background:radial-gradient(420px circle at var(--mx,50%) var(--my,0%),var(--glow),transparent 60%)}
+@media (hover:hover){.card.lit::before{opacity:1}.card.lit{border-color:color-mix(in srgb,var(--accent) 22%,var(--line))}}
+
+/* ── headings */
+.hero h1{font-weight:680;letter-spacing:-.04em}
+.hero h1 .grad{background:linear-gradient(100deg,var(--brand-red) 0%,var(--accent) 38%,var(--accent-2) 70%,var(--brand-red) 100%);background-size:220% 100%;
+ -webkit-background-clip:text;background-clip:text;animation:gradflow 9s ease-in-out infinite alternate}
+@keyframes gradflow{to{background-position:100% 0}}
+.card h2{font-weight:650}
+
+/* ── KPI: big tabular numbers, tone bar on the left edge */
+.kpi-value{font-weight:700;letter-spacing:-.045em}
+.kpi .kpi-icon{box-shadow:var(--hl);transition:transform .55s var(--spring)}
+.kpi:hover .kpi-icon{transform:rotate(-8deg) scale(1.08)}
+.kpi:hover{transform:translateY(-3px)}
+
+/* ── sidebar: glass, accent rail on the active item */
+.sidebar{backdrop-filter:blur(28px) saturate(1.7)}
+.nav-indicator{box-shadow:var(--hl),var(--shadow-sm)}
+.nav-indicator::before{content:"";position:absolute;left:-1px;top:9px;bottom:9px;width:3px;border-radius:3px;background:linear-gradient(var(--accent),var(--accent-2))}
+.nav-item svg{transition:transform .45s var(--spring)}
+.nav-item:hover svg{transform:scale(1.1)}
+.nav-item.active span{font-weight:600}
+
+/* ── buttons: tactile press, light sweep on the accent button */
+.btn{box-shadow:var(--hl),var(--shadow-sm);transition:transform .45s var(--spring),box-shadow .25s,background-color .2s,border-color .2s,color .2s}
+.btn:active{transform:scale(.96);transition-duration:.08s}
+.btn.ghost,.btn.ghost:hover{box-shadow:none}
+.btn.accent{position:relative;overflow:hidden;isolation:isolate;box-shadow:inset 0 1px 0 oklch(100% 0 0 / .25),0 8px 20px -8px var(--accent-ring)}
+.btn.accent::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(105deg,transparent 35%,oklch(100% 0 0 / .28) 50%,transparent 65%);transform:translateX(-120%);transition:transform .8s var(--out)}
+.btn.accent:hover::after{transform:translateX(120%)}
+.btn.primary{box-shadow:inset 0 1px 0 oklch(100% 0 0 / .14),var(--shadow)}
+
+/* ── inputs */
+.search,.input,.select,.textarea{transition:border-color .2s,box-shadow .25s var(--out),background-color .2s}
+.search:focus-within,.input:focus,.select:focus,.textarea:focus{box-shadow:0 0 0 4px var(--accent-soft),0 6px 18px -10px var(--accent-ring)}
+.search:focus-within svg{color:var(--accent)}
+
+/* ── tables: accent marker slides in on the hovered row */
+tbody tr>td:first-child{position:relative}
+tbody tr[data-client]>td:first-child::before,tbody tr[data-int]>td:first-child::before,tbody tr[data-due]>td:first-child::before,tbody tr[data-art]>td:first-child::before{
+ content:"";position:absolute;left:0;top:22%;bottom:22%;width:3px;border-radius:3px;background:var(--accent);transform:scaleY(0);transition:transform .35s var(--spring)}
+tbody tr:hover>td:first-child::before{transform:scaleY(1)}
+tbody tr:hover{background:color-mix(in srgb,var(--accent) 4%,var(--surface-2))}
+th{letter-spacing:.02em;text-transform:uppercase;font-size:10.5px}
+
+/* ── badges & marks */
+.badge{box-shadow:inset 0 0 0 1px color-mix(in srgb,currentColor 14%,transparent)}
+.mark{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--h,#5b5bf0) 18%,transparent)}
+
+/* ── charts: rounded bars with a lit top */
+.bar i{background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 92%,white),color-mix(in srgb,var(--accent) 40%,transparent));box-shadow:inset 0 1px 0 oklch(100% 0 0 / .35)}
+.bar:hover i{filter:brightness(1.12) saturate(1.1)}
+.bar i{transition:filter .2s}
+
+/* ── overlays: blur + spring, entering from where they belong */
+.modal{background:oklch(18% .03 265 / .32);backdrop-filter:blur(8px) saturate(1.2)}
+.modal-box{animation:popin .55s var(--spring) both}
+@keyframes popin{from{opacity:0;transform:translateY(12px) scale(.94);filter:blur(4px)}}
+.drawer{animation:drawin .6s var(--spring-soft) both}
+@keyframes drawin{from{transform:translateX(104%)}}
+.toast{backdrop-filter:blur(10px);box-shadow:var(--shadow-lg)}
+
+/* ── page change: a soft blur-through cross-fade (view transitions) */
+::view-transition-old(main-content){animation:vtout .16s var(--out) both}
+::view-transition-new(main-content){animation:vtin .5s var(--spring-soft) both}
+@keyframes vtout{to{opacity:0;filter:blur(3px);transform:scale(.995)}}
+@keyframes vtin{from{opacity:0;filter:blur(4px);transform:translateY(10px)}}
+.anim .reveal{animation:risein .6s var(--spring-soft) both;animation-delay:min(calc(var(--i,0)*40ms),320ms)}
+@keyframes risein{from{opacity:0;transform:translateY(16px) scale(.985)}}
+
+/* ── scrollbars & selection */
+::selection{background:color-mix(in srgb,var(--accent) 28%,transparent)}
+*{scrollbar-color:var(--line-2) transparent}
+
+@media (prefers-reduced-motion:reduce){.hero h1 .grad{animation:none}.card::before{display:none}}
+@media (max-width:860px){body::before{background-size:32px 32px;opacity:.4}}
+@media print{body::before,.card::before{display:none}}

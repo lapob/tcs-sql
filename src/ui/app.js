@@ -596,6 +596,11 @@ let vt=null;
 function transition(fn){if(!document.startViewTransition||reduced||document.hidden){fn();return;}
  let done=false;const once=()=>{if(!done){done=true;fn();}};setTimeout(once,350); // never block navigation if the window is not painting
  vt?.skipTransition();const t=vt=document.startViewTransition(once);for(const p of[t.ready,t.finished,t.updateCallbackDone])p.catch(()=>{});t.finished.finally(()=>{if(vt===t)vt=null;});}
+// ── pointer spotlight on cards (theme.css): one passive listener, at most one style write per frame
+{let lit=null,px=0,py=0,raf=0;
+ const paint=()=>{raf=0;if(!lit)return;const r=lit.getBoundingClientRect();lit.style.setProperty('--mx',(px-r.left)+'px');lit.style.setProperty('--my',(py-r.top)+'px');};
+ document.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse')return;const c=e.target.closest?.('.card');if(c!==lit){lit?.classList.remove('lit');lit=c;c?.classList.add('lit');}px=e.clientX;py=e.clientY;if(lit&&!raf)raf=requestAnimationFrame(paint);},{passive:true});
+ document.addEventListener('pointerleave',()=>{lit?.classList.remove('lit');lit=null;});}
 function moveIndicator(){const a=$('.nav-item.active'),ind=$('.nav-indicator');if(!a){ind.style.opacity=0;return;}ind.style.opacity=1;ind.style.transform=`translateY(${a.offsetTop}px)`;}
 function countUp(){if(reduced)return;$$('[data-count]').forEach(el=>{const to=+el.dataset.count;if(!to)return;const t0=performance.now(),dur=600;const step=t=>{const k=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-k,4);el.textContent=fmt(Math.round(to*e));if(k<1)requestAnimationFrame(step);};requestAnimationFrame(step);});}
 function bind(){
