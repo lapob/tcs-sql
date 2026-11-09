@@ -90,6 +90,16 @@ Ogni movimento resta nel registro con utente, data e note.
 
 **Da MastroSQL** (Impostazioni → *Importa da MastroSQL*): vengono importati articoli, categorie e fornitori; spuntando *Allinea anche le giacenze* le quantità di Mastro diventano quelle di partenza (registrate come rettifiche, quindi tracciate). Da quel momento il magazzino operativo è Top Cash Studio.
 
+## 6-bis. Contabilità
+
+Menu **Contabilità** (PC, browser; su Android in *Altro*), per **tutti** gli utenti. I dati vengono da MastroSQL con *Importa da MastroSQL* (sola lettura: Mastro resta il programma di contabilità e le fatture si emettono sempre da Mastro).
+
+- **Riepilogo**: fatturato dell'anno (imponibile, note di credito dedotte) con il confronto con lo stesso periodo dell'anno prima, importo da incassare, **scaduto**, pagamenti ai fornitori nei prossimi 30 giorni e grafico degli ultimi 12 mesi.
+- **Da incassare**: scadenzario clienti. Apri una rata per segnarla come **Sollecitato**, **Promesso**, **Incassato** o **Contestato** con una nota, oppure per preparare l'**email di sollecito** già compilata. Stato e note sono condivisi con il team e **restano anche dopo ogni nuova importazione**.
+- **Fatture**, **Da pagare** (fornitori) e **Clienti** (chi ha importi scaduti in cima).
+- Nella **scheda cliente** c'è la sezione *Contabilità*: fatturato, da incassare, scaduto, saldo contabile di Mastro e rate aperte.
+- Ufficio e amministratore possono esportare **fatture** e **scadenze aperte** in CSV.
+
 ## 7. Rapportino firmato dal cliente
 
 A fine lavoro, nell'intervento premi **Firma e rapportino** (PC/browser) o *Fai firmare il rapportino al cliente* (Android):
@@ -126,17 +136,17 @@ Il codice è versionato con Git portatile (`.tools\git`): ogni modifica può ess
 powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\versioni.ps1                      (storico)
 powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\versioni.ps1 -Salva "cosa è cambiato"
 ```
-Lo storico contiene solo codice, script e guide: **database, backup, chiavi e password non vengono mai salvati**. Lo storico resta su questo PC (nessun invio online).
+Lo storico contiene solo codice, script e guide: **database, backup, chiavi e password non vengono mai salvati**. Lo storico è salvato su questo PC e, quando pubblichi, anche nel repository **privato** GitHub `lapob/tcs-sql`.
 
-## 6-bis. Contabilità
+### Release su GitHub (download per i colleghi)
 
-Menu **Contabilità** (PC, browser; su Android in *Altro*), per **tutti** gli utenti. I dati vengono da MastroSQL con *Importa da MastroSQL* (sola lettura: Mastro resta il programma di contabilità e le fatture si emettono sempre da Mastro).
-
-- **Riepilogo**: fatturato dell'anno (imponibile, note di credito dedotte) con il confronto con lo stesso periodo dell'anno prima, importo da incassare, **scaduto**, pagamenti ai fornitori nei prossimi 30 giorni e grafico degli ultimi 12 mesi.
-- **Da incassare**: scadenzario clienti. Apri una rata per segnarla come **Sollecitato**, **Promesso**, **Incassato** o **Contestato** con una nota, oppure per preparare l'**email di sollecito** già compilata. Stato e note sono condivisi con il team e **restano anche dopo ogni nuova importazione**.
-- **Fatture**, **Da pagare** (fornitori) e **Clienti** (chi ha importi scaduti in cima).
-- Nella **scheda cliente** c'è la sezione *Contabilità*: fatturato, da incassare, scaduto, saldo contabile di Mastro e rate aperte.
-- Ufficio e amministratore possono esportare **fatture** e **scadenze aperte** in CSV.
+Le versioni pronte (APK Android, app Windows, aggiornamento server) si pubblicano come **Release** del repository privato:
+```
+powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\pubblica-release.ps1 -Versione 2.3.0
+```
+Lo script invia il codice, crea il pacchetto e la Release con i file da scaricare (controlla che nei pacchetti non ci siano database, chiavi o impostazioni di Mastro).
+La prima volta accedi a GitHub con `D:\TopCashSQL\.tools\ghin\gh.exe auth login` (l'accesso è salvato in `.tools\gh-config`, fuori da Git).
+Il repository è privato: per scaricare, ogni collega deve avere un account GitHub **invitato** (*Settings → Collaborators* del repository). In alternativa i colleghi possono continuare a ricevere l'APK direttamente da te.
 
 ## Dopo questo aggiornamento
 
