@@ -193,6 +193,19 @@ app.MapPost("/api/interventions/{id}/delete",(HttpContext ctx,string id)=>
  try{store.DeleteIntervention(id);store.Log("edit",$"{Who(ctx)} ha eliminato un intervento.");hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}
 }).RequireAuthorization("export");
 
+// ───────────────────────── intervention report (signature + PDF)
+app.MapPost("/api/interventions/{id}/sign",(HttpContext ctx,string id,SignRequest r)=>
+{
+ byte[] png;try{png=Convert.FromBase64String((r?.Signature??"").Split(',').Last());}catch{return Bad("Firma non valida.");}
+ try{var i=store.SignIntervention(id,r!.Signer??"",r.Hours??"",png,r.Close,Who(ctx));hub.Changed();return Results.Ok(i);}catch(InvalidDataException ex){return Bad(ex.Message);}
+}).RequireAuthorization("read");
+app.MapPost("/api/interventions/{id}/unsign",(HttpContext ctx,string id)=>{try{store.UnsignIntervention(id,Who(ctx));hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("export");
+app.MapGet("/api/interventions/{id}/report.pdf",(string id)=>
+{
+ var i=store.Interventions().FirstOrDefault(x=>x.Id==id);if(i==null)return Results.NotFound();
+ try{return Results.File(InterventionReport.Build(store,id),"application/pdf",InterventionReport.FileName(i));}catch(InvalidDataException ex){return Bad(ex.Message);}
+}).RequireAuthorization("read");
+
 // ───────────────────────── warehouse
 bool CanManage(HttpContext ctx)=>ctx.User.IsInRole(Roles.Admin)||ctx.User.IsInRole(Roles.Office);
 app.MapPost("/api/warehouse/movements",(HttpContext ctx,MovementsRequest r)=>
@@ -265,4 +278,5 @@ record BatchRequest(string Kind,string Product,string Scope,List<string> Headers
 record LogRequest(string Kind,string Message);
 record ProgressRequest(bool Running,bool Connected,string Text);
 record MovementsRequest(List<Movement> Movements);
+record SignRequest(string? Signer,string? Hours,string? Signature,bool Close);
 record InventoryRequest(string Warehouse,Dictionary<string,decimal> Counted);

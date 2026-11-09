@@ -24,6 +24,9 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Draw
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -117,7 +120,7 @@ private val itabs = listOf("Da fare", "Chiusi", "Storico Mastro", "Tutti")
                 }
                 if (showClient) Text(x.clientName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
                 Text(listOf(x.date?.let { Dates.short(it) + " · " + Dates.relative(Dates.daysFromToday(it)) }, x.i.technician.takeIf { it.isNotBlank() }, if (x.i.priority != "Normale") x.i.priority else null,
-                    if (x.i.source == "mastro") "storico Mastro" else null).filterNotNull().joinToString(" · "),
+                    if (x.i.source == "mastro") "storico Mastro" else null, x.i.reportNo.takeIf { x.i.signedAt.isNotBlank() }?.let { "firmato n. $it" }).filterNotNull().joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
             }
         }
@@ -128,7 +131,10 @@ private val itabs = listOf("Da fare", "Chiusi", "Storico Mastro", "Tutti")
 @Composable fun InterventionEditor(vm: AppViewModel, a: Archive, req: EditorRequest, onDismiss: () -> Unit, onOpenClient: (String) -> Unit) {
     val me by vm.me.collectAsStateWithLifecycle()
     val existing = req.interventionId?.let { id -> a.interventions.firstOrNull { it.i.id == id } }
-    val ro = existing?.i?.source == "mastro"
+    val signed = existing?.i?.signedAt?.isNotBlank() == true
+    val ro = existing?.i?.source == "mastro" || signed
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var signing by remember { mutableStateOf<Intervention?>(null) }
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     var clientCode by remember { mutableStateOf(existing?.client?.code ?: req.clientCode.orEmpty()) }
@@ -145,10 +151,19 @@ private val itabs = listOf("Da fare", "Chiusi", "Storico Mastro", "Tutti")
     var confirmDelete by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     val close: () -> Unit = { scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss() } }
+    val current = { Intervention(id = existing?.i?.id.orEmpty(), clientCode = clientCode, clientName = clientQuery, date = date, machine = machine, title = title.trim(), work = work,
+        status = status, technician = tech.trim(), priority = priority, total = existing?.i?.total.orEmpty(), parts = parts, hours = existing?.i?.hours.orEmpty()) }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
-            Text(if (ro) "Intervento dallo storico Mastro" else if (existing != null) "Modifica intervento" else "Nuovo intervento", style = MaterialTheme.typography.headlineSmall)
+            Text(if (signed) "Rapportino n. ${existing!!.i.reportNo}" else if (ro) "Intervento dallo storico Mastro" else if (existing != null) "Modifica intervento" else "Nuovo intervento", style = MaterialTheme.typography.headlineSmall)
+            if (signed) existing!!.i.let { e ->
+                Row(Modifier.fillMaxWidth().padding(top = 10.dp).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.primaryContainer).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Verified, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text("  Firmato da ${e.signer} il ${Dates.short(Dates.parse(e.signedAt.take(10)))}${if (e.hours.isNotBlank()) " · " + e.hours.replace('.', ',') + " h" else ""}. Non è più modificabile.",
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            }
             Gap(14.dp)
             // client picker with live suggestions
             var menu by remember { mutableStateOf(false) }
@@ -193,18 +208,27 @@ private val itabs = listOf("Da fare", "Chiusi", "Storico Mastro", "Tutti")
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp)) }
             Gap(16.dp)
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (signed && me?.role != "tecnico") TextButton({ vm.unsignIntervention(existing!!.i.id); close() }) { Text("Annulla firma", color = MaterialTheme.colorScheme.error) }
                 if (existing != null && !ro && me?.role != "tecnico") TextButton({ confirmDelete = true }) { Icon(Icons.Rounded.Delete, null, tint = MaterialTheme.colorScheme.error); Text(" Elimina", color = MaterialTheme.colorScheme.error) }
                 if (clientCode.isNotEmpty()) TextButton({ onOpenClient(clientCode) }) { Text("Apri cliente") }
                 Box(Modifier.weight(1f))
-                if (ro) Button(close) { Text("Chiudi") }
+                if (signed) Button({ vm.shareReport(existing!!.i, ctx) }, shape = MaterialTheme.shapes.medium) { Icon(Icons.Rounded.Share, null); Text("  Invia PDF") }
+                else if (ro) Button(close) { Text("Chiudi") }
                 else Button({
                     saving = true
-                    vm.saveIntervention(Intervention(id = existing?.i?.id.orEmpty(), clientCode = clientCode, clientName = clientQuery, date = date, machine = machine, title = title.trim(), work = work,
-                        status = status, technician = tech.trim(), priority = priority, total = existing?.i?.total.orEmpty(), parts = parts)) { saving = false; close() }
+                    vm.saveIntervention(current()) { saving = false; close() }.invokeOnCompletion { saving = false }
                 }, enabled = !saving && clientCode.isNotEmpty() && title.isNotBlank(), shape = MaterialTheme.shapes.medium) { Text(if (saving) "Salvataggio…" else "Salva") }
+            }
+            // the customer signs on the spot: the current edits are saved first, then the pad opens
+            if (!ro) OutlinedButton({
+                saving = true
+                vm.saveIntervention(current(), quiet = true) { r -> signing = r }.invokeOnCompletion { saving = false }
+            }, Modifier.fillMaxWidth().padding(top = 10.dp).height(52.dp), enabled = !saving && clientCode.isNotEmpty() && title.isNotBlank(), shape = MaterialTheme.shapes.medium) {
+                Icon(Icons.Rounded.Draw, null); Text("  Fai firmare il rapportino al cliente")
             }
         }
     }
+    signing?.let { r -> SignatureSheet(vm, r, a.byCode[r.clientCode]?.name ?: r.clientName, onDismiss = { signing = null }) { s -> signing = null; close(); vm.shareReport(s, ctx) } }
     if (pickDate) {
         val st = rememberDatePickerState(initialSelectedDateMillis = (Dates.parse(date) ?: LocalDate.now()).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli())
         DatePickerDialog(onDismissRequest = { pickDate = false }, confirmButton = { TextButton({ st.selectedDateMillis?.let { date = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString() }; pickDate = false }) { Text("OK") } }) { DatePicker(st) }

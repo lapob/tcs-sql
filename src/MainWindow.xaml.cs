@@ -146,6 +146,15 @@ public partial class MainWindow : Window
     case "exportStock":case "exportReorder":
      var sp=new SaveFileDialog{Filter="CSV italiano|*.csv",FileName=(action=="exportStock"?"TopCash-giacenze-":"TopCash-proposta-ordine-")+DateTime.Today.ToString("yyyyMMdd")+".csv"};
      if(sp.ShowDialog(this)==true){File.WriteAllText(sp.FileName,action=="exportStock"?WarehouseReports.StockCsv(store):WarehouseReports.ReorderCsv(store),new UTF8Encoding(true));await Notify("File salvato.");}break;
+    case "signIntervention":
+     try{var b64=(root.GetProperty("signature").GetString()??"").Split(',').Last();var signed=store.SignIntervention(root.GetProperty("id").GetString()??"",root.GetProperty("signer").GetString()??"",root.GetProperty("hours").GetString()??"",Convert.FromBase64String(b64),root.GetProperty("close").GetBoolean(),Environment.UserName);
+      await Push();await Notify($"Rapportino n. {signed.ReportNo} firmato.");Post(new{type="signed",id=signed.Id,reportNo=signed.ReportNo});}catch(Exception ex) when(ex is InvalidDataException or FormatException){await Notify(ex.Message);}break;
+    case "unsignIntervention":
+     try{store.UnsignIntervention(root.GetProperty("id").GetString()??"",Environment.UserName);await Push();await Notify("Firma annullata: ora il rapportino si può modificare.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
+    case "reportPdf":
+     {var rid=root.GetProperty("id").GetString()??"";var rv=store.Interventions().FirstOrDefault(x=>x.Id==rid);if(rv==null)break;
+      var rp=new SaveFileDialog{Filter="PDF|*.pdf",FileName=InterventionReport.FileName(rv)};
+      if(rp.ShowDialog(this)==true){File.WriteAllBytes(rp.FileName,InterventionReport.Build(store,rid));Process.Start(new ProcessStartInfo(rp.FileName){UseShellExecute=true});}}break;
     case "interventionDelete":
      try{store.DeleteIntervention(root.GetProperty("id").GetString()??"");await Push();await Notify("Intervento eliminato.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
     case "hostInfo":Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,portalOpen=portal!=null});break;

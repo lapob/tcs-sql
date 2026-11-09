@@ -87,6 +87,19 @@ class Api(context: Context) {
     suspend fun saveMeta(code: String, meta: ClientMeta) { post("/api/meta", json.encodeToString(MetaRequest(code, meta))) }
     suspend fun saveIntervention(i: Intervention): Intervention = json.decodeFromString(post("/api/interventions", json.encodeToString(i)))
     suspend fun saveMovements(m: List<Movement>) { post("/api/warehouse/movements", json.encodeToString(MovementsRequest(m))) }
+    private fun enc(id: String) = java.net.URLEncoder.encode(id, "UTF-8").replace("+", "%20")
+    suspend fun signIntervention(id: String, r: SignRequest): Intervention = json.decodeFromString(post("/api/interventions/" + enc(id) + "/sign", json.encodeToString(r)))
+    suspend fun unsignIntervention(id: String) { post("/api/interventions/" + enc(id) + "/unsign") }
+    /** Downloads the numbered PDF report into [dir]; returns the file. */
+    suspend fun reportPdf(id: String, dir: java.io.File, name: String): java.io.File = withContext(Dispatchers.IO) {
+        try {
+            http.newCall(Request.Builder().url(url("/api/interventions/" + enc(id) + "/report.pdf")).get().build()).execute().use { r ->
+                if (!r.isSuccessful) throw ApiException(r.errorText(), r.code)
+                dir.mkdirs(); dir.listFiles()?.forEach { it.delete() } // keep only the latest report in the cache
+                java.io.File(dir, name).also { f -> f.outputStream().use { r.body.byteStream().copyTo(it) } }
+            }
+        } catch (e: ApiException) { throw e } catch (e: IOException) { throw ApiException("Server non raggiungibile") }
+    }
     suspend fun deleteIntervention(id: String) { post("/api/interventions/" + java.net.URLEncoder.encode(id, "UTF-8") + "/delete") }
 
     /** Returns null when the archive did not change (HTTP 304). */

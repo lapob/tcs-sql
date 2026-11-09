@@ -370,7 +370,7 @@ function machinesPage(){
 }
 // Intervention editor (modal form). History from Mastro opens read-only.
 function openIntervention(id,clientCode){
- const it=id?D.interventions.find(i=>i.id===id):null;const ro=it?.source==='mastro';
+ const it=id?D.interventions.find(i=>i.id===id):null;const signed=!!it?.signedAt;const ro=it?.source==='mastro'||signed;
  const c=it?.c||D.byCode.get(clientCode)||null;
  const n=new Date(),todayIso=`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; // local date, not UTC
  const v=it||{id:'',clientCode:c?.code||'',date:todayIso,title:'',work:'',status:'Aperto',priority:'Normale',technician:WEB&&me?me.name:'',machine:'',total:''};
@@ -379,7 +379,8 @@ function openIntervention(id,clientCode){
  const machOpts=cc=>{const cl=D.byCode.get(cc);return`<option value="">Nessuna macchina</option>`+(cl?.machines||[]).map(x=>`<option value="${esc(x.id)}"${x.id===v.machine?' selected':''}>${esc((x.model||'Macchina')+' · '+x.serial)}</option>`).join('');};
  const techs=[...new Set(D.interventions.map(i=>i.technician).filter(Boolean))];
  m.innerHTML=`<form class="modal-box wide" id="int-form" aria-label="Intervento">
-  <h3>${ro?'Intervento dallo storico Mastro':it?'Modifica intervento':'Nuovo intervento'}</h3>
+  <h3>${it?.source==='mastro'?'Intervento dallo storico Mastro':signed?'Rapportino n. '+esc(it.reportNo):it?'Modifica intervento':'Nuovo intervento'}</h3>
+  ${signed?`<div class="sign-banner">${icon('check')}<div><strong>Firmato da ${esc(it.signer)}</strong><small>${dTime(it.signedAt)} · rapportino n. ${esc(it.reportNo)} · non più modificabile</small></div></div>`:''}
   <label class="field">Cliente<input class="input" id="int-client" list="int-clients" value="${esc(c?c.name:'')}" placeholder="Scrivi per cercare un cliente…" ${ro?'disabled':''} required autocomplete="off"></label>
   <datalist id="int-clients">${D.clients.slice(0,3000).map(x=>`<option value="${esc(x.name)}">${esc([x.city,x.code.replace(/^0+/,'')].filter(Boolean).join(' · '))}</option>`).join('')}</datalist>
   <div class="form-row"><label class="field">Data<input class="input" type="date" name="date" value="${esc(v.date||'')}" ${ro?'disabled':''}></label><label class="field">Tecnico<input class="input" name="technician" list="int-techs" value="${esc(v.technician||'')}" maxlength="80" ${ro?'disabled':''}></label></div>
@@ -390,7 +391,7 @@ function openIntervention(id,clientCode){
   ${typeof partsSection==='function'?partsSection(it?.parts||[],ro,v.technician):''}
   <label class="field">Lavoro svolto / note<textarea class="textarea" name="work" maxlength="20000" ${ro?'disabled':''} placeholder="Descrizione del problema e del lavoro eseguito…">${esc(v.work||'')}</textarea></label>
   ${it?`<p class="muted" style="font-size:12px">${it.source==='mastro'?'Importato da MastroSQL'+(it.total&&it.total!=='0'?' · totale documento '+esc(it.total)+' €':''):`Creato ${it.created?dTime(it.created):''} ${it.createdBy?'da '+esc(it.createdBy):''}${it.updated&&it.updated!==it.created?` · modificato ${dTime(it.updated)} ${it.updatedBy?'da '+esc(it.updatedBy):''}`:''}`}</p>`:''}
-  <div class="btn-row">${it&&!ro?`<button type="button" class="btn ghost need-export" data-m="del" style="margin-right:auto;color:var(--bad)">Elimina</button>`:''}${c?`<button type="button" class="btn ghost" data-m="client">Apri cliente</button>`:''}<button type="button" class="btn ghost" data-m="0">${ro?'Chiudi':'Annulla'}</button>${ro?'':`<button class="btn accent" type="submit">${icon('check')}Salva</button>`}</div></form>`;
+  <div class="btn-row">${it&&it.source==='app'?(signed?`<button type="button" class="btn accent" data-m="pdf">${icon('download')}PDF rapportino</button><button type="button" class="btn ghost need-export" data-m="unsign">Annulla firma</button>`:`<button type="button" class="btn" data-m="sign">${icon('check')}Firma e rapportino</button>`):''}${it&&!ro?`<button type="button" class="btn ghost need-export" data-m="del" style="margin-right:auto;color:var(--bad)">Elimina</button>`:''}${c?`<button type="button" class="btn ghost" data-m="client">Apri cliente</button>`:''}<button type="button" class="btn ghost" data-m="0">${ro?'Chiudi':'Annulla'}</button>${ro?'':`<button class="btn accent" type="submit">${icon('check')}Salva</button>`}</div></form>`;
  document.body.append(m);hideTip();
  const form=m.querySelector('form');const clientInput=m.querySelector('#int-client');
  const resolve=()=>{const n=clientInput.value.trim();return D.clients.find(x=>x.name===n)||D.clients.find(x=>norm(x.name)===norm(n))||null;};
@@ -400,6 +401,9 @@ function openIntervention(id,clientCode){
  m.addEventListener('click',async e=>{const b=e.target.closest('[data-m]');if(e.target===m)return close();if(!b)return;
   if(b.dataset.m==='0')close();
   if(b.dataset.m==='client'){close();openClient(c.code);}
+  if(b.dataset.m==='pdf'){reportPdf(it.id);}
+  if(b.dataset.m==='unsign'){close();unsignReport(it);}
+  if(b.dataset.m==='sign'){close();openSignature({...it,c:it.c});}
   if(b.dataset.m==='del'){if(await ask({title:'Eliminare l’intervento?',text:'L’operazione non si può annullare.',ok:'Elimina',danger:true})){close();if(WEB)post('/api/interventions/'+encodeURIComponent(it.id)+'/delete').then(()=>toast('Intervento eliminato')).catch(x=>toast(x.message,'alert'));else send('interventionDelete',{id:it.id});}}});
  form.addEventListener('submit',e=>{e.preventDefault();if(ro)return;const cl=resolve();if(!cl){toast('Scegli un cliente dall’elenco','alert');clientInput.focus();return;}
   const f=Object.fromEntries(new FormData(form));

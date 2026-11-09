@@ -569,3 +569,17 @@ main{view-transition-name:main-content}
 [data-perf="lite"] .anim tbody tr.reveal{animation:none}
 [data-perf="lite"] .card,[data-perf="lite"] .btn{box-shadow:var(--shadow-sm)}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after,::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}.aurora{display:none}}
+
+/* Intervention report: signature pad */
+.sign-sum{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;padding:12px 14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--line)}
+.sign-sum small{display:block;font-size:11.5px;color:var(--text-3)}.sign-sum strong{font-weight:560;font-size:13px}
+.sign-pad{position:relative;height:200px;border-radius:16px;border:1.5px dashed var(--line-2);background:#fff;touch-action:none;overflow:hidden;transition:border-color .2s}
+.sign-pad canvas{position:absolute;inset:0;cursor:crosshair;touch-action:none}
+.sign-pad.signed{border-style:solid;border-color:var(--accent-ring)}
+.sign-hint{position:absolute;left:0;right:0;bottom:46%;text-align:center;color:#9aa0b4;font-size:13px;pointer-events:none;transition:opacity .25s}
+.sign-pad.signed .sign-hint{opacity:0}
+.sign-pad::after{content:"";position:absolute;left:24px;right:24px;bottom:42px;border-bottom:1px solid #d8dbe6;pointer-events:none}
+.sign-clear{position:absolute;right:8px;top:8px;background:rgba(255,255,255,.85)!important;color:#55566a!important}
+.sign-banner{display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:14px;background:var(--ok-soft);color:var(--ok)}
+.sign-banner strong{display:block;color:var(--text)}.sign-banner small{color:var(--text-2);font-size:12px}
+@media (max-width:760px){.sign-sum{grid-template-columns:1fr}.sign-pad{height:220px}}

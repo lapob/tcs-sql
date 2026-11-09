@@ -90,7 +90,17 @@ I tecnici registrano carichi, scarichi e trasferimenti; rettifiche, inventario e
 
 **Da MastroSQL** (Impostazioni → *Importa da MastroSQL*): vengono importati articoli, categorie e fornitori; spuntando *Allinea anche le giacenze* le quantità di Mastro diventano quelle di partenza (registrate come rettifiche, quindi tracciate). Da quel momento il magazzino operativo è Top Cash Studio.
 
-## 7. App Android
+## 7. Rapportino firmato dal cliente
+
+A fine lavoro, nell'intervento premi **Firma e rapportino** (PC/browser) o *Fai firmare il rapportino al cliente* (Android):
+1. scrivi le **ore lavorate** e il **nome di chi firma**;
+2. il cliente firma nel riquadro con il dito, la penna o il mouse;
+3. conferma: il rapportino riceve un **numero progressivo annuale** (es. `2026/0001`), l'intervento può essere chiuso in automatico e i ricambi vengono scaricati.
+
+Subito dopo puoi **scaricare il PDF** (PC) o **inviarlo** al cliente con WhatsApp, email o Drive (Android, *Invia PDF*). Il PDF contiene logo, dati Top Cash, cliente, macchina, lavoro svolto, ricambi, ore e firma.
+Un rapportino firmato **non è più modificabile**; solo ufficio e amministratore possono *Annullare la firma* (il numero resta lo stesso e l'operazione è registrata nella cronologia).
+
+## 8. App Android
 
 App **nativa** (Kotlin + Jetpack Compose, Material 3) — File: `D:\TopCashSQL\android\TopCash-Studio.apk`.
 
@@ -98,7 +108,7 @@ App **nativa** (Kotlin + Jetpack Compose, Material 3) — File: `D:\TopCashSQL\a
 2. Al primo avvio l'indirizzo `192.168.1.220` è già inserito: premi **Collega**.
 3. Accedi con il tuo utente (resta connesso).
 
-Home con indicatori, Clienti con ricerca e scheda completa (chiama, email, mappa, preferiti, promemoria, note), Interventi (crea, modifica, stati e priorità), Macchine e verificazioni, Scadenziario, Licenze, Ordini, tema chiaro/scuro. Si aggiorna in tempo reale e mostra gli ultimi dati anche senza rete.
+Home con indicatori, Clienti con ricerca e scheda completa (chiama, email, mappa, preferiti, promemoria, note), Interventi (crea, modifica, stati e priorità, ricambi, rapportino con firma e invio PDF), Magazzino con scanner, Macchine e verificazioni, Scadenziario, Licenze, Ordini, tema chiaro/scuro. Si aggiorna in tempo reale e mostra gli ultimi dati anche senza rete.
 
 Per ricompilare: `powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\android\build.ps1` (aggiungi `-Install` per installarla sul telefono collegato).
 **Conserva** `android\topcash-release.keystore` e `android\keystore-password.txt`: servono per gli aggiornamenti dell'app.
@@ -121,7 +131,7 @@ Lo storico contiene solo codice, script e guide: **database, backup, chiavi e pa
 ## Dopo questo aggiornamento
 
 - L'app Windows ora tiene la sua cache dentro `D:\TopCashSQL\.runtime`: al primo avvio **accedi di nuovo** (server e, sulla postazione, MY Zucchetti). Le vecchie cache in `C:\Users\lapob\AppData\Local\TopCashStudio` non servono più e si possono eliminare.
-- Esegui `aggiorna-server.ps1` per portare il server alla nuova versione (barre in vetro sfocato, file temporanei dentro `D:\TopCashSQL`).
+- Esegui `aggiorna-server.ps1` per portare il server alla nuova versione (magazzino, rapportino con firma e PDF, librerie con le correzioni di sicurezza).
 
 ## Aggiornare il server
 

@@ -25,6 +25,7 @@ public sealed partial class Store
    """;cmd.ExecuteNonQuery();
   InitGestionale(c);
   InitMagazzino(c);
+  InitRapportini(c);
  }
  public List<ClientRecord> Clients(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM clients";using var r=q.ExecuteReader();var list=new List<ClientRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<ClientRecord>(r.GetString(0))!);return list;}
  public List<OrderRecord> Orders(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM orders";using var r=q.ExecuteReader();var list=new List<OrderRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<OrderRecord>(r.GetString(0))!);return list;}
@@ -105,6 +106,22 @@ public sealed partial class Store
  }
  public void Log(string kind,string message){using var c=Open();using var q=c.CreateCommand();q.CommandText="INSERT INTO events(time,kind,message) VALUES($t,$k,$m)";q.Parameters.AddWithValue("$t",DateTimeOffset.Now.ToString("O"));q.Parameters.AddWithValue("$k",kind);q.Parameters.AddWithValue("$m",message);q.ExecuteNonQuery();}
  public void Backup(string path){using var source=Open();using var destination=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=path}.ToString());destination.Open();source.BackupDatabase(destination);}
+#if !TOPCASH_SERVER
+ /// A handwriting-like stroke rendered to PNG (WPF), used only by the self-test.
+ static byte[] TestSignature()
+ {
+  var v=new System.Windows.Media.DrawingVisual();
+  using(var dc=v.RenderOpen())
+  {
+   var geo=new System.Windows.Media.StreamGeometry();
+   using(var ctx=geo.Open()){ctx.BeginFigure(new(20,60),false,false);for(int x=20;x<380;x+=6)ctx.LineTo(new(x,60+28*Math.Sin(x/17.0)*Math.Cos(x/53.0)),true,true);}
+   dc.DrawGeometry(null,new System.Windows.Media.Pen(new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16,24,64)),3.2){StartLineCap=System.Windows.Media.PenLineCap.Round},geo);
+  }
+  var bmp=new System.Windows.Media.Imaging.RenderTargetBitmap(400,120,96,96,System.Windows.Media.PixelFormats.Pbgra32);bmp.Render(v);
+  var enc=new System.Windows.Media.Imaging.PngBitmapEncoder();enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+  using var ms=new MemoryStream();enc.Save(ms);return ms.ToArray();
+ }
+#endif
  public static void SelfTest(string folder)
  {
   var store=new Store(folder);var b=new SourceBatch("TEST",DateTimeOffset.Now.ToString("O"),true,["Codice Cliente","Cliente","Matricola","Nome prodotto","Scadenza","Blocco"],[["00001","Cliente di prova <script>","TEST-001","Test","30-11-2026","NO"]]);
@@ -157,6 +174,19 @@ public sealed partial class Store
   store.ImportMastro(new([mc],[],[],"t","test",[new("ROT-80","Rotolo carta 80mm","","Consumabili","PZ",0.5m,1.2m,22,"","",false,true,"","",""),new("NUOVO","Articolo Mastro","","","PZ",1,2,22,"","",false,true,"","","")],[new("ROT-80","1",90),new("NUOVO","1",4)],true),"test");
   if(Q("ROT-80","sede")!=90||Q("NUOVO","sede")!=4||Q("ROT-80",van.Id)!=20)throw new Exception("Allineamento giacenze Mastro");
   if(store.Articles().Single(a=>a.Code=="ROT-80").Barcode!="8001234567890")throw new Exception("Import Mastro ha cancellato il codice a barre");
+  // signed report: yearly number, lock, unsign/re-sign keeps the number, PDF
+#if !TOPCASH_SERVER
+  var sig=TestSignature();
+  var rv=store.SaveIntervention(new("","M15","Cliente Mastro","2026-11-09","","Sostituzione stampante fiscale","Sostituita la stampante termica guasta e verificato il collegamento con l'Agenzia delle Entrate.\nCliente istruito sull'uso.","Aperto","Mario","Alta","","","","","","",[new("ROT-80",2,van.Id,"")],"1.5"),"test");
+  try{store.SignIntervention(rv.Id,"Cliente","",[1,2,3],true,"test");throw new Exception("Firma non valida accettata");}catch(InvalidDataException){}
+  var signed=store.SignIntervention(rv.Id,"Mario Rossi","1,5",sig,true,"test");
+  if(!signed.ReportNo.EndsWith("/0001")||signed.Status!="Chiuso"||store.Signature(rv.Id)==null)throw new Exception("Firma rapportino");
+  try{store.SaveIntervention(signed with{Title="Modifica"},"test");throw new Exception("Rapportino firmato modificabile");}catch(InvalidDataException){}
+  store.UnsignIntervention(rv.Id,"test");store.SaveIntervention(store.Interventions().Single(x=>x.Id==rv.Id) with{Work="Lavoro aggiornato"},"test");
+  var again=store.SignIntervention(rv.Id,"Mario Rossi","1.5",sig,true,"test");if(again.ReportNo!=signed.ReportNo)throw new Exception("Numero rapportino cambiato");
+  var pdf=InterventionReport.Build(store,rv.Id);if(pdf.Length<2000||pdf[0]!=(byte)'%'||pdf[1]!=(byte)'P')throw new Exception("PDF rapportino");
+  File.WriteAllBytes(Path.Combine(folder,"rapportino-esempio.pdf"),pdf);
+#endif
   store.Backup(Path.Combine(folder,"backup.sqlite"));Console.WriteLine("PASS: upsert, deduplicazione, validazione atomica, note, backup.");
  }
 }

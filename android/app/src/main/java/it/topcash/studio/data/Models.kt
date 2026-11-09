@@ -32,7 +32,7 @@ import kotlinx.serialization.Serializable
     val id: String = "", val clientCode: String = "", val clientName: String = "", val date: String = "", val machine: String = "",
     val title: String = "", val work: String = "", val status: String = "Aperto", val technician: String = "", val priority: String = "Normale",
     val total: String = "", val source: String = "app", val created: String = "", val createdBy: String = "", val updated: String = "", val updatedBy: String = "",
-    val parts: List<PartUse> = emptyList(),
+    val parts: List<PartUse> = emptyList(), val hours: String = "", val signer: String = "", val signedAt: String = "", val reportNo: String = "",
 )
 // ── warehouse
 @Serializable data class PartUse(val article: String = "", val qty: Double = 1.0, val warehouse: String = "", val serial: String = "")
@@ -63,6 +63,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class Session(val setupNeeded: Boolean = false, val user: Me? = null, val version: Long = 0)
 @Serializable data class ServerError(val error: String = "")
 @Serializable data class LoginRequest(val username: String, val password: String, val remember: Boolean = true)
+@Serializable data class SignRequest(val signer: String, val hours: String, val signature: String, val close: Boolean)
 @Serializable data class NoteRequest(val code: String, val note: String)
 @Serializable data class MetaRequest(val code: String, val meta: ClientMeta)
 @Serializable data class StreamMessage(val type: String = "", val version: Long = 0, val running: Boolean = false, val connected: Boolean = false, val text: String = "")

@@ -136,13 +136,33 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun saveNote(code: String, note: String) = act("Nota salvata e condivisa") { api.saveNote(code, note) }
     fun saveMeta(code: String, meta: ClientMeta, message: String = "Promemoria aggiornato") = act(message) { api.saveMeta(code, meta) }
-    fun saveIntervention(i: Intervention, onDone: () -> Unit) = viewModelScope.launch {
-        try { api.saveIntervention(i); _messages.tryEmit("Intervento salvato"); onDone(); refresh() } catch (e: ApiException) { _messages.tryEmit(e.message ?: "Salvataggio non riuscito") }
+    fun saveIntervention(i: Intervention, quiet: Boolean = false, onDone: (Intervention) -> Unit) = viewModelScope.launch {
+        try { val r = api.saveIntervention(i); if (!quiet) _messages.tryEmit("Intervento salvato"); onDone(r); refresh() } catch (e: ApiException) { _messages.tryEmit(e.message ?: "Salvataggio non riuscito") }
     }
     fun deleteIntervention(id: String) = act("Intervento eliminato") { api.deleteIntervention(id) }
     fun saveMovements(m: List<Movement>, onDone: () -> Unit) = viewModelScope.launch {
         try { api.saveMovements(m); _messages.tryEmit(if (m.size == 1) "Movimento registrato" else "${m.size} movimenti registrati"); onDone(); refresh() }
         catch (e: ApiException) { _messages.tryEmit(e.message ?: "Movimento non registrato") }
+    }
+
+    fun signIntervention(id: String, signer: String, hours: String, png: ByteArray, close: Boolean, onDone: (Intervention) -> Unit) = viewModelScope.launch {
+        try {
+            val r = api.signIntervention(id, SignRequest(signer, hours.replace(',', '.'), "data:image/png;base64," + android.util.Base64.encodeToString(png, android.util.Base64.NO_WRAP), close))
+            _messages.tryEmit("Rapportino n. ${r.reportNo} firmato"); onDone(r); refresh()
+        } catch (e: ApiException) { _messages.tryEmit(e.message ?: "Firma non registrata") }
+    }
+    fun unsignIntervention(id: String) = act("Firma annullata") { api.unsignIntervention(id) }
+    /** Downloads the PDF report and opens the Android share sheet (WhatsApp, e-mail, Drive…). */
+    fun shareReport(i: Intervention, context: android.content.Context) = viewModelScope.launch {
+        try {
+            val name = "Rapportino-" + (i.reportNo.ifBlank { i.id.take(8) }).replace('/', '-') + ".pdf"
+            val f = api.reportPdf(i.id, File(getApplication<Application>().cacheDir, "reports"), name)
+            val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", f)
+            val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("application/pdf").putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                .putExtra(android.content.Intent.EXTRA_SUBJECT, "Rapportino di intervento " + i.reportNo).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            context.startActivity(android.content.Intent.createChooser(send, "Invia il rapportino"))
+        } catch (e: ApiException) { _messages.tryEmit(e.message ?: "PDF non disponibile") }
+        catch (e: Exception) { _messages.tryEmit("Nessuna app per condividere il PDF") }
     }
 
     override fun onCleared() { stream?.cancel() }
