@@ -124,10 +124,19 @@ th{letter-spacing:.02em;text-transform:uppercase;font-size:10.5px}
 .anim .reveal{animation:risein .6s var(--spring-soft) both;animation-delay:min(calc(var(--i,0)*40ms),320ms)}
 @keyframes risein{from{opacity:0;transform:translateY(16px) scale(.985)}}
 
+/* ── live updates: changed numbers tick, their card glows once, menu counters pop */
+.tick-up,.tick-down{display:inline-block;animation:tick .7s var(--spring) both}
+.tick-up{color:var(--ok)}.tick-down{color:var(--accent)}
+@keyframes tick{0%{transform:translateY(0)}25%{transform:translateY(-4px) scale(1.07)}100%{transform:none}}
+.card.live{animation:liveglow 1.4s var(--out) both}
+@keyframes liveglow{0%{box-shadow:var(--hl),var(--shadow),0 0 0 0 var(--accent-ring)}30%{box-shadow:var(--hl),var(--shadow),0 0 0 6px color-mix(in srgb,var(--accent) 14%,transparent)}100%{box-shadow:var(--hl),var(--shadow),0 0 0 14px transparent}}
+.pop{animation:pop .5s var(--spring) both}
+@keyframes pop{0%{transform:scale(1)}35%{transform:scale(1.35)}100%{transform:scale(1)}}
+
 /* ── scrollbars & selection */
 ::selection{background:color-mix(in srgb,var(--accent) 28%,transparent)}
 *{scrollbar-color:var(--line-2) transparent}
 
-@media (prefers-reduced-motion:reduce){.hero h1 .grad{animation:none}.card::before{display:none}}
+@media (prefers-reduced-motion:reduce){.hero h1 .grad{animation:none}.card::before{display:none}.tick-up,.tick-down,.card.live,.pop{animation:none}}
 @media (max-width:860px){body::before{background-size:32px 32px;opacity:.4}}
 @media print{body::before,.card::before{display:none}}

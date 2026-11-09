@@ -620,7 +620,10 @@ function render(animate){
  if(page==='warehouse'&&!isAdmin())page='overview';
  const html={overview,clients:clientsPage,licenses:licensesPage,expiry:expiryPage,orders:ordersPage,tasks:tasksPage,sync:syncPage,settings:settingsPage,team:teamPage,interventions:interventionsPage,machines:machinesPage,warehouse:typeof warehousePage==='function'?warehousePage:overview,accounting:typeof accountingPage==='function'?accountingPage:overview}[page]||overview;
  document.body.classList.toggle('anim',!!animate&&!reduced);
- main.innerHTML=`<div class="page">${html()}</div>`;
+ // live update on the same page: remember the numbers shown, to roll only the ones that change
+ const before=!animate&&lastRendered===page?$$('#main [data-count]').map(el=>+el.dataset.count):null;
+ const badges=$$('.nav-item .badge, .nav-item [id^="nav-"]').map(b=>[b,b.textContent]);
+ main.innerHTML=`<div class="page">${html()}</div>`;lastRendered=page;
  $('#crumb').textContent=PAGES[page];
  $$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.page===page));$('#nav-more')?.classList.toggle('active',!MAIN_TABS.includes(page));moveIndicator();
  $('#nav-clients').textContent=fmt(D.clients.length);$('#nav-licenses').textContent=fmt(D.current.length);$('#nav-orders').textContent=D.orders.length?fmt(D.orders.length):'';$('#nav-interventions').textContent=D.openInterventions.length||'';$('#nav-machines').textContent=D.machines.length?fmt(D.machines.length):'';if(typeof W!=='undefined'&&W)$('#nav-warehouse').textContent=W.below.length||'';if(typeof A!=='undefined'&&A)$('#nav-accounting').textContent=A.overdue.length?fmt(A.overdue.length):'';
@@ -629,6 +632,8 @@ function render(animate){
  $('#nav-sync-dot').className='sync-dot '+(state.syncRunning?'run':state.portalConnected?'on':'');
  $('#sync-pill').hidden=!state.syncRunning;$('#sync-pill-text').textContent=state.syncProgress||'Sincronizzazione…';
  sideStatus();
+ if(before)liveChanges(before);
+ if(!reduced)for(const[b,t]of badges)if(b.textContent&&b.textContent!==t){b.classList.remove('pop');void b.offsetWidth;b.classList.add('pop');}
  if(animate){main.scrollTop=0;countUp();}else{main.scrollTop=scroll;if(focus){const el=document.getElementById(focus);if(el){el.focus({preventScroll:true});try{el.setSelectionRange(caret,caret);}catch{}}}}
  bind();
 }
@@ -645,6 +650,13 @@ function transition(fn){if(!document.startViewTransition||reduced||document.hidd
  document.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse')return;const c=e.target.closest?.('.card');if(c!==lit){lit?.classList.remove('lit');lit=c;c?.classList.add('lit');}px=e.clientX;py=e.clientY;if(lit&&!raf)raf=requestAnimationFrame(paint);},{passive:true});
  document.addEventListener('pointerleave',()=>{lit?.classList.remove('lit');lit=null;});}
 function moveIndicator(){const a=$('.nav-item.active'),ind=$('.nav-indicator');if(!a){ind.style.opacity=0;return;}ind.style.opacity=1;ind.style.transform=`translateY(${a.offsetTop}px)`;}
+let lastRendered='';
+// Numbers that changed with a live update roll from the old to the new value; their card glows once.
+function liveChanges(before){if(reduced)return;const now=$$('#main [data-count]');if(now.length!==before.length)return;
+ now.forEach((el,i)=>{const from=before[i],to=+el.dataset.count;if(from===to||!isFinite(from)||!isFinite(to))return;
+  const t0=performance.now(),dur=700;el.classList.add(to>from?'tick-up':'tick-down');
+  const step=t=>{const k=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-k,4);el.textContent=fmt(Math.round(from+(to-from)*e));if(k<1)requestAnimationFrame(step);else setTimeout(()=>el.classList.remove('tick-up','tick-down'),600);};requestAnimationFrame(step);
+  const card=el.closest('.card');if(card){card.classList.remove('live');void card.offsetWidth;card.classList.add('live');setTimeout(()=>card.classList.remove('live'),1400);}});}
 function countUp(){if(reduced)return;$$('[data-count]').forEach(el=>{const to=+el.dataset.count;if(!to)return;const t0=performance.now(),dur=600;const step=t=>{const k=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-k,4);el.textContent=fmt(Math.round(to*e));if(k<1)requestAnimationFrame(step);};requestAnimationFrame(step);});}
 function bind(){
  const q=$('#q');if(q)q.addEventListener('input',e=>{ui.q=e.target.value;ui.p=1;clearTimeout(searchTimer);searchTimer=setTimeout(()=>requestAnimationFrame(()=>render(false)),90);});

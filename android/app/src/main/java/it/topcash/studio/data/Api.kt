@@ -133,7 +133,7 @@ class Api(context: Context) {
         val b = Request.Builder().url(url("/api/state")).get()
         if (!etag.isNullOrEmpty()) b.header("If-None-Match", etag)
         try {
-            http.newCall(b.build()).execute().use { r ->
+            http.newCall(b.build()).apply { timeout().timeout(25, TimeUnit.SECONDS) }.execute().use { r ->
                 if (r.code == 304) return@withContext null
                 if (!r.isSuccessful) throw r.error()
                 r.body.string() to r.header("ETag")

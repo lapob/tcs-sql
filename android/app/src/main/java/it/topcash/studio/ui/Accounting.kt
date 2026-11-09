@@ -136,7 +136,7 @@ private fun deltaText(now: Double, prev: Double): String =
             Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(c)); Spacer(Modifier.size(8.dp))
             Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(money0(value), style = MaterialTheme.typography.titleLarge.tabular, modifier = Modifier.padding(top = 10.dp, bottom = 2.dp), maxLines = 1)
+        RollingText(money0(value), MaterialTheme.typography.titleLarge.tabular, Modifier.padding(top = 10.dp, bottom = 2.dp))
         Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }

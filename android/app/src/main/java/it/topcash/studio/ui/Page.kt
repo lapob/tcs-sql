@@ -101,9 +101,19 @@ import it.topcash.studio.data.AppViewModel
     val refreshing by (vm?.refreshing ?: idle).collectAsStateWithLifecycle()
     val ptr = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
     val bottom = androidx.compose.foundation.layout.WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    // one light tick when the pull crosses the "release to refresh" point (and again if it goes back and forth)
+    androidx.compose.runtime.LaunchedEffect(ptr) {
+        androidx.compose.runtime.snapshotFlow { ptr.distanceFraction >= 1f }.collect { armed -> if (armed && !refreshing) haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick) }
+    }
+    val density = androidx.compose.ui.platform.LocalDensity.current
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { vm?.refresh(true) }, state = ptr, modifier = Modifier.fillMaxSize(),
-        indicator = { androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator(state = ptr, isRefreshing = refreshing, modifier = Modifier.align(Alignment.TopCenter).padding(top = pad.calculateTopPadding())) }) {
-        LazyColumn(Modifier.fillMaxSize().hazeSourceCompat(haze), state = state,
+        indicator = {
+            @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+            androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.LoadingIndicator(state = ptr, isRefreshing = refreshing, modifier = Modifier.align(Alignment.TopCenter).padding(top = pad.calculateTopPadding()))
+        }) {
+        // the list follows the finger a little (rubber band), then settles with the indicator
+        LazyColumn(Modifier.fillMaxSize().graphicsLayer { translationY = with(density) { (if (refreshing) 1f else ptr.distanceFraction.coerceIn(0f, 1.6f)) * 28.dp.toPx() } }.hazeSourceCompat(haze), state = state,
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 4.dp, bottom = bottom + 120.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
             if (vm != null) item(key = "__status") { StatusStrip(vm) }
             header?.let { h -> item(key = "__header") { h() } }

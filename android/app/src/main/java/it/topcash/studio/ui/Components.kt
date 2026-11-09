@@ -1,6 +1,7 @@
 package it.topcash.studio.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -36,6 +37,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
@@ -115,15 +118,38 @@ fun hueColor(key: String, dark: Boolean = false): Color { var h = 0; key.forEach
     }
 }
 
+/** Odometer: every digit rolls on its own when the value changes (up when it grows, down when it shrinks); first appearance rolls in staggered. */
+@Composable fun RollingText(text: String, style: androidx.compose.ui.text.TextStyle, modifier: Modifier = Modifier, color: Color = Color.Unspecified) {
+    var shown by remember { mutableStateOf(text.map { c -> if (c.isDigit()) ' ' else c }.joinToString("")) }
+    var grew by remember { mutableStateOf(true) }
+    androidx.compose.runtime.LaunchedEffect(text) {
+        val a = shown.filter { it.isDigit() }.toBigIntegerOrNull(); val b = text.filter { it.isDigit() }.toBigIntegerOrNull()
+        grew = a == null || b == null || b >= a; shown = text
+    }
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        val n = shown.length
+        shown.forEachIndexed { i, ch ->
+            androidx.compose.runtime.key(n - i) { // slots counted from the right: units stay units when the number gets longer
+                androidx.compose.animation.AnimatedContent(ch, transitionSpec = {
+                    val dir = if (grew) 1 else -1; val delay = ((n - 1 - i) * 28).coerceAtMost(220)
+                    val spec = androidx.compose.animation.core.spring<androidx.compose.ui.unit.IntOffset>(dampingRatio = 0.72f, stiffness = 420f)
+                    ((androidx.compose.animation.slideInVertically(spec) { h -> h * dir } + androidx.compose.animation.fadeIn(tween(180, delayMillis = delay)))
+                        togetherWith (androidx.compose.animation.slideOutVertically(spec) { h -> -h * dir } + androidx.compose.animation.fadeOut(tween(140))))
+                        .using(androidx.compose.animation.SizeTransform(clip = true))
+                }, label = "digit") { c -> Text(c.toString(), style = style, color = color, maxLines = 1) }
+            }
+        }
+    }
+}
+
 @Composable fun Kpi(title: String, value: Int, note: String, icon: ImageVector, tone: Tone, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val shown by animateIntAsState(value, tween(900, easing = FastOutSlowInEasing), label = "kpi")
     val c = LocalStatus.current.of(tone)
     CardBox(modifier, onClick = onClick, padding = PaddingValues(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Box(Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(c.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) { Icon(icon, null, tint = c, modifier = Modifier.size(17.dp)) }
         }
-        Text("%,d".format(shown).replace(',', '.'), style = MaterialTheme.typography.headlineLarge.tabular, modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
+        RollingText("%,d".format(value).replace(',', '.'), MaterialTheme.typography.headlineLarge.tabular, Modifier.padding(top = 14.dp, bottom = 4.dp))
         Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }

@@ -150,24 +150,24 @@ Il codice è versionato con Git portatile (`.tools\git`): ogni modifica può ess
 powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\versioni.ps1                      (storico)
 powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\versioni.ps1 -Salva "cosa è cambiato"
 ```
-Lo storico contiene solo codice, script e guide: **database, backup, chiavi e password non vengono mai salvati**. Lo storico è salvato su questo PC e, quando pubblichi, anche nel repository **privato** GitHub `lapob/tcs-sql`.
+Lo storico contiene solo codice, script e guide: **database, backup, chiavi e password non vengono mai salvati**. Lo storico è salvato su questo PC e, quando pubblichi, anche nel repository **pubblico** GitHub `lapob/tcs-sql` (chiunque può leggere il codice: per questo database, chiavi e password non ci finiscono mai).
 
 ### Release su GitHub (download per i colleghi)
 
-Le versioni pronte (APK Android, app Windows, aggiornamento server) si pubblicano come **Release** del repository privato:
+Le versioni pronte (APK Android, app Windows, aggiornamento server) si pubblicano come **Release** del repository:
 ```
 powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\pubblica-release.ps1 -Versione 2.3.0
 ```
 Lo script invia il codice, crea il pacchetto e la Release con i file da scaricare (controlla che nei pacchetti non ci siano database, chiavi o impostazioni di Mastro).
 La prima volta accedi a GitHub con `D:\TopCashSQL\.tools\gh\bin\gh.exe auth login` (l'accesso è salvato in `.tools\gh-config`, fuori da Git).
-Il repository è privato: per scaricare, ogni collega deve avere un account GitHub **invitato** (*Settings → Collaborators* del repository). In alternativa i colleghi possono continuare a ricevere l'APK direttamente da te.
+Il repository è pubblico: i colleghi scaricano i file dalla pagina *Releases* (https://github.com/lapob/tcs-sql/releases) senza account. I pacchetti contengono solo i programmi: per usarli serve comunque un utente del server Top Cash.
 
 ## Dopo questo aggiornamento
 
 - L'app Windows ora tiene la sua cache dentro `D:\TopCashSQL\.runtime`: al primo avvio **accedi di nuovo** (server e, sulla postazione, MY Zucchetti). Le vecchie cache in `C:\Users\lapob\AppData\Local\TopCashStudio` non servono più e si possono eliminare.
 - Esegui `aggiorna-server.ps1` per portare il server alla nuova versione (contabilità, magazzino riservato all'amministratore, connessione da fuori ufficio, rapportino con firma, stampa ed email, backup su disco esterno).
 - Poi, dal PC con MastroSQL, ripeti **Impostazioni → Importa da MastroSQL**: questa volta vengono lette anche fatture, scadenze e saldi.
-- Installa sui telefoni la nuova `TopCash-Studio.apk` (versione 2.4: stampa ed email dei rapportini).
+- Installa sui telefoni la nuova `TopCash-Studio.apk` (versione 2.4.1: stampa ed email dei rapportini, trascina giù per aggiornare senza blocchi, numeri animati).
 - Configura **Impostazioni → Email rapportini** (sopra, sezione 7) e controlla in **Impostazioni → Backup automatici** che la copia su `H:\TcsSqlOfflineBackups` risulti riuscita.
 
 ## Aggiornare il server

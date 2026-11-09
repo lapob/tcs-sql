@@ -88,8 +88,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refresh(userInitiated: Boolean = false) {
-        if (refreshJob?.isActive == true) return
+        val running = refreshJob
+        if (running?.isActive == true) {
+            // pulled while a background refresh is already running: show the indicator until that one ends
+            // (before, the pull was ignored and the indicator stayed stuck half-way)
+            if (userInitiated && !_refreshing.value) viewModelScope.launch {
+                _refreshing.value = true; val t0 = System.currentTimeMillis()
+                try { running.join() } finally { delay((MIN_SPIN - (System.currentTimeMillis() - t0)).coerceAtLeast(0)); _refreshing.value = false }
+            }
+            return
+        }
         refreshJob = viewModelScope.launch {
+            val t0 = System.currentTimeMillis()
             if (userInitiated) _refreshing.value = true
             try {
                 val r = api.state(if (_archive.value == null) null else etag)
@@ -104,8 +114,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 if (e.status == 401) { signedOut(); return@launch }
                 if (e.device.isNotEmpty()) { stream?.cancel(); stream = null; _device.value = DeviceStatus(e.device, e.code, true); _screen.value = Screen.Device; return@launch }
                 _online.value = false; if (userInitiated) _messages.tryEmit(e.message ?: "Aggiornamento non riuscito")
-            } finally { _refreshing.value = false }
+            } finally {
+                if (userInitiated) withContext(kotlinx.coroutines.NonCancellable) { delay((MIN_SPIN - (System.currentTimeMillis() - t0)).coerceAtLeast(0)) }
+                _refreshing.value = false
+            }
         }
+    }
+    private companion object { const val MIN_SPIN = 650L }
+    /** Safety net for live updates: a cheap ETag check every 2 minutes while the app is visible (304 = nothing to download). */
+    private var heartbeat: Job? = null
+    private fun startHeartbeat() {
+        heartbeat?.cancel()
+        heartbeat = viewModelScope.launch { while (true) { delay(120_000); if (foreground && _screen.value == Screen.Main) refresh() } }
     }
 
     private fun connect() {
@@ -128,8 +148,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Live updates only while the app is visible (battery friendly); catch up on return. */
     fun setForeground(value: Boolean) {
         foreground = value
-        if (value) { if (_screen.value == Screen.Main) { refresh(); connect() } }
-        else { stream?.cancel(); stream = null; reconnect?.cancel() }
+        if (value) { if (_screen.value == Screen.Main) { refresh(); connect() }; startHeartbeat() }
+        else { stream?.cancel(); stream = null; reconnect?.cancel(); heartbeat?.cancel() }
     }
 
     fun setServer(input: String, external: String = ""): String? {

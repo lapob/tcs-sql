@@ -1,4 +1,4 @@
-# Pubblica il codice e una Release su GitHub (repository privato lapob/tcs-sql).
+# Pubblica il codice e una Release su GitHub (repository pubblico lapob/tcs-sql).
 # Uso:  powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\pubblica-release.ps1 -Versione 2.3.0 [-Note "cosa cambia"]
 # Prima volta: accedi con  .tools\gh\bin\gh.exe auth login  (vedi GUIDA, sezione "Versioni e Release").
 # Nella Release vanno SOLO i programmi compilati: mai database, backup, chiavi o password (esclusi da .gitignore).
@@ -20,7 +20,7 @@ if (& $git status --porcelain) { throw 'Ci sono modifiche non salvate in Git: fa
 
 # 1. repository privato (creato la prima volta) e invio del codice
 & $gh repo view $repo *> $null
-if ($LASTEXITCODE) { & $gh repo create $repo --private --description 'Top Cash Studio - gestionale Top Cash Service S.r.l.' ; if ($LASTEXITCODE) { throw 'Creazione repository non riuscita' } }
+if ($LASTEXITCODE) { & $gh repo create $repo --public --description 'Top Cash Studio - gestionale Top Cash Service S.r.l.' ; if ($LASTEXITCODE) { throw 'Creazione repository non riuscita' } }
 if (-not (& $git remote | Select-String -SimpleMatch 'origin')) { & $git remote add origin "https://github.com/$repo.git" }
 & $gh auth setup-git
 & $git push -u origin HEAD:main
