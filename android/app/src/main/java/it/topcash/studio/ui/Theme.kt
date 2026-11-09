@@ -70,7 +70,8 @@ val Snappy = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness
     val status = if (dark) StatusColors(Color(0xFF34D399), Color(0xFFFBBF24), Color(0xFFFB7185), Color(0xFF38BDF8), Color(0xFF4D9BFF), Color(0xFFA3A3B5))
                  else StatusColors(Color(0xFF10A36B), Color(0xFFD98A06), Color(0xFFE5484D), Color(0xFF0B8DE0), BrandBlue, Color(0xFF6E6F82))
     androidx.compose.runtime.CompositionLocalProvider(LocalStatus provides status) {
-        MaterialTheme(colorScheme = if (dark) Dark else Light, typography = Type, shapes = AppShapes, content = content)
+        // Material 3 Expressive motion: every M3 component (sheets, chips, buttons, menus) animates with the official springs
+        MaterialTheme(colorScheme = if (dark) Dark else Light, typography = Type, shapes = AppShapes, motionScheme = androidx.compose.material3.MotionScheme.expressive(), content = content)
     }
 }
 val TextStyle.tabular get() = copy(fontFeatureSettings = "tnum")

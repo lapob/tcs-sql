@@ -33,13 +33,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -169,7 +170,7 @@ private val itabs = listOf("Da fare", "Chiusi", "Storico Mastro", "Tutti")
             var menu by remember { mutableStateOf(false) }
             val suggestions = remember(clientQuery) { val n = norm(clientQuery); if (n.length < 2) emptyList() else a.clients.filter { it.search.contains(n) }.take(8) }
             ExposedDropdownMenuBox(menu && suggestions.isNotEmpty() && !ro, { menu = it }) {
-                OutlinedTextField(clientQuery, { clientQuery = it; clientCode = ""; menu = true }, Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryEditable), enabled = !ro && existing == null || clientCode.isEmpty(),
+                OutlinedTextField(clientQuery, { clientQuery = it; clientCode = ""; menu = true }, Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable), enabled = !ro && existing == null || clientCode.isEmpty(),
                     label = { Text("Cliente") }, singleLine = true, shape = MaterialTheme.shapes.medium, isError = clientQuery.isNotBlank() && clientCode.isEmpty(),
                     supportingText = { if (clientQuery.isNotBlank() && clientCode.isEmpty()) Text("Scegli il cliente dall'elenco") })
                 ExposedDropdownMenu(menu && suggestions.isNotEmpty() && !ro, { menu = false }) {

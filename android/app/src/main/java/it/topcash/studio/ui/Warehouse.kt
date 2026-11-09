@@ -35,6 +35,7 @@ import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Warehouse
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalButton
@@ -44,7 +45,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
@@ -251,7 +252,7 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
             val suggestions = remember(query, wh) { val t = norm(query); if (t.length < 2 || article?.a?.name == query) emptyList() else wh.articles.filter { it.a.active && it.search.contains(t) }.take(8) }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ExposedDropdownMenuBox(menu && suggestions.isNotEmpty(), { menu = it }, Modifier.weight(1f)) {
-                    OutlinedTextField(query, { query = it; article = wh.find(it); menu = true }, Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryEditable),
+                    OutlinedTextField(query, { query = it; article = wh.find(it); menu = true }, Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
                         label = { Text("Articolo") }, singleLine = true, shape = MaterialTheme.shapes.medium,
                         supportingText = { article?.let { x -> Text("${x.a.code} · disponibili: " + wh.warehouses.filter { (x.perWarehouse[it.id] ?: 0.0) != 0.0 }.joinToString(" · ") { "${it.name} ${qty(x.perWarehouse[it.id]!!)}" }.ifBlank { "nessuna giacenza" }, maxLines = 2) } })
                     ExposedDropdownMenu(menu && suggestions.isNotEmpty(), { menu = false }) {
@@ -329,7 +330,7 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
             onChange(if (i >= 0) parts.toMutableList().also { it[i] = it[i].copy(qty = it[i].qty + 1) } else parts + it.topcash.studio.data.PartUse(x.a.code, 1.0, van, "")) }
         Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             ExposedDropdownMenuBox(menu && sugg.isNotEmpty(), { menu = it }, Modifier.weight(1f)) {
-                OutlinedTextField(query, { query = it; menu = true }, Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryEditable), placeholder = { Text("Aggiungi ricambio…", maxLines = 1) }, singleLine = true, shape = MaterialTheme.shapes.medium)
+                OutlinedTextField(query, { query = it; menu = true }, Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable), placeholder = { Text("Aggiungi ricambio…", maxLines = 1) }, singleLine = true, shape = MaterialTheme.shapes.medium)
                 ExposedDropdownMenu(menu && sugg.isNotEmpty(), { menu = false }) {
                     sugg.forEach { s -> DropdownMenuItem(text = { Text(s.a.name + " · " + qty(s.qtyIn(van)) + " " + s.a.unit + " sul furgone", maxLines = 1) }, onClick = { add(s) }) }
                 }
