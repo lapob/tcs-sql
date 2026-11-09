@@ -145,7 +145,7 @@ Le versioni pronte (APK Android, app Windows, aggiornamento server) si pubblican
 powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\pubblica-release.ps1 -Versione 2.3.0
 ```
 Lo script invia il codice, crea il pacchetto e la Release con i file da scaricare (controlla che nei pacchetti non ci siano database, chiavi o impostazioni di Mastro).
-La prima volta accedi a GitHub con `D:\TopCashSQL\.tools\ghin\gh.exe auth login` (l'accesso è salvato in `.tools\gh-config`, fuori da Git).
+La prima volta accedi a GitHub con `D:\TopCashSQL\.tools\gh\bin\gh.exe auth login` (l'accesso è salvato in `.tools\gh-config`, fuori da Git).
 Il repository è privato: per scaricare, ogni collega deve avere un account GitHub **invitato** (*Settings → Collaborators* del repository). In alternativa i colleghi possono continuare a ricevere l'APK direttamente da te.
 
 ## Dopo questo aggiornamento
