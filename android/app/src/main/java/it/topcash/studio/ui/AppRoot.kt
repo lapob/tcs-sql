@@ -10,7 +10,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.dp
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -150,14 +153,16 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
         SharedTransitionLayout(Modifier.fillMaxSize().hazeSourceCompat(haze)) {
             CompositionLocalProvider(LocalShared provides this, LocalAppHaze provides haze, LocalBottomBar provides if (topLevel) androidx.compose.ui.unit.Dp(80f) else androidx.compose.ui.unit.Dp(0f)) {
                 NavHost(nav, startDestination = "home",
-                    // tabs: quick "fade through"; details: spring slide that follows the finger on predictive back
-                    enterTransition = { if (initialState.destination.route in tabRoutes && targetState.destination.route in tabRoutes) fadeIn(tween(210, 70)) + scaleIn(navSpringF, 0.95f) else slideInHorizontally(navSpring) { it / 3 } + fadeIn(tween(220)) },
-                    exitTransition = { if (initialState.destination.route in tabRoutes && targetState.destination.route in tabRoutes) fadeOut(tween(90)) else slideOutHorizontally(navSpring) { -it / 6 } + fadeOut(tween(220)) },
-                    popEnterTransition = { slideInHorizontally(navSpring) { -it / 6 } + fadeIn(tween(220)) },
-                    popExitTransition = { slideOutHorizontally(navSpring) { it / 3 } + fadeOut(tween(200)) },
+                    // tabs: quick "fade through" both ways. Details: open with a spring slide; on back the page detaches like a
+                    // card (rounded corners, shrinks, slides toward the edge) following the finger during the predictive back gesture,
+                    // while the page underneath comes forward from a slight depth.
+                    enterTransition = { if (isTabSwitch()) fadeIn(tween(210, 70)) + scaleIn(navSpringF, 0.95f) else slideInHorizontally(navSpring) { it / 3 } + fadeIn(tween(220)) },
+                    exitTransition = { if (isTabSwitch()) fadeOut(tween(90)) else slideOutHorizontally(navSpring) { -it / 8 } + scaleOut(navSpringF, 0.96f) + fadeOut(tween(260), 0.35f) },
+                    popEnterTransition = { if (isTabSwitch()) fadeIn(tween(210, 70)) + scaleIn(navSpringF, 0.95f) else slideInHorizontally(navSpring) { -it / 8 } + scaleIn(navSpringF, 0.96f) + fadeIn(tween(240), 0.35f) },
+                    popExitTransition = { if (isTabSwitch()) fadeOut(tween(90)) else scaleOut(navSpringF, 0.86f) + slideOutHorizontally(navSpring) { it / 4 } + fadeOut(tween(230)) },
                 ) {
                     fun screen(r: String, body: @Composable (Archive) -> Unit) = composable(r) {
-                        CompositionLocalProvider(LocalAnim provides this) { if (a == null) LoadingArchive() else body(a) }
+                        CompositionLocalProvider(LocalAnim provides this) { Box(Modifier.navCard(this)) { if (a == null) LoadingArchive() else body(a) } }
                     }
                     screen("home") { HomeScreen(vm, it, nav, onNewIntervention = { editor = EditorRequest() }, onOpenIntervention = { id -> editor = EditorRequest(interventionId = id) }) }
                     screen("clients") { ClientsScreen(vm, it, nav) }
@@ -171,17 +176,17 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
                     screen("orders") { OrdersScreen(it, nav) }
                     screen("account") { AccountScreen(vm, nav) }
                     composable("article/{code}") { e ->
-                        CompositionLocalProvider(LocalAnim provides this) {
+                        CompositionLocalProvider(LocalAnim provides this) { Box(Modifier.navCard(this)) {
                             if (a == null) LoadingArchive() else ArticleScreen(vm, a, e.arguments?.getString("code").orEmpty(), nav) { t, art -> movement = t to art }
-                        }
+                        } }
                     }
                     composable("client/{code}") { e ->
-                        CompositionLocalProvider(LocalAnim provides this) {
+                        CompositionLocalProvider(LocalAnim provides this) { Box(Modifier.navCard(this)) {
                             val code = e.arguments?.getString("code").orEmpty()
                             val c = a?.byCode?.get(code)
                             if (a == null || c == null) LoadingArchive() else ClientDetailScreen(vm, a, c, nav,
                                 onNewIntervention = { editor = EditorRequest(clientCode = code) }, onOpenIntervention = { id -> editor = EditorRequest(interventionId = id) })
-                        }
+                        } }
                     }
                 }
             }
@@ -194,6 +199,18 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
 }
 
 private val tabRoutes = setOf("home", "clients", "interventions", "warehouse", "more")
+private fun androidx.compose.animation.AnimatedContentTransitionScope<androidx.navigation.NavBackStackEntry>.isTabSwitch() =
+    initialState.destination.route in tabRoutes && targetState.destination.route in tabRoutes
+
+/** While a page is entering or leaving it is drawn as a card: rounded corners and a soft shadow (follows the back gesture). */
+@Composable private fun Modifier.navCard(scope: AnimatedVisibilityScope): Modifier {
+    val corner by scope.transition.animateDp(transitionSpec = { androidx.compose.animation.core.spring(stiffness = 500f) }, label = "navCorner") { st ->
+        if (st == androidx.compose.animation.EnterExitState.Visible) 0.dp else 32.dp }
+    return this.fillMaxSize().graphicsLayer {
+        val r = corner.toPx()
+        if (r > 0.5f) { shape = androidx.compose.foundation.shape.RoundedCornerShape(r); clip = true; shadowElevation = r * 0.5f }
+    }
+}
 fun NavHostController.switchTab(route: String) = navigate(route) {
     popUpTo(graph.startDestinationId) { saveState = true }; launchSingleTop = true; restoreState = true
 }

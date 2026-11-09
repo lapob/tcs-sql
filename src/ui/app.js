@@ -637,13 +637,14 @@ function render(animate){
  if(animate){main.scrollTop=0;countUp();}else{main.scrollTop=scroll;if(focus){const el=document.getElementById(focus);if(el){el.focus({preventScroll:true});try{el.setSelectionRange(caret,caret);}catch{}}}}
  bind();
 }
-function go(p,keepQuery){if(!PAGES[p])return;const change=()=>{page=p;store.set('page',p);ui.p=1;ui.status='';ui.product='';ui.city='';ui.ostatus='';ui.ofam='';ui.tech='';if(!keepQuery)ui.q='';ui.sort={key:p==='orders'?'date':p==='clients'?'name':'exp',dir:p==='orders'?-1:1};render(true);};
- if(p!==page)transition(change);else change();}
+function go(p,keepQuery,fromHistory){if(!PAGES[p])return;const change=()=>{page=p;store.set('page',p);ui.p=1;ui.status='';ui.product='';ui.city='';ui.ostatus='';ui.ofam='';ui.tech='';if(!keepQuery)ui.q='';ui.sort={key:p==='orders'?'date':p==='clients'?'name':'exp',dir:p==='orders'?-1:1};render(true);};
+ if(p!==page){if(!fromHistory)navHistory.push(p);transition(change,fromHistory?'back':'fwd');}else change();}
 // View Transitions with graceful fallback: a new navigation skips the running one, and aborted transitions are silent.
 let vt=null;
-function transition(fn){if(!document.startViewTransition||reduced||document.hidden){fn();return;}
+function transition(fn,dir='fwd'){if(!document.startViewTransition||reduced||document.hidden){fn();return;}
+ document.documentElement.dataset.nav=dir;clearTimeout(transition.t);transition.t=setTimeout(()=>{delete document.documentElement.dataset.nav;},900); // never left behind
  let done=false;const once=()=>{if(!done){done=true;fn();}};setTimeout(once,350); // never block navigation if the window is not painting
- vt?.skipTransition();const t=vt=document.startViewTransition(once);for(const p of[t.ready,t.finished,t.updateCallbackDone])p.catch(()=>{});t.finished.finally(()=>{if(vt===t)vt=null;});}
+ vt?.skipTransition();const t=vt=document.startViewTransition(once);for(const p of[t.ready,t.finished,t.updateCallbackDone])p.catch(()=>{});t.finished.finally(()=>{if(vt===t){vt=null;delete document.documentElement.dataset.nav;}});}
 // ── pointer spotlight on cards (theme.css): one passive listener, at most one style write per frame
 {let lit=null,px=0,py=0,raf=0;
  const paint=()=>{raf=0;if(!lit)return;const r=lit.getBoundingClientRect();lit.style.setProperty('--mx',(px-r.left)+'px');lit.style.setProperty('--my',(py-r.top)+'px');};
@@ -651,6 +652,33 @@ function transition(fn){if(!document.startViewTransition||reduced||document.hidd
  document.addEventListener('pointerleave',()=>{lit?.classList.remove('lit');lit=null;});}
 function moveIndicator(){const a=$('.nav-item.active'),ind=$('.nav-indicator');if(!a){ind.style.opacity=0;return;}ind.style.opacity=1;ind.style.transform=`translateY(${a.offsetTop}px)`;}
 let lastRendered='';
+// ── Back button / back gesture (browser, installed app on the phone): it first closes the open window or client panel,
+// then goes back through the pages visited — it no longer leaves the app by mistake.
+// Every history entry is {tcs,page,ov}: ov = how many windows were open. Windows closed from the UI remove their entry.
+const navHistory=(()=>{
+ let ignore=0,queued=null,raf=0;
+ const overlays=()=>[...document.querySelectorAll('body > .modal:not(.out)')].length+(($('#drawer')&&!$('#drawer').hidden&&!$('#drawer').classList.contains('out'))?1:0);
+ const cur=()=>history.state?.tcs?history.state:{tcs:1,page,ov:0};
+ const reconcile=()=>{raf=0;if(ignore)return;const n=overlays(),s=cur();
+  if(n>s.ov)history.pushState({tcs:1,page,ov:n},'');
+  else if(n<s.ov){ignore++;history.back();}};
+ const schedule=()=>{if(!raf)raf=setTimeout(reconcile,40);}; // a timer, not rAF: it must run also when the window is in background
+ const closeTop=()=>{const m=[...document.querySelectorAll('body > .modal:not(.out)')].pop();
+  if(m){m.dispatchEvent(new MouseEvent('click',{bubbles:true}));return true;}
+  if(!$('#drawer').hidden){closeDrawer();return true;}return false;};
+ addEventListener('popstate',e=>{
+  if(ignore){ignore--;if(!ignore&&queued){history.pushState(queued,'');queued=null;}schedule();return;}
+  const s=e.state?.tcs?e.state:{tcs:1,page:'overview',ov:0};
+  if(overlays()>s.ov){closeTop();schedule();return;}
+  if(s.page!==page){go(s.page,false,true);return;}
+ });
+ new MutationObserver(schedule).observe(document.body,{childList:true});
+ queueMicrotask(()=>{const d=$('#drawer');if(d)new MutationObserver(schedule).observe(d,{attributes:true,attributeFilter:['hidden','class']});});
+ history.replaceState({tcs:1,page,ov:0},'');
+ return{push(p){const st={tcs:1,page:p,ov:0};
+   if(ignore){queued=st;return;}                          // a "close window" step is still travelling: push right after it
+   if(cur().ov>0)history.replaceState(st,'');else history.pushState(st,'');}}; // leaving a page with a window open: reuse its entry
+})();
 // Numbers that changed with a live update roll from the old to the new value; their card glows once.
 function liveChanges(before){if(reduced)return;const now=$$('#main [data-count]');if(now.length!==before.length)return;
  now.forEach((el,i)=>{const from=before[i],to=+el.dataset.count;if(from===to||!isFinite(from)||!isFinite(to))return;

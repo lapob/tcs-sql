@@ -121,6 +121,13 @@ th{letter-spacing:.02em;text-transform:uppercase;font-size:10.5px}
 ::view-transition-new(main-content){animation:vtin .5s var(--spring-soft) both}
 @keyframes vtout{to{opacity:0;filter:blur(3px);transform:scale(.995)}}
 @keyframes vtin{from{opacity:0;filter:blur(4px);transform:translateY(10px)}}
+/* going back: the page slides away to the right, the previous one returns from the left (same direction as the gesture) */
+html[data-nav="back"]::view-transition-old(main-content){animation:vtbackout .28s var(--out) both}
+html[data-nav="back"]::view-transition-new(main-content){animation:vtbackin .5s var(--spring-soft) both}
+@keyframes vtbackout{to{opacity:0;transform:translateX(56px) scale(.985);filter:blur(2px)}}
+@keyframes vtbackin{from{opacity:0;transform:translateX(-40px)}}
+html[data-nav="back"] .anim .reveal{animation-name:fadein;animation-delay:0s}
+@keyframes fadein{from{opacity:0}}
 .anim .reveal{animation:risein .6s var(--spring-soft) both;animation-delay:min(calc(var(--i,0)*40ms),320ms)}
 @keyframes risein{from{opacity:0;transform:translateY(16px) scale(.985)}}
 

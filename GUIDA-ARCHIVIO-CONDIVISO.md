@@ -61,6 +61,8 @@ La chiave è salvata cifrata per l'utente Windows (DPAPI). Non è una password p
 | Qualsiasi PC/Mac | Browser → `http://IP-DEL-SERVER:8470` |
 | Telefono / tablet | Browser → indirizzo del server → *Aggiungi a schermata Home* |
 
+Il tasto **indietro** (browser, gesto del telefono, tasto laterale del mouse) chiude prima la finestra o la scheda cliente aperta, poi torna alle pagine visitate: non fa più uscire dall'app.
+
 ## 5. Importa i clienti da MastroSQL
 
 Da fare su un PC dove **MastroSQL è installato** (legge le impostazioni di Mastro in `C:\MastroSQL\RETE.ini`):
@@ -167,7 +169,7 @@ Il repository è pubblico: i colleghi scaricano i file dalla pagina *Releases* (
 - L'app Windows ora tiene la sua cache dentro `D:\TopCashSQL\.runtime`: al primo avvio **accedi di nuovo** (server e, sulla postazione, MY Zucchetti). Le vecchie cache in `C:\Users\lapob\AppData\Local\TopCashStudio` non servono più e si possono eliminare.
 - Esegui `aggiorna-server.ps1` per portare il server alla nuova versione (contabilità, magazzino riservato all'amministratore, connessione da fuori ufficio, rapportino con firma, stampa ed email, backup su disco esterno).
 - Poi, dal PC con MastroSQL, ripeti **Impostazioni → Importa da MastroSQL**: questa volta vengono lette anche fatture, scadenze e saldi.
-- Installa sui telefoni la nuova `TopCash-Studio.apk` (versione 2.4.1: stampa ed email dei rapportini, trascina giù per aggiornare senza blocchi, numeri animati).
+- Installa sui telefoni la nuova `TopCash-Studio.apk` (versione 2.4.2: stampa ed email dei rapportini, trascina giù per aggiornare senza blocchi, numeri animati, gesto indietro con la pagina che si stacca come una scheda).
 - Configura **Impostazioni → Email rapportini** (sopra, sezione 7) e controlla in **Impostazioni → Backup automatici** che la copia su `H:\TcsSqlOfflineBackups` risulti riuscita.
 
 ## Aggiornare il server
