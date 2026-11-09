@@ -117,7 +117,7 @@ Per ricompilare: `powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\android
 
 Tutto è dentro `D:\TopCashSQL`:
 `data` (database e backup) · `app` (programma Windows) · `server-app` / `server-update` (server) · `android` (app Android) · `src`, `server` (codice) · `.tools` (Gradle, Android SDK, librerie) · `.runtime` (cache e file temporanei, si può svuotare).
-Fuori restano solo il servizio Windows, la regola del firewall e il collegamento sul Desktop, che puntano a questa cartella.
+Fuori restano solo i servizi Windows (Top Cash e, se attivo, Cloudflare), la regola del firewall e il collegamento sul Desktop, che puntano a questa cartella.
 
 ## Versioni del progetto (Git)
 
@@ -148,14 +148,37 @@ Il servizio si ferma per pochi secondi; dati, utenti e sessioni restano invariat
 - **Backup automatico ogni giorno** in `D:\TopCashSQL\data\backups` (ultimi 30). Copia periodicamente la cartella su un disco esterno o su Google Drive.
 - Cronologia: ogni sincronizzazione, importazione e modifica alle note riporta il nome dell'utente.
 
-## Accesso da fuori ufficio (prossimo passo consigliato)
+## Accesso da fuori ufficio (connessione privata)
 
-In ufficio il server usa `http://`, va bene sulla rete interna. Per usarlo **fuori ufficio**, e per installarlo sui telefoni con modalità offline, serve `https://`:
+Top Cash funziona anche fuori ufficio **senza installare altre app** su telefoni e PC: basta l'app Top Cash (o il browser).
+La connessione passa da un **tunnel Cloudflare** cifrato (`https://`): sul router **non si apre nessuna porta** e il PC server non è visibile su Internet.
+Da fuori entrano **solo i dispositivi che hai autorizzato** e, in più, serve sempre nome utente e password. In ufficio non cambia nulla.
 
-- **Tailscale** (consigliato, gratuito fino a 3 utenti / economico oltre): VPN privata con certificato HTTPS automatico. Nessuna porta aperta su Internet.
-- **Server cloud** (es. Azure o un provider europeo, ~10-30 €/mese) con dominio `topcash.tuodominio.it`.
+### Una volta sola (circa 20 minuti)
 
-Non esporre mai la porta 8470 direttamente su Internet senza HTTPS.
+1. **Dominio**: crea un account gratuito su [dash.cloudflare.com](https://dash.cloudflare.com) e registra un dominio (es. `topcash-app.it`, circa 10 €/anno, menu *Domain Registration*). Se ne hai già uno, aggiungilo a Cloudflare.
+2. **Tunnel**: in Cloudflare apri *Zero Trust → Networks → Tunnels → Create a tunnel* → tipo **Cloudflared** → nome `topcash` → scegli *Windows* e **copia il comando** mostrato (contiene il token: non condividerlo).
+3. **Indirizzo pubblico**: sempre nel tunnel, *Public Hostname → Add*: sottodominio `app`, il tuo dominio, *Service* **HTTP** e URL **`localhost:8472`**. Salva.
+4. Sul **PC server**, come amministratore: prima `aggiorna-server.ps1`, poi
+   ```
+   powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\collega-esterno.ps1
+   ```
+   incolla il comando/token copiato e scrivi l'indirizzo (es. `app.topcash-app.it`). Lo script scarica `cloudflared` (verificato) in `D:\TopCashSQL\.tools\cloudflared` e lo avvia come servizio.
+
+### Autorizzare i dispositivi
+
+- Da fuori ufficio, un telefono o PC nuovo mostra un **codice** (es. `K7Q-4M2`) e resta bloccato.
+- L'amministratore apre **Utenti → Dispositivi** e preme **Autorizza** sul codice giusto: il dispositivo si sblocca da solo in pochi secondi.
+- Lo stesso elenco mostra l'ultimo utente, l'ultimo accesso e l'indirizzo IP; **Blocca** chiude subito l'accesso da fuori a un telefono perso o di un ex collaboratore.
+- I dispositivi degli **amministratori** che accedono in ufficio sono autorizzati in automatico.
+
+### Sui dispositivi
+
+- **Android**: *Altro → Account e impostazioni → Cambia server* e compila **Indirizzo esterno** (es. `app.topcash-app.it`). In ufficio l'app usa il Wi-Fi, fuori passa da sola all'indirizzo esterno.
+- **App Windows** (portatili): *Impostazioni → Questo PC → Indirizzo esterno*, stesso comportamento automatico.
+- **Browser / iPhone**: apri `https://app.topcash-app.it` e, se vuoi, *Aggiungi a schermata Home*.
+
+Per spegnere l'accesso da fuori: `collega-esterno.ps1 -Rimuovi`. Non esporre mai la porta 8470 direttamente su Internet.
 
 ## Disinstallare
 

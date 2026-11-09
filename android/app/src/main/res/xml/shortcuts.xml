@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- long-press the app icon: the most frequent actions in one tap -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="new" android:enabled="true" android:icon="@drawable/shortcut_new" android:shortcutShortLabel="@string/sc_new_short" android:shortcutLongLabel="@string/sc_new">
+        <intent android:action="it.topcash.studio.NEW_INTERVENTION" android:targetPackage="it.topcash.studio" android:targetClass="it.topcash.studio.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="load" android:enabled="true" android:icon="@drawable/shortcut_load" android:shortcutShortLabel="@string/sc_load_short" android:shortcutLongLabel="@string/sc_load">
+        <intent android:action="it.topcash.studio.LOAD_STOCK" android:targetPackage="it.topcash.studio" android:targetClass="it.topcash.studio.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="search" android:enabled="true" android:icon="@drawable/shortcut_search" android:shortcutShortLabel="@string/sc_search_short" android:shortcutLongLabel="@string/sc_search">
+        <intent android:action="it.topcash.studio.SEARCH_CLIENT" android:targetPackage="it.topcash.studio" android:targetClass="it.topcash.studio.MainActivity" />
+    </shortcut>
+</shortcuts>

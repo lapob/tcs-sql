@@ -38,6 +38,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) handleShortcut(intent)
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.auto(0x00000000, 0x00000000), navigationBarStyle = SystemBarStyle.auto(0x00000000, 0x00000000))
         lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) = vm.setForeground(true)
@@ -47,6 +48,11 @@ class MainActivity : ComponentActivity() {
             val theme by vm.theme.collectAsStateWithLifecycle()
             TopCashTheme(theme) { AppRoot(vm) }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) { super.onNewIntent(intent); handleShortcut(intent) }
+    private fun handleShortcut(i: android.content.Intent?) {
+        vm.shortcut.value = when (i?.action) { "it.topcash.studio.NEW_INTERVENTION" -> "new"; "it.topcash.studio.LOAD_STOCK" -> "load"; "it.topcash.studio.SEARCH_CLIENT" -> "search"; else -> return }
     }
 }
 

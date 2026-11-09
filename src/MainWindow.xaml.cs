@@ -17,12 +17,15 @@ public partial class MainWindow : Window
  string SettingsPath=>Path.Combine(store.Folder,"settings.json");
  // Shared-archive mode: when set, the UI is served by the Top Cash server and this PC is a client (or the sync station).
  string serverUrl="";string syncToken="";
+ // optional external address (Cloudflare tunnel, https): used automatically when the office server cannot be reached
+ string serverExternal="";string activeServer="";
  bool ServerMode=>serverUrl.Length>0;
- string ServerOrigin=>ServerMode?new Uri(serverUrl).GetLeftPart(UriPartial.Authority):"";
+ string Active=>activeServer.Length>0?activeServer:serverUrl;
+ string ServerOrigin=>ServerMode?new Uri(Active).GetLeftPart(UriPartial.Authority):"";
  void SaveSettings()
  {
   var protectedToken=syncToken.Length==0?"":Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(syncToken),null,DataProtectionScope.CurrentUser));
-  File.WriteAllText(SettingsPath,JsonSerializer.Serialize(new{sourceFolder,serverUrl,syncToken=protectedToken}));
+  File.WriteAllText(SettingsPath,JsonSerializer.Serialize(new{sourceFolder,serverUrl,serverExternal,syncToken=protectedToken}));
  }
  void LoadSettings()
  {
@@ -30,6 +33,7 @@ public partial class MainWindow : Window
   try{using var s=JsonDocument.Parse(File.ReadAllText(SettingsPath));var r=s.RootElement;
    if(r.TryGetProperty("sourceFolder",out var sf))sourceFolder=sf.GetString()??sourceFolder;
    if(r.TryGetProperty("serverUrl",out var su))serverUrl=su.GetString()??"";
+   if(r.TryGetProperty("serverExternal",out var se))serverExternal=se.GetString()??"";
    if(r.TryGetProperty("syncToken",out var st)&&st.GetString() is {Length:>0} enc)syncToken=Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(enc),null,DataProtectionScope.CurrentUser));
   }catch(Exception ex){store.Log("error","Impostazioni: "+ex.Message);}
  }
@@ -76,7 +80,7 @@ public partial class MainWindow : Window
    core.WebMessageReceived+=Message; // the page sends "ready" once loaded: a single initial push
    // Only real connection failures to the server count (a cancelled mailto:/tel:/download navigation is not an error).
    core.NavigationCompleted+=(_,ev)=>{if(!ev.IsSuccess&&ServerMode&&!serverErrorOpen&&ev.WebErrorStatus is CoreWebView2WebErrorStatus.CannotConnect or CoreWebView2WebErrorStatus.ConnectionAborted or CoreWebView2WebErrorStatus.ConnectionReset or CoreWebView2WebErrorStatus.Disconnected or CoreWebView2WebErrorStatus.HostNameNotResolved or CoreWebView2WebErrorStatus.ServerUnreachable or CoreWebView2WebErrorStatus.Timeout)ShowServerError();};
-   Navigate();
+   await ChooseServer();Navigate();
    await Task.Yield();if(!ServerMode&&Scan(false)>0)await Push();
    timer.Tick+=async(_,_)=>{if(!busy&&!ServerMode){var count=Scan(false);if(count>0)await Push();}};timer.Start();
   }
@@ -86,17 +90,28 @@ public partial class MainWindow : Window
    if(answer==MessageBoxResult.Yes)Process.Start(new ProcessStartInfo("https://developer.microsoft.com/microsoft-edge/webview2/"){UseShellExecute=true});
   }
  }
- void Navigate()=>Dashboard.CoreWebView2?.Navigate(ServerMode?serverUrl:"https://topcash.local/index.html");
- bool serverErrorOpen;
+ void Navigate()=>Dashboard.CoreWebView2?.Navigate(ServerMode?Active:"https://topcash.local/index.html");
+ /// Office first (fast, stays on the LAN); outside the office the external address takes over without waiting for a timeout.
+ async Task ChooseServer()
+ {
+  activeServer=serverUrl;if(!ServerMode||serverExternal.Length==0)return;
+  try{using var http=new System.Net.Http.HttpClient{Timeout=TimeSpan.FromMilliseconds(1800)};var res=await http.GetAsync(serverUrl+"api/health");if(res.IsSuccessStatusCode)return;}catch{}
+  activeServer=serverExternal;
+ }
+ bool serverErrorOpen,triedOfficeAgain;
  void ShowServerError()
  {
+  // try the other address before bothering the user
+  if(serverExternal.Length>0&&Active!=serverExternal){activeServer=serverExternal;Navigate();return;}
+  if(serverExternal.Length>0&&Active==serverExternal&&!triedOfficeAgain){triedOfficeAgain=true;activeServer=serverUrl;Navigate();return;}
   serverErrorOpen=true;try{
-  var r=MessageBox.Show(this,$"Il server Top Cash ({serverUrl}) non risponde.\n\nSì = riprova\nNo = usa l'archivio locale di questo PC",
+  var r=MessageBox.Show(this,$"Il server Top Cash ({serverUrl}{(serverExternal.Length>0?" e "+serverExternal:"")}) non risponde.\n\nSì = riprova\nNo = usa l'archivio locale di questo PC",
    "Top Cash Studio",MessageBoxButton.YesNo,MessageBoxImage.Warning);
+  triedOfficeAgain=false;
   if(r==MessageBoxResult.No){serverUrl="";SaveSettings();}Navigate();
   }finally{serverErrorOpen=false;}
  }
- static readonly HashSet<string> RemoteActions=["external","portal","syncPortal","disconnectServer","setSyncToken","hostInfo","mastroRead"];
+ static readonly HashSet<string> RemoteActions=["external","portal","syncPortal","disconnectServer","setSyncToken","hostInfo","mastroRead","setExternal"];
  MastroBatch? lastMastro;
  static readonly JsonSerializerOptions jsonIn=new(){PropertyNameCaseInsensitive=true};
  /// Reads Mastro (read-only) on this PC and hands a preview to the page. Local mode keeps the batch for "mastroImport";
@@ -157,13 +172,22 @@ public partial class MainWindow : Window
       if(rp.ShowDialog(this)==true){File.WriteAllBytes(rp.FileName,InterventionReport.Build(store,rid));Process.Start(new ProcessStartInfo(rp.FileName){UseShellExecute=true});}}break;
     case "interventionDelete":
      try{store.DeleteIntervention(root.GetProperty("id").GetString()??"");await Push();await Notify("Intervento eliminato.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
-    case "hostInfo":Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,portalOpen=portal!=null});break;
+    case "hostInfo":Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,serverExternal,activeServer=Active,portalOpen=portal!=null});break;
+    case "setExternal":
+     {
+      var raw=(root.GetProperty("url").GetString()??"").Trim();
+      if(raw.Length==0){serverExternal="";SaveSettings();await Notify("Indirizzo esterno rimosso.");break;}
+      if(!raw.Contains("://"))raw="https://"+raw;
+      if(!Uri.TryCreate(raw,UriKind.Absolute,out var eu)||eu.Scheme!="https"||!eu.Host.Contains('.')){await Notify("Indirizzo esterno non valido: usa il nome del dominio, es. topcash.tuodominio.it");break;}
+      serverExternal=eu.GetLeftPart(UriPartial.Authority)+"/";SaveSettings();
+      Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,serverExternal,activeServer=Active,portalOpen=portal!=null});await Notify("Indirizzo esterno salvato: fuori ufficio verrà usato in automatico.");break;
+     }
     case "connectServer":
      var url=NormalizeServer(root.GetProperty("url").GetString()??"");if(url==null){await Notify("Indirizzo del server non valido.");break;}
-     try{using var http=new System.Net.Http.HttpClient{Timeout=TimeSpan.FromSeconds(6)};var res=await http.GetAsync(url+"api/session");if(!res.IsSuccessStatusCode)throw new Exception("HTTP "+(int)res.StatusCode);}
+     try{using var http=new System.Net.Http.HttpClient{Timeout=TimeSpan.FromSeconds(6)};var res=await http.GetAsync(url+"api/health");if(!res.IsSuccessStatusCode)throw new Exception("HTTP "+(int)res.StatusCode);}
      catch(Exception ex){await Notify("Server non raggiungibile: "+ex.Message);break;}
-     serverUrl=url;SaveSettings();portal?.Close();Navigate();break;
-    case "disconnectServer":serverUrl="";syncToken="";SaveSettings();portal?.Close();Navigate();break;
+     serverUrl=url;activeServer=url;SaveSettings();portal?.Close();Navigate();break;
+    case "disconnectServer":serverUrl="";serverExternal="";activeServer="";syncToken="";SaveSettings();portal?.Close();Navigate();break;
     case "setSyncToken":syncToken=root.GetProperty("token").GetString()??"";SaveSettings();if(portal!=null)portal.Target=SyncTarget();
      Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,portalOpen=portal!=null});await Notify(syncToken.Length>0?"Questo PC è ora la postazione di sincronizzazione.":"Postazione di sincronizzazione disattivata.");break;
     case "ready":await Push();break;

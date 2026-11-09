@@ -16,7 +16,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.sse.EventSource
 import java.io.File
 
-enum class Screen { Loading, Setup, Login, Main }
+enum class Screen { Loading, Setup, Login, Main, Device }
 data class SyncProgress(val running: Boolean = false, val text: String = "")
 
 /** Single source of truth: cached archive (works offline), session, live updates from the server. */
@@ -27,6 +27,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val etagFile = File(app.filesDir, "archive.etag")
 
     private val _screen = MutableStateFlow(Screen.Loading); val screen = _screen.asStateFlow()
+    /** Pending launcher shortcut ("new", "load", "search"), consumed by the UI once the archive is ready. */
+    val shortcut = MutableStateFlow<String?>(null)
+    /** One-shot: the clients search field takes the focus (shortcut "Cerca cliente"). */
+    val focusSearch = MutableStateFlow(false)
     private val _archive = MutableStateFlow<Archive?>(null); val archive = _archive.asStateFlow()
     private val _me = MutableStateFlow<Me?>(null); val me = _me.asStateFlow()
     private val _online = MutableStateFlow(true); val online = _online.asStateFlow()
@@ -35,6 +39,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4); val messages = _messages.asSharedFlow()
     private val _theme = MutableStateFlow(prefs.getString("theme", "system") ?: "system"); val theme = _theme.asStateFlow()
     val server: String get() = prefs.getString("server", "").orEmpty()
+    val serverExternal: String get() = prefs.getString("server_ext", "").orEmpty()
+    /** Code shown on the "authorize this device" screen, and its status (pending / revoked). */
+    private val _device = MutableStateFlow(DeviceStatus()); val device = _device.asStateFlow()
+    val usingExternal: Boolean get() = api.isExternal
+    private val deviceKey: String by lazy {
+        prefs.getString("device_key", null) ?: java.security.SecureRandom().let { r -> ByteArray(32).also(r::nextBytes) }
+            .let { android.util.Base64.encodeToString(it, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP) }
+            .also { prefs.edit().putString("device_key", it).apply() }
+    }
 
     private var etag: String? = null
     private var stream: EventSource? = null
@@ -47,14 +60,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun start() = viewModelScope.launch {
         if (server.isBlank()) { _screen.value = Screen.Setup; return@launch }
-        api.base = server
-        loadCache()
+        api.deviceKey = deviceKey
+        api.bases = listOf(server, serverExternal).filter { it.isNotBlank() }; api.base = server
+        if (_archive.value == null) loadCache()
         try {
+            if (api.bases.size > 1) api.choose()
+            // outside the office the server only talks to approved devices
+            // an older server has no device check yet (404): behave as in the office
+            val h = try { api.hello() } catch (e: ApiException) { if (e.status == 404) DeviceStatus("office") else throw e }
+            if (h.remote && h.status != "approved") { _device.value = h; _screen.value = Screen.Device; return@launch }
             val s = api.session()
             if (s.user == null) { _screen.value = Screen.Login; return@launch }
             _me.value = s.user; prefs.edit().putString("me", json.encodeToString(Me.serializer(), s.user)).apply()
             _screen.value = Screen.Main; refresh(); connect()
         } catch (e: ApiException) {
+            if (e.device.isNotEmpty()) { _device.value = DeviceStatus(e.device, e.code, true); _screen.value = Screen.Device; return@launch }
             // offline: show the last saved archive if we have one
             if (_archive.value != null && prefs.getString("me", null) != null) {
                 _me.value = runCatching { json.decodeFromString<Me>(prefs.getString("me", "")!!) }.getOrNull(); _online.value = false; _screen.value = Screen.Main; scheduleReconnect()
@@ -82,6 +102,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _online.value = true
             } catch (e: ApiException) {
                 if (e.status == 401) { signedOut(); return@launch }
+                if (e.device.isNotEmpty()) { stream?.cancel(); stream = null; _device.value = DeviceStatus(e.device, e.code, true); _screen.value = Screen.Device; return@launch }
                 _online.value = false; if (userInitiated) _messages.tryEmit(e.message ?: "Aggiornamento non riuscito")
             } finally { _refreshing.value = false }
         }
@@ -102,7 +123,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     private fun scheduleReconnect() {
         reconnect?.cancel()
-        reconnect = viewModelScope.launch { delay(backoff); backoff = (backoff * 2).coerceAtMost(30_000L); refresh(); connect() }
+        reconnect = viewModelScope.launch { delay(backoff); backoff = (backoff * 2).coerceAtMost(30_000L); if (api.bases.size > 1) api.choose(); refresh(); connect() }
     }
     /** Live updates only while the app is visible (battery friendly); catch up on return. */
     fun setForeground(value: Boolean) {
@@ -111,17 +132,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         else { stream?.cancel(); stream = null; reconnect?.cancel() }
     }
 
-    fun setServer(input: String): String? {
+    fun setServer(input: String, external: String = ""): String? {
         val url = Api.normalize(input) ?: return "Indirizzo non valido"
-        prefs.edit().putString("server", url).apply(); api.base = url
+        val ext = if (external.isBlank()) "" else Api.normalizeExternal(external) ?: return "Indirizzo esterno non valido: usa il nome del dominio, es. topcash.tuodominio.it"
+        prefs.edit().putString("server", url).putString("server_ext", ext).apply()
         _screen.value = Screen.Loading; start(); return null
     }
+    /** "Controlla ora" on the authorization screen; also polled every few seconds. */
+    suspend fun checkDevice(): Boolean = try {
+        val h = api.hello(); _device.value = h
+        if (!h.remote || h.status == "approved") { _screen.value = Screen.Loading; start(); true } else false
+    } catch (e: ApiException) { false }
     fun changeServer() { stream?.cancel(); stream = null; _screen.value = Screen.Setup }
 
     suspend fun login(user: String, password: String): String? = try {
-        val me = api.login(user.trim(), password); _me.value = me; prefs.edit().putString("me", json.encodeToString(Me.serializer(), me)).apply()
+        val me = api.login(user.trim(), password); _me.value = me; prefs.edit().putString("last_user", user.trim()).apply(); prefs.edit().putString("me", json.encodeToString(Me.serializer(), me)).apply()
         _screen.value = Screen.Main; refresh(); connect(); null
-    } catch (e: ApiException) { e.message }
+    } catch (e: ApiException) { if (e.device.isNotEmpty()) { _device.value = DeviceStatus(e.device, e.code, true); _screen.value = Screen.Device }; e.message }
+    val lastUser: String get() = prefs.getString("last_user", "").orEmpty()
 
     fun logout() = viewModelScope.launch {
         stream?.cancel(); stream = null; api.logout(); signedOut()

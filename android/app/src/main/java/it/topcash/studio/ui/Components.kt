@@ -38,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -160,8 +161,10 @@ fun hueColor(key: String, dark: Boolean = false): Color { var h = 0; key.forEach
 @Composable fun Gap(h: Dp) = Spacer(Modifier.height(h))
 
 /** Rounded search field: one-line placeholder (never wraps), clear button. */
-@Composable fun SearchField(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier) {
-    androidx.compose.material3.OutlinedTextField(value, onChange, modifier.fillMaxWidth(),
+@Composable fun SearchField(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier, focus: Boolean = false, onFocused: () -> Unit = {}) {
+    val fr = androidx.compose.runtime.remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(focus) { if (focus) { kotlinx.coroutines.delay(350); runCatching { fr.requestFocus() }; onFocused() } }
+    androidx.compose.material3.OutlinedTextField(value, onChange, modifier.fillMaxWidth().focusRequester(fr),
         placeholder = { Text(placeholder, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.Search, null) },
         trailingIcon = { if (value.isNotEmpty()) androidx.compose.material3.IconButton({ onChange("") }) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.Clear, "Cancella") } },

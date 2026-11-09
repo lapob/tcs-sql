@@ -23,5 +23,6 @@ fun Modifier.hazeSourceCompat(state: HazeState): Modifier = this.then(Modifier.h
 @Composable fun Modifier.glass(state: HazeState?, strong: Boolean = false): Modifier {
     if (state == null) return this
     val c = MaterialTheme.colorScheme.surfaceContainer
-    return this.hazeBlur(HazeInput.Sources(state), style = if (strong) HazeMaterials.thin(c) else HazeMaterials.ultraThin(c))
+    // Balanced: the blur is computed on a downscaled copy → same frosted look, a fraction of the GPU work (no jank while scrolling)
+    return this.hazeBlur(HazeInput.Sources(state), style = if (strong) HazeMaterials.thin(c) else HazeMaterials.ultraThin(c), performanceMode = dev.chrisbanes.haze.HazePerformanceMode.Balanced)
 }

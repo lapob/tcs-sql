@@ -24,6 +24,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material.icons.rounded.Router
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -53,6 +55,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.unit.dp
 import it.topcash.studio.R
 import it.topcash.studio.data.AppViewModel
@@ -87,6 +92,7 @@ import kotlinx.coroutines.launch
 @Composable fun SetupScreen(vm: AppViewModel) {
     // pre-filled with the office server; any other address (or https://…) can be typed
     var address by rememberSaveable { mutableStateOf(vm.server.removePrefix("http://").trimEnd('/').removeSuffix(":8470").ifBlank { "192.168.1.220" }) }
+    var external by rememberSaveable { mutableStateOf(vm.serverExternal.removePrefix("https://").trimEnd('/')) }
     var error by remember { mutableStateOf<String?>(null) }
     AuthFrame {
         Logo()
@@ -96,15 +102,19 @@ import kotlinx.coroutines.launch
         OutlinedTextField(address, { address = it; error = null }, Modifier.fillMaxWidth().widthIn(max = 460.dp).appear(3), label = { Text("Indirizzo del server") },
             placeholder = { Text("192.168.1.220") }, leadingIcon = { Icon(Icons.Rounded.Router, null) }, singleLine = true, isError = error != null,
             supportingText = { Text(error ?: "La porta 8470 viene aggiunta in automatico") }, shape = MaterialTheme.shapes.medium,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go), keyboardActions = KeyboardActions(onGo = { error = vm.setServer(address) }))
-        Button({ error = vm.setServer(address) }, Modifier.fillMaxWidth().widthIn(max = 460.dp).height(54.dp).padding(top = 6.dp).appear(4), shape = MaterialTheme.shapes.medium) { Text("Collega") }
-        Text("Funziona sul Wi-Fi dell'ufficio. I dati restano sul server aziendale.", style = MaterialTheme.typography.bodySmall,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go), keyboardActions = KeyboardActions(onGo = { error = vm.setServer(address, external) }))
+        OutlinedTextField(external, { external = it; error = null }, Modifier.fillMaxWidth().widthIn(max = 460.dp).padding(top = 4.dp).appear(3), label = { Text("Indirizzo esterno (facoltativo)") },
+            placeholder = { Text("topcash.tuodominio.it") }, leadingIcon = { Icon(Icons.Rounded.Public, null) }, singleLine = true,
+            supportingText = { Text("Per usare l'app anche fuori ufficio") }, shape = MaterialTheme.shapes.medium,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go), keyboardActions = KeyboardActions(onGo = { error = vm.setServer(address, external) }))
+        Button({ error = vm.setServer(address, external) }, Modifier.fillMaxWidth().widthIn(max = 460.dp).height(54.dp).padding(top = 6.dp).appear(4), shape = MaterialTheme.shapes.medium) { Text("Collega") }
+        Text("In ufficio usa il Wi-Fi, fuori passa da solo all'indirizzo esterno. I dati restano sul server aziendale.", style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 24.dp).appear(5))
     }
 }
 
 @Composable fun LoginScreen(vm: AppViewModel) {
-    var user by rememberSaveable { mutableStateOf("") }
+    var user by rememberSaveable { mutableStateOf(vm.lastUser) }
     var pass by remember { mutableStateOf("") }
     var show by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
@@ -126,5 +136,36 @@ import kotlinx.coroutines.launch
             if (busy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp, color = MaterialTheme.colorScheme.onPrimary) else Text("Accedi")
         }
         TextButton({ vm.changeServer() }, Modifier.padding(top = 12.dp)) { Text("Cambia server") }
+    }
+}
+
+/** Outside the office: this phone must be approved by an administrator (Utenti → Dispositivi). Polls on its own. */
+@Composable fun DeviceScreen(vm: AppViewModel) {
+    val d by vm.device.collectAsStateWithLifecycle()
+    val blocked = d.status == "revoked"
+    var checking by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(blocked) { if (!blocked) while (true) { kotlinx.coroutines.delay(8000); if (vm.checkDevice()) break } }
+    AuthFrame {
+        Logo()
+        Text(if (blocked) "Dispositivo bloccato" else "Autorizza questo telefono", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center, modifier = Modifier.padding(top = 22.dp).appear(1))
+        Text(if (blocked) "L'amministratore ha bloccato l'accesso da fuori ufficio per questo telefono."
+             else "Da fuori ufficio Top Cash si apre solo sui dispositivi approvati. Comunica questo codice all'amministratore: lo trova in Utenti → Dispositivi.",
+            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 460.dp).padding(top = 8.dp, bottom = 22.dp).appear(2))
+        if (d.code.isNotEmpty()) androidx.compose.foundation.layout.Row(
+            Modifier.appear(3).clip(MaterialTheme.shapes.large).background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 26.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.VerifiedUser, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            Text("  " + d.code, style = MaterialTheme.typography.headlineMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, letterSpacing = androidx.compose.ui.unit.TextUnit(3f, androidx.compose.ui.unit.TextUnitType.Sp)),
+                color = MaterialTheme.colorScheme.onPrimaryContainer)
+        }
+        if (!blocked) androidx.compose.foundation.layout.Row(Modifier.padding(top = 22.dp).appear(4), verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+            Text("  In attesa di approvazione: si sblocca da solo", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        TextButton({ checking = true; scope.launch { vm.checkDevice(); checking = false } }, Modifier.padding(top = 12.dp), enabled = !checking) { Text(if (checking) "Controllo…" else "Controlla ora") }
+        TextButton({ vm.changeServer() }) { Text("Cambia server") }
     }
 }

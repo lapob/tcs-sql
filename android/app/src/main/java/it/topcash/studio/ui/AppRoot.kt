@@ -61,6 +61,8 @@ import it.topcash.studio.data.Archive
 import it.topcash.studio.data.Screen
 
 /** Scopes for shared-element transitions (list avatar → detail header). */
+private val navSpring = androidx.compose.animation.core.spring(dampingRatio = 0.86f, stiffness = 420f, visibilityThreshold = androidx.compose.ui.unit.IntOffset(1, 1))
+private val navSpringF = androidx.compose.animation.core.spring<Float>(dampingRatio = 0.8f, stiffness = 500f)
 val LocalShared = compositionLocalOf<SharedTransitionScope?> { null }
 val LocalAnim = compositionLocalOf<AnimatedVisibilityScope?> { null }
 
@@ -90,6 +92,7 @@ object Actions {
             Screen.Setup -> SetupScreen(vm)
             Screen.Login -> LoginScreen(vm)
             Screen.Main -> MainScreen(vm)
+            Screen.Device -> DeviceScreen(vm)
         }
     }
     }
@@ -109,6 +112,13 @@ private val tabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("cli
     var editor by remember { mutableStateOf<EditorRequest?>(null) }
     var movement by remember { mutableStateOf<Pair<String, String?>?>(null) } // (type, article)
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
+    // launcher shortcuts (long-press on the app icon)
+    val sc by vm.shortcut.collectAsStateWithLifecycle()
+    LaunchedEffect(sc, archive != null) {
+        if (archive == null) return@LaunchedEffect
+        when (sc) { "new" -> editor = EditorRequest(); "load" -> movement = "carico" to null; "search" -> { nav.switchTab("clients"); vm.focusSearch.value = true }; else -> return@LaunchedEffect }
+        vm.shortcut.value = null
+    }
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route ?: "home"
     val topLevel = tabs.any { it.route == route }
@@ -136,10 +146,11 @@ private val tabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("cli
         SharedTransitionLayout(Modifier.fillMaxSize().hazeSourceCompat(haze)) {
             CompositionLocalProvider(LocalShared provides this, LocalAppHaze provides haze, LocalBottomBar provides if (topLevel) androidx.compose.ui.unit.Dp(80f) else androidx.compose.ui.unit.Dp(0f)) {
                 NavHost(nav, startDestination = "home",
-                    enterTransition = { if (initialState.destination.route in tabRoutes && targetState.destination.route in tabRoutes) fadeIn(tween(260)) + scaleIn(tween(320), 0.97f) else slideInHorizontally(tween(380)) { it / 3 } + fadeIn(tween(300)) },
-                    exitTransition = { if (initialState.destination.route in tabRoutes && targetState.destination.route in tabRoutes) fadeOut(tween(160)) else slideOutHorizontally(tween(380)) { -it / 6 } + fadeOut(tween(300)) },
-                    popEnterTransition = { slideInHorizontally(tween(380)) { -it / 6 } + fadeIn(tween(300)) },
-                    popExitTransition = { slideOutHorizontally(tween(380)) { it / 3 } + fadeOut(tween(260)) },
+                    // tabs: quick "fade through"; details: spring slide that follows the finger on predictive back
+                    enterTransition = { if (initialState.destination.route in tabRoutes && targetState.destination.route in tabRoutes) fadeIn(tween(210, 70)) + scaleIn(navSpringF, 0.95f) else slideInHorizontally(navSpring) { it / 3 } + fadeIn(tween(220)) },
+                    exitTransition = { if (initialState.destination.route in tabRoutes && targetState.destination.route in tabRoutes) fadeOut(tween(90)) else slideOutHorizontally(navSpring) { -it / 6 } + fadeOut(tween(220)) },
+                    popEnterTransition = { slideInHorizontally(navSpring) { -it / 6 } + fadeIn(tween(220)) },
+                    popExitTransition = { slideOutHorizontally(navSpring) { it / 3 } + fadeOut(tween(200)) },
                 ) {
                     fun screen(r: String, body: @Composable (Archive) -> Unit) = composable(r) {
                         CompositionLocalProvider(LocalAnim provides this) { if (a == null) LoadingArchive() else body(a) }

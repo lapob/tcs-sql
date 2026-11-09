@@ -5,7 +5,8 @@
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const icon=n=>`<svg aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const nf=new Intl.NumberFormat('it-IT');const fmt=n=>nf.format(n);
+const nf=new Intl.NumberFormat('it-IT');const DF0=new Intl.DateTimeFormat('it-IT',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}),DF1=new Intl.DateTimeFormat('it-IT',{day:'numeric',month:'short',year:'numeric'}),DF2=new Intl.DateTimeFormat('it-IT',{month:'long',year:'numeric'}),DF3=new Intl.DateTimeFormat('it-IT',{month:'short'}),DF4=new Intl.DateTimeFormat('it-IT',{weekday:'long',day:'numeric',month:'long'}),DF5=new Intl.DateTimeFormat('it-IT',{weekday:'short'}); // formatters are costly to build: create once
+const fmt=n=>nf.format(n);
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const store={get(k,d){try{const v=localStorage.getItem('tc.'+k);return v===null?d:JSON.parse(v);}catch{return d;}},set(k,v){try{localStorage.setItem('tc.'+k,JSON.stringify(v));}catch{}}};
 let today=new Date();today.setHours(0,0,0,0);
@@ -14,8 +15,8 @@ const _pd=new Map();
 function parseDate(v){if(!v)return null;let d=_pd.get(v);if(d!==undefined)return d;let m=String(v).match(/^(\d{2})[-/](\d{2})[-/](\d{4})(?:\s+(\d{2}):(\d{2}))?/);d=m?new Date(+m[3],+m[2]-1,+m[1],+(m[4]||0),+(m[5]||0)):(m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})/))?new Date(+m[1],+m[2]-1,+m[3]):null;if(_pd.size>20000)_pd.clear();_pd.set(v,d);return d;}
 const dayDiff=d=>d?Math.round((new Date(d.getFullYear(),d.getMonth(),d.getDate())-today)/86400000):null;
 const days=v=>dayDiff(parseDate(v));
-const dShort=d=>d?new Intl.DateTimeFormat('it-IT',{day:'numeric',month:'short',year:'numeric'}).format(d):'—';
-const dTime=v=>v?new Intl.DateTimeFormat('it-IT',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(v)):'—';
+const dShort=d=>d?DF1.format(d):'—';
+const dTime=v=>v?DF0.format(new Date(v)):'—';
 const rel=n=>n===null?'':n===0?'oggi':n===1?'domani':n===-1?'ieri':n>0?`tra ${n} giorni`:`${-n} giorni fa`;
 const norm=s=>String(s||'').toLocaleLowerCase('it').normalize('NFD').replace(/[̀-ͯ]/g,'');
 const normName=s=>norm(s).replace(/[^a-z0-9]/g,'');
@@ -102,11 +103,12 @@ async function api(path,opt={}){
  const r=await fetch(path,{credentials:'same-origin',...opt,headers});
  if(r.status===401&&!/\/api\/(login|password|session)/.test(path)){showAuth('login');throw new Error('Sessione scaduta: accedi di nuovo.');}
  const ct=r.headers.get('content-type')||'';const data=ct.includes('json')?await r.json():await r.text();
+ if(r.status===403&&data?.device){showDevice(data.device,data.code);throw new Error(data.error);}
  if(!r.ok)throw new Error(data?.error||(typeof data==='string'&&data)||('Errore '+r.status));return data;}
 const post=(p,b)=>api(p,{method:'POST',body:JSON.stringify(b||{})});
 function download(url){const a=document.createElement('a');a.href=url;a.download='';document.body.append(a);a.click();a.remove();toast('Download avviato','download');}
 function pickAndUpload(){const i=document.createElement('input');i.type='file';i.accept='.csv,.json,.xlsx';i.onchange=async()=>{const f=i.files[0];if(!f)return;const fd=new FormData();fd.append('file',f);try{const r=await api('/api/import',{method:'POST',body:fd});toast(r.message||'Importazione completata');}catch(e){toast(e.message,'alert');}};i.click();}
-const HOST_ACTIONS=['portal','syncPortal','external','setSyncToken','disconnectServer','connectServer','hostInfo'];
+const HOST_ACTIONS=['portal','syncPortal','external','setSyncToken','disconnectServer','connectServer','hostInfo','setExternal'];
 function send(action,data={}){
  if(!WEB){if(host)host.postMessage({action,...data});else toast('Funzione disponibile nell’app Windows (TopCash.Licenze.exe).','alert');return;}
  if(host&&HOST_ACTIONS.includes(action))return host.postMessage({action,...data});
@@ -141,9 +143,9 @@ document.addEventListener('pointerover',e=>{if(e.pointerType==='touch')return;co
 ['scroll','pointerdown','keydown','wheel'].forEach(ev=>addEventListener(ev,hideTip,{capture:true,passive:true}));
 // ── in-app confirmation dialog (replaces the browser's grey confirm boxes)
 let lastAskAlign=false;
-function ask({title,text='',ok='Conferma',danger=false,html=''}){return new Promise(res=>{
+function ask({title,text='',ok='Conferma',danger=false,html='',cancel=true}){return new Promise(res=>{
  const m=document.createElement('div');m.className='modal';
- m.innerHTML=`<div class="modal-box" role="alertdialog" aria-modal="true" aria-label="${esc(title)}"><h3>${esc(title)}</h3>${text?`<p>${text}</p>`:''}${html}<div class="btn-row"><button class="btn ghost" data-m="0">Annulla</button><button class="btn ${danger?'danger':'accent'}" data-m="1">${esc(ok)}</button></div></div>`;
+ m.innerHTML=`<div class="modal-box" role="alertdialog" aria-modal="true" aria-label="${esc(title)}"><h3>${esc(title)}</h3>${text?`<p>${text}</p>`:''}${html}<div class="btn-row">${cancel?'<button class="btn ghost" data-m="0">Annulla</button>':''}<button class="btn ${danger?'danger':'accent'}" data-m="1">${esc(ok)}</button></div></div>`;
  document.body.append(m);const prev=document.activeElement;
  const key=e=>{if(e.key==='Escape'){e.stopPropagation();e.preventDefault();close(false);}if(e.key==='Tab'){const f=[...m.querySelectorAll('button')];const i=f.indexOf(document.activeElement);e.preventDefault();f[(i+(e.shiftKey?-1:1)+f.length)%f.length].focus();}};
  const close=v=>{lastAskAlign=!!m.querySelector('#mastro-align')?.checked;document.removeEventListener('keydown',key,true);m.classList.add('out');setTimeout(()=>m.remove(),220);prev?.focus?.({preventScroll:true});res(v);};
@@ -167,7 +169,7 @@ function pageOf(list,size){const pages=Math.max(1,Math.ceil(list.length/size));u
 function search(placeholder){return`<label class="search">${icon('search')}<input id="q" value="${esc(ui.q)}" placeholder="${placeholder}" autocomplete="off"></label>`;}
 function sel(id,label,options,value){return`<select class="select" id="${id}" aria-label="${label}"><option value="">${label}</option>${options.map(o=>`<option${o===value?' selected':''} value="${esc(o)}">${esc(famLabel(o))}</option>`).join('')}</select>`;}
 const telOk=p=>(p||'').replace(/\D/g,'').length>=6;
-function contacts(c){return`<div class="contact-icons"><button class="ci ${telOk(c.phone)?'on':'off'}" ${telOk(c.phone)?`data-ext="tel:${esc(c.phone.replace(/[^\d+]/g,''))}" data-tip="Chiama ${esc(c.phone)}"`:'disabled'}>${icon('phone')}</button><button class="ci ${c.email?'on':'off'}" ${c.email?`data-ext="mailto:${esc(c.email)}" data-tip="Scrivi a ${esc(c.email)}"`:'disabled'}>${icon('mail')}</button><button class="ci ${c.address?'on':'off'}" ${c.address?`data-ext="${mapsUrl(c)}" data-tip="Apri in Google Maps"`:'disabled'}>${icon('pin')}</button></div>`;}
+function contacts(c){return`<div class="contact-icons"><button class="ci ${telOk(c.phone)?'on':'off'}" aria-label="Chiama" ${telOk(c.phone)?`data-ext="tel:${esc(c.phone.replace(/[^\d+]/g,''))}" data-tip="Chiama ${esc(c.phone)}"`:'disabled'}>${icon('phone')}</button><button class="ci ${c.email?'on':'off'}" aria-label="Email" ${c.email?`data-ext="mailto:${esc(c.email)}" data-tip="Scrivi a ${esc(c.email)}"`:'disabled'}>${icon('mail')}</button><button class="ci ${c.address?'on':'off'}" aria-label="Mappa" ${c.address?`data-ext="${mapsUrl(c)}" data-tip="Apri in Google Maps"`:'disabled'}>${icon('pin')}</button></div>`;}
 const mapsUrl=c=>'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent([c.address,c.city].filter(Boolean).join(', '));
 const empty=(ic,title,text)=>`<div class="empty">${icon(ic)}<strong>${title}</strong><span>${text}</span></div>`;
 function lastCapture(){const d=state.sources.map(s=>s.capturedAt).concat((state.clients||[]).slice(0,1).map(c=>c.capturedAt)).filter(Boolean).sort().at(-1);return d?dTime(d):'mai';}
@@ -181,7 +183,7 @@ function overview(){
  const fams=Object.keys(FAMILY).map(f=>({f,n:D.current.filter(r=>famOfScope(r.scope)===f).length})).filter(x=>x.n);const maxF=Math.max(1,...fams.map(x=>x.n));
  const agenda=D.tasks.filter(c=>c.meta.nextContact&&c.meta.followupState!=='Completato').sort((a,b)=>a.meta.nextContact.localeCompare(b.meta.nextContact)).slice(0,5);
  const needSync=!(state.clients||[]).length;
- return`${hero(`${greet}, <span class="grad">${esc(WEB&&me?.name?me.name.split(/\s+/)[0]:'Top Cash')}</span>.`,`Tutti i tuoi clienti, licenze e ordini Zucchetti in un unico posto · ${new Intl.DateTimeFormat('it-IT',{weekday:'long',day:'numeric',month:'long'}).format(new Date())}`,`<button class="btn" data-action="exportClients">${icon('download')}Esporta anagrafica</button><button class="btn accent" data-action="syncPortal">${icon('sync')}Sincronizza</button>`)}
+ return`${hero(`${greet}, <span class="grad">${esc(WEB&&me?.name?me.name.split(/\s+/)[0]:'Top Cash')}</span>.`,`Tutti i tuoi clienti, licenze e ordini Zucchetti in un unico posto · ${DF4.format(new Date())}`,`<button class="btn" data-action="exportClients">${icon('download')}Esporta anagrafica</button><button class="btn accent" data-action="syncPortal">${icon('sync')}Sincronizza</button>`)}
  ${explain('overview','<strong>Questa è la tua plancia.</strong> In alto i numeri chiave (cliccali per aprire la sezione), poi le scadenze imminenti, l’andamento degli ordini e lo stato delle licenze. Usa <strong>Ctrl K</strong> in qualsiasi momento per trovare un cliente, una matricola o un ordine.')}
  <div class="kpis">
   ${kpi('Clienti',cs.length,`${fmt(withPhone)} con telefono · ${fmt(withMail)} con email`,'users','','clients',2,'Clienti distinti da anagrafica e licenze Zucchetti')}
@@ -192,15 +194,15 @@ function overview(){
  <div class="layout-2"><div class="stack">
   ${needSync?`<div class="banner reveal" style="--i:6"><span class="orb">${icon('sync')}</span><div class="grow"><h3>Completa le anagrafiche dei clienti</h3><p>Avvia una sincronizzazione: verranno letti indirizzi, telefoni, email, codici fiscali e ordini da MY Zucchetti.</p></div><button class="btn" data-go="sync">Come si fa ${icon('arrow')}</button></div>`:`<div class="banner reveal" style="--i:6"><span class="orb">${icon('shield')}</span><div class="grow"><h3>Archivio allineato con Zucchetti</h3><p>Ultima lettura dal portale: ${esc(lastCapture())}. ${WEB?'Tutto il team vede gli stessi dati, in tempo reale.':'I dati restano sul tuo computer.'}</p></div><button class="btn" data-go="sync">Dettagli ${icon('arrow')}</button></div>`}
   <div class="card reveal" style="--i:7"><div class="card-head"><div><h2>Prossime scadenze</h2><p>Licenze che scadono nei prossimi 60 giorni (e quelle appena scadute).</p></div><button class="btn ghost sm" data-go="expiry">Scadenziario ${icon('arrow')}</button></div>
-   ${upcoming.map(r=>{const d=parseDate(r.expiry),n=dayDiff(d);return`<div class="list-row" data-client="${esc(r.clientCode)}"><span class="date-chip ${n<0?'bad':n<=30?'due':''}"><b>${d.getDate()}</b><span>${new Intl.DateTimeFormat('it-IT',{month:'short'}).format(d)}</span></span><div class="grow"><strong>${esc(r.client)}</strong><small>${esc(famLabel(famOfScope(r.scope)))} · <span class="mono">${esc(r.serial)}</span></small></div><span class="in-days" style="color:var(--${n<0?'bad':n<=30?'due':'text-3'})">${rel(n)}</span></div>`;}).join('')||empty('calendar','Nessuna scadenza imminente','Nei prossimi 60 giorni non scade nessuna licenza.')}
+   ${upcoming.map(r=>{const d=parseDate(r.expiry),n=dayDiff(d);return`<div class="list-row" data-client="${esc(r.clientCode)}"><span class="date-chip ${n<0?'bad':n<=30?'due':''}"><b>${d.getDate()}</b><span>${DF3.format(d)}</span></span><div class="grow"><strong>${esc(r.client)}</strong><small>${esc(famLabel(famOfScope(r.scope)))} · <span class="mono">${esc(r.serial)}</span></small></div><span class="in-days" style="color:var(--${n<0?'bad':n<=30?'due':'text-3'})">${rel(n)}</span></div>`;}).join('')||empty('calendar','Nessuna scadenza imminente','Nei prossimi 60 giorni non scade nessuna licenza.')}
   </div>
   <div class="card reveal" style="--i:8"><div class="card-head"><div><h2>Ordini negli ultimi 12 mesi</h2><p>Ordini web registrati sul portale, per mese.</p></div><button class="btn ghost sm" data-go="orders">Tutti gli ordini ${icon('arrow')}</button></div>
-   ${D.orders.length?`<div class="bars">${months.map((m,i)=>`<div class="bar"><i style="height:${Math.max(3,m.n/maxM*100)}%;--i:${i}" data-v="${m.n} ordini"></i><span>${new Intl.DateTimeFormat('it-IT',{month:'short'}).format(m.d)}</span></div>`).join('')}</div>`:empty('bag','Nessun ordine in archivio','Gli ordini arrivano con la prossima sincronizzazione.')}
+   ${D.orders.length?`<div class="bars">${months.map((m,i)=>`<div class="bar"><i style="height:${Math.max(3,m.n/maxM*100)}%;--i:${i}" data-v="${m.n} ordini"></i><span>${DF3.format(m.d)}</span></div>`).join('')}</div>`:empty('bag','Nessun ordine in archivio','Gli ordini arrivano con la prossima sincronizzazione.')}
   </div>
  </div><div class="stack">
   ${donut()}
   <div class="card reveal" style="--i:8"><h2>Licenze per prodotto</h2><p class="sub">Elenchi correnti per famiglia Zucchetti.</p><div style="margin-top:12px">${fams.map((x,i)=>`<div class="hbar"><span>${esc(famLabel(x.f))}</span><span class="track"><span class="fill" style="width:${x.n/maxF*100}%;--i:${i};display:block"></span></span><strong>${fmt(x.n)}</strong></div>`).join('')||'<p class="sub">Nessuna licenza.</p>'}</div></div>
-  <div class="card reveal" style="--i:9"><div class="card-head"><div><h2>Agenda contatti</h2><p>I promemoria che hai fissato.</p></div><button class="btn ghost sm" data-go="tasks">${icon('arrow')}</button></div>${agenda.map(c=>{const n=days(c.meta.nextContact);return`<div class="list-row" data-client="${esc(c.code)}">${markEl(c.name,c.code)}<div class="grow"><strong>${esc(c.name)}</strong><small>${esc(c.meta.followupState||'Da contattare')}</small></div><span class="in-days" style="color:var(--${n<0?'bad':n===0?'due':'text-3'})">${rel(n)}</span></div>`;}).join('')||`<p class="sub">Apri un cliente e imposta “Prossimo contatto” per ritrovarlo qui.</p>`}</div>
+  <div class="card reveal" style="--i:9"><div class="card-head"><div><h2>Agenda contatti</h2><p>I promemoria che hai fissato.</p></div><button class="btn ghost sm" data-go="tasks" aria-label="Apri le attività" data-tip="Tutte le attività">${icon('arrow')}</button></div>${agenda.map(c=>{const n=days(c.meta.nextContact);return`<div class="list-row" data-client="${esc(c.code)}">${markEl(c.name,c.code)}<div class="grow"><strong>${esc(c.name)}</strong><small>${esc(c.meta.followupState||'Da contattare')}</small></div><span class="in-days" style="color:var(--${n<0?'bad':n===0?'due':'text-3'})">${rel(n)}</span></div>`;}).join('')||`<p class="sub">Apri un cliente e imposta “Prossimo contatto” per ritrovarlo qui.</p>`}</div>
  </div></div>`;
 }
 function donut(){const groups=[['Attiva','var(--ok)'],['In scadenza','var(--due)'],['Scaduta','var(--bad)'],['Bloccata','#9f1239'],['Da verificare','var(--text-3)']].map(([n,c])=>({n,c,v:D.current.filter(r=>licenseStatus(r)===n).length}));const total=D.current.length||1;const C=2*Math.PI*52;let off=0;
@@ -258,11 +260,11 @@ function expiryPage(){
   ${kpi('Già scadute',D.overdue.length,'Ancora negli elenchi correnti','alert','t-bad','expiry',4)}
  </div>
  <div class="layout-2"><div class="card reveal" style="--i:5"><div class="card-head"><div><h2>Calendario scadenze</h2><p>Prossimi 120 giorni.</p></div></div>
-  ${[...months.values()].map(m=>`<div class="month"><div class="month-head"><h3>${new Intl.DateTimeFormat('it-IT',{month:'long',year:'numeric'}).format(m.d)}</h3><span>${m.items.length} licenze</span></div>${m.items.map(r=>{const d=parseDate(r.expiry),n=dayDiff(d);return`<div class="list-row" data-client="${esc(r.clientCode)}"><span class="date-chip ${n<=30?'due':''}"><b>${d.getDate()}</b><span>${new Intl.DateTimeFormat('it-IT',{weekday:'short'}).format(d)}</span></span><div class="grow"><strong>${esc(r.client)}</strong><small>${esc(famLabel(famOfScope(r.scope)))} · <span class="mono">${esc(r.serial)}</span></small></div><span class="in-days" style="color:var(--${n<=30?'due':'text-3'})">${rel(n)}</span>${D.byCode.get(r.clientCode)?.meta.nextContact?`<span class="badge acc" data-tip="Promemoria già fissato">${icon('check')}</span>`:''}</div>`;}).join('')}</div>`).join('')||empty('calendar','Nessuna scadenza in arrivo','Nei prossimi 120 giorni non scade nessuna licenza.')}
+  ${[...months.values()].map(m=>`<div class="month"><div class="month-head"><h3>${DF2.format(m.d)}</h3><span>${m.items.length} licenze</span></div>${m.items.map(r=>{const d=parseDate(r.expiry),n=dayDiff(d);return`<div class="list-row" data-client="${esc(r.clientCode)}"><span class="date-chip ${n<=30?'due':''}"><b>${d.getDate()}</b><span>${DF5.format(d)}</span></span><div class="grow"><strong>${esc(r.client)}</strong><small>${esc(famLabel(famOfScope(r.scope)))} · <span class="mono">${esc(r.serial)}</span></small></div><span class="in-days" style="color:var(--${n<=30?'due':'text-3'})">${rel(n)}</span>${D.byCode.get(r.clientCode)?.meta.nextContact?`<span class="badge acc" data-tip="Promemoria già fissato">${icon('check')}</span>`:''}</div>`;}).join('')}</div>`).join('')||empty('calendar','Nessuna scadenza in arrivo','Nei prossimi 120 giorni non scade nessuna licenza.')}
  </div>
  <div class="card reveal" style="--i:6"><h2>Scadute da gestire</h2><p class="sub">Licenze con data passata ancora negli elenchi correnti.</p><div style="margin-top:10px">${D.overdue.sort((a,b)=>parseDate(b.expiry)-parseDate(a.expiry)).slice(0,30).map(r=>`<div class="list-row" data-client="${esc(r.clientCode)}"><div class="grow"><strong>${esc(r.client)}</strong><small><span class="mono">${esc(r.serial)}</span> · ${esc(r.expiry)}</small></div><span class="in-days" style="color:var(--bad)">${rel(days(r.expiry))}</span></div>`).join('')||'<p class="sub">Nessuna. Ottimo lavoro!</p>'}</div></div></div>
  ${D.machines.length?`<div class="card reveal" style="--i:7;margin-top:16px"><div class="card-head"><div><h2>Verificazioni e abbonamenti</h2><p>Registratori con verificazione periodica (stimata) o abbonamento in scadenza entro 60 giorni.</p></div><button class="btn ghost sm" data-go="machines">Parco macchine ${icon('arrow')}</button></div>
-  ${[...D.verDue.map(m=>({m,kind:'Verificazione',d:m.verNext,n:m.verDays})),...D.contractDue.map(m=>({m,kind:'Fine abbonamento',d:m.end,n:m.endDays}))].sort((a,b)=>a.d-b.d).slice(0,40).map(x=>`<div class="list-row" ${x.m.code?`data-client="${esc(x.m.code)}"`:''}><span class="date-chip ${x.n<0?'bad':'due'}"><b>${x.d.getDate()}</b><span>${new Intl.DateTimeFormat('it-IT',{month:'short'}).format(x.d)}</span></span><div class="grow"><strong>${esc(x.m.client)}</strong><small>${x.kind} · ${esc(x.m.model||'')} <span class="mono">${esc(x.m.serial)}</span></small></div><span class="in-days" style="color:var(--${x.n<0?'bad':'due'})">${rel(x.n)}</span></div>`).join('')||'<p class="sub">Nessuna scadenza nei prossimi 60 giorni.</p>'}</div>`:''}`;
+  ${[...D.verDue.map(m=>({m,kind:'Verificazione',d:m.verNext,n:m.verDays})),...D.contractDue.map(m=>({m,kind:'Fine abbonamento',d:m.end,n:m.endDays}))].sort((a,b)=>a.d-b.d).slice(0,40).map(x=>`<div class="list-row" ${x.m.code?`data-client="${esc(x.m.code)}"`:''}><span class="date-chip ${x.n<0?'bad':'due'}"><b>${x.d.getDate()}</b><span>${DF3.format(x.d)}</span></span><div class="grow"><strong>${esc(x.m.client)}</strong><small>${x.kind} · ${esc(x.m.model||'')} <span class="mono">${esc(x.m.serial)}</span></small></div><span class="in-days" style="color:var(--${x.n<0?'bad':'due'})">${rel(x.n)}</span></div>`).join('')||'<p class="sub">Nessuna scadenza nei prossimi 60 giorni.</p>'}</div>`:''}`;
 }
 function ordersPage(){
  let list=D.orders;const q=norm(ui.q);
@@ -340,7 +342,7 @@ function interventionsPage(){
  const urgent=D.openInterventions.filter(i=>i.priority==='Urgente'||i.priority==='Alta').length;const today_=D.openInterventions.filter(i=>i.d&&dayDiff(i.d)===0).length;
  return`${hero('Gli <span class="grad">interventi</span>.','Assistenza tecnica: apri, assegna e chiudi gli interventi presso i clienti. Lo storico di Mastro resta consultabile.',`<button class="btn accent" data-action-local="newIntervention">${icon('plus')}Nuovo intervento</button>`)}
  ${explain('interventions','Crea un intervento con <strong>Nuovo intervento</strong> o dalla scheda di un cliente. Assegna un tecnico, una priorità e aggiornane lo stato fino a <span class="badge ok">Chiuso</span>. ' +(WEB?'Ogni modifica è visibile subito a tutto il team.':'')+' Gli interventi importati da Mastro sono in sola lettura.')}
- <div class="kpis" style="grid-template-columns:repeat(3,1fr)">${kpi('Aperti',D.openInterventions.length,'Da completare','tool','t-info','interventions',2)}${kpi('Urgenti o alta priorità',urgent,'Da fare per primi','alert','t-bad','interventions',3)}${kpi('Pianificati per oggi',today_,new Intl.DateTimeFormat('it-IT',{weekday:'long',day:'numeric',month:'long'}).format(new Date()),'calendar','t-due','interventions',4)}</div>
+ <div class="kpis" style="grid-template-columns:repeat(3,1fr)">${kpi('Aperti',D.openInterventions.length,'Da completare','tool','t-info','interventions',2)}${kpi('Urgenti o alta priorità',urgent,'Da fare per primi','alert','t-bad','interventions',3)}${kpi('Pianificati per oggi',today_,DF4.format(new Date()),'calendar','t-due','interventions',4)}</div>
  <div class="card reveal" style="--i:5"><div class="card-head"><div><h2>Elenco interventi<span class="count">${fmt(list.length)}</span></h2></div><div class="seg">${[['open','Da fare'],['closed','Chiusi'],['mastro','Storico Mastro'],['all','Tutti']].map(([k,l])=>`<button class="${ui.itab===k?'active':''}" data-itab="${k}">${l}</button>`).join('')}</div></div>
  <div class="toolbar">${search('Cerca cliente, lavoro, tecnico…')}<select class="select" id="f-tech"><option value="">Tutti i tecnici</option>${techs.map(t=>`<option${t===ui.tech?' selected':''}>${esc(t)}</option>`).join('')}</select></div>
  <div class="table-wrap"><table class="t-int"><thead><tr>${th('Data','date')}${th('Cliente','client')}<th>Intervento</th><th>Tecnico</th>${th('Priorità','prio')}<th>Stato</th><th></th></tr></thead><tbody>
@@ -369,7 +371,7 @@ function machinesPage(){
  </tbody></table></div>${pager(list.length,16)}</div>`;
 }
 // Intervention editor (modal form). History from Mastro opens read-only.
-function openIntervention(id,clientCode){
+function openIntervention(id,clientCode){remember('i',id);
  const it=id?D.interventions.find(i=>i.id===id):null;const signed=!!it?.signedAt;const ro=it?.source==='mastro'||signed;
  const c=it?.c||D.byCode.get(clientCode)||null;
  const n=new Date(),todayIso=`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; // local date, not UTC
@@ -461,8 +463,18 @@ function teamPage(){
    ${newToken?`<div class="path" style="user-select:all">${esc(newToken)}</div><p class="sub">Copiala ora: non verrà più mostrata.</p><div class="btn-row"><button class="btn sm" data-copy="${esc(newToken)}">${icon('copy')}Copia chiave</button>${host?`<button class="btn sm accent" data-action-local="useToken">${icon('check')}Usa questo PC come postazione</button>`:''}</div>`:
    `<div class="btn-row" style="margin-top:12px"><button class="btn sm accent" data-action-local="genToken">${icon('key')}${usersData.syncTokenCreated?'Genera nuova chiave':'Crea chiave'}</button>${usersData.syncTokenCreated?`<button class="btn sm ghost" data-action-local="revokeToken">Revoca</button>`:''}</div>`}
    ${host&&hostInfo?.syncStation?'<p class="sub" style="margin-top:10px"><span class="badge ok">Questo PC è la postazione di sincronizzazione</span></p>':''}
-  </div></div></div>`;
+  </div></div></div>
+ <div style="margin-top:16px">${devicesCard()}</div>`;
 }
+function devicesCard(){const list=usersData.devices||[];const pend=list.filter(d=>d.status==='pending').length;
+ const badge=d=>d.status==='approved'?'<span class="badge ok">Autorizzato</span>':d.status==='pending'?'<span class="badge due">In attesa</span>':'<span class="badge bad">Bloccato</span>';
+ return`<div class="card reveal devices-card" style="--i:3"><div class="card-head"><div><h2>Dispositivi${pend?`<span class="count due">${pend} da approvare</span>`:`<span class="count">${list.length}</span>`}</h2>
+  <p>Da fuori ufficio entrano solo i dispositivi autorizzati, e serve comunque nome utente e password. In ufficio non cambia nulla. I dispositivi degli amministratori che accedono in ufficio sono autorizzati in automatico.</p></div></div>
+  ${list.length?`<div class="table-wrap"><table><thead><tr><th>Codice</th><th>Dispositivo</th><th>Ultimo utente</th><th>Ultimo accesso</th><th>Stato</th><th></th></tr></thead><tbody>
+  ${list.map(d=>`<tr><td><span class="mono" style="font-weight:650">${esc(d.id)}</span>${d.id===usersData.thisDevice?' <span class="badge acc">questo</span>':''}</td><td><strong>${esc(d.name)}</strong><small class="muted" style="display:block">${esc(d.platform||'')}${d.remote?' · da fuori ufficio':''}</small></td>
+   <td>${esc(d.user||'—')}</td><td>${d.lastSeen?dTime(d.lastSeen):'—'}<small class="muted" style="display:block">${esc(d.lastIp||'')}</small></td><td>${badge(d)}</td>
+   <td><div class="btn-row">${d.status!=='approved'?`<button class="btn sm accent" data-dev="${esc(d.id)}" data-dev-act="approve">${icon('check')}Autorizza</button>`:''}${d.status!=='revoked'?`<button class="btn sm ghost" data-dev="${esc(d.id)}" data-dev-act="revoke">Blocca</button>`:''}<button class="btn sm ghost" data-dev="${esc(d.id)}" data-dev-act="delete" data-tip="Elimina dall’elenco" aria-label="Elimina">${icon('close')}</button></div></td></tr>`).join('')}
+  </tbody></table></div>`:empty('shield','Nessun dispositivo','Compariranno qui quando qualcuno accede o chiede l’accesso da fuori ufficio.')}</div>`;}
 function accountCard(i){if(!WEB||!me)return'';return`<form class="card reveal" style="--i:${i}" id="pwd-form"><h2>Il tuo account</h2><p class="sub">${esc(me.name)} · ${esc(me.username)} · ${esc(me.roleLabel)}</p>
  <div style="display:grid;gap:10px;margin-top:14px"><label class="field">Password attuale<input class="input" type="password" name="current" required autocomplete="current-password"></label><label class="field">Nuova password (min. 10 caratteri)<input class="input" type="password" name="password" required minlength="10" autocomplete="new-password"></label>
  <div class="btn-row"><button class="btn sm primary" type="submit">Cambia password</button><button class="btn sm ghost" type="button" data-action-local="logout">Esci</button></div></div></form>`;}
@@ -470,7 +482,9 @@ function serverCard(i){
  if(!WEB&&host)return`<div class="card reveal" style="--i:${i}"><h2>Archivio condiviso</h2><p class="sub">Collega questo PC al server Top Cash per lavorare tutti sugli stessi dati, da PC, tablet e telefono. L’archivio locale resta sul PC e puoi tornarci quando vuoi.</p>
   <div style="display:flex;gap:8px;margin-top:14px"><input class="input" id="server-url" placeholder="es. 192.168.1.20:8470 oppure topcash.azienda.it" value="${esc(hostInfo?.serverUrl||'')}"><button class="btn accent" data-action-local="connect">${icon('external')}Collega</button></div></div>`;
  if(WEB&&host)return`<div class="card reveal" style="--i:${i}"><h2>Questo PC</h2><p class="sub">Collegato al server <strong>${esc(location.host)}</strong>.${hostInfo?.syncStation?' È la <strong>postazione di sincronizzazione</strong>: tienilo acceso con Top Cash Studio aperto.':''}</p>
-  <div class="btn-row" style="margin-top:12px">${hostInfo?.syncStation?`<button class="btn sm" data-action="portal">${icon('external')}Apri collegamento Zucchetti</button><button class="btn sm ghost" data-action-local="unsetStation">Non usare più come postazione</button>`:''}<button class="btn sm ghost" data-action-local="disconnect">Torna all’archivio locale</button></div></div>`;
+  <div class="btn-row" style="margin-top:12px">${hostInfo?.syncStation?`<button class="btn sm" data-action="portal">${icon('external')}Apri collegamento Zucchetti</button><button class="btn sm ghost" data-action-local="unsetStation">Non usare più come postazione</button>`:''}<button class="btn sm ghost" data-action-local="disconnect">Torna all’archivio locale</button></div>
+  <label class="field" style="margin-top:16px">Indirizzo esterno (fuori ufficio)<div style="display:flex;gap:8px"><input class="input" id="server-ext" placeholder="es. topcash.tuodominio.it" value="${esc((hostInfo?.serverExternal||'').replace(/^https:\/\//,'').replace(/\/$/,''))}"><button class="btn sm" data-action-local="saveExternal">${icon('check')}Salva</button></div></label>
+  <p class="muted" style="font-size:12px;margin-top:6px">In ufficio usa la rete locale; fuori ufficio passa da solo all’indirizzo esterno. ${hostInfo?.activeServer&&hostInfo.activeServer===hostInfo.serverExternal?'<span class="badge acc">ora collegato da fuori</span>':''}</p></div>`;
  if(WEB)return`<div class="card reveal" style="--i:${i}"><h2>Installa l’app</h2><p class="sub">Su telefono e tablet: apri il menu del browser e scegli <strong>“Aggiungi a schermata Home”</strong> (iPhone: icona Condividi). Su PC con Edge o Chrome: icona <strong>Installa</strong> nella barra dell’indirizzo. Si apre come un’app, a schermo intero, e si aggiorna da sola.</p></div>`;
  return'';
 }
@@ -481,6 +495,7 @@ async function localAction(name,el){
   case'mastroRead':mastroState={stage:'reading',source:'MastroSQL'};render(false);host.postMessage({action:'mastroRead'});break;
   case'resetTips':Object.keys(PAGES).forEach(k=>store.set('hide.'+k,false));toast('Le spiegazioni sono di nuovo visibili');render(false);break;
   case'connect':{const url=$('#server-url').value.trim();if(!url)return toast('Scrivi l’indirizzo del server','alert');send('connectServer',{url});toast('Collegamento in corso…','sync');break;}
+  case'saveExternal':host.postMessage({action:'setExternal',url:$('#server-ext').value.trim()});break;
   case'disconnect':if(await ask({title:'Tornare all’archivio locale?',text:'Questo PC userà di nuovo il suo database locale. Il server condiviso e i dati dei colleghi non vengono toccati.',ok:'Torna all’archivio locale'}))host.postMessage({action:'disconnectServer'});break;
   case'unsetStation':host.postMessage({action:'setSyncToken',token:''});break;
   case'genPwd':newPassword=genPassword();render(false);break;
@@ -498,7 +513,7 @@ document.addEventListener('submit',async e=>{
 document.addEventListener('change',async e=>{const u=e.target.dataset?.userRole;if(!u)return;try{await post('/api/users/'+encodeURIComponent(u),{role:e.target.value});toast('Ruolo aggiornato');usersData=null;render(false);}catch(x){toast(x.message,'alert');usersData=null;render(false);}});
 
 // ───────────────────────── drawer (client card)
-function openClient(code,keep){const c=D.byCode.get(code);if(!c)return;drawerCode=code;const d=$('#drawer');const wasOpen=!d.hidden;$('#drawer-backdrop').hidden=false;d.hidden=false;if(!keep&&!wasOpen){d.classList.remove('out');}
+function openClient(code,keep){const c=D.byCode.get(code);if(!c)return;if(!keep)remember('c',code);drawerCode=code;const d=$('#drawer');const wasOpen=!d.hidden;$('#drawer-backdrop').hidden=false;d.hidden=false;if(!keep&&!wasOpen){d.classList.remove('out');}
  const m=c.meta;const fact=(label,value,copyable)=>`<div class="fact"><small>${label}</small><span>${value?esc(value):'<span class="muted">—</span>'}${value&&copyable?`<button class="copy" data-copy="${esc(value)}" aria-label="Copia">${icon('copy')}</button>`:''}</span></div>`;
  const scroll=d.scrollTop;
  d.innerHTML=`<div class="d-head"><span class="tag">Scheda cliente</span><div class="btn-row"><button class="icon-btn" data-close aria-label="Chiudi">${icon('close')}</button></div></div><div class="d-body">
@@ -521,7 +536,17 @@ function closeDrawer(){const d=$('#drawer');if(d.hidden)return;d.classList.add('
 function saveMeta(code,patch){const old=state.metadata[code]||{favorite:false,nextContact:'',followupState:''};const meta={favorite:!!old.favorite,nextContact:old.nextContact||'',followupState:old.followupState||'',...patch};state.metadata[code]=meta;derive();send('meta',{code,meta});render(false);openClient(code,true);}
 
 // ───────────────────────── command palette
+const MAIN_TABS=['overview','clients','interventions','warehouse'];
 let cmdSel=0,cmdItems=[];
+// recently opened clients / interventions (per device) → first thing in the quick search
+function remember(k,id){if(!id)return;const r=store.get('recent',[]).filter(x=>!(x.k===k&&x.id===id));r.unshift({k,id});store.set('recent',r.slice(0,6));}
+function recentItems(){return store.get('recent',[]).map(({k,id})=>{if(k==='c'){const c=D.byCode.get(id);return c&&{g:'Aperti di recente',t:c.name,s:[c.city,c.phone].filter(Boolean).join(' · '),mark:c,run:()=>openClient(c.code)};}
+ const i=D.interventions.find(x=>x.id===id);return i&&{g:'Aperti di recente',t:i.title||'Intervento',s:(i.c?.name||i.clientName||'')+' · '+i.status,ic:'tool',run:()=>openIntervention(i.id)};}).filter(Boolean);}
+const HAS_W=()=>typeof W!=='undefined'&&W;
+// quick actions shared by the palette, the "Nuovo" menu and the keyboard shortcuts
+function quickActions(){const a=[{t:'Nuovo intervento',s:'N',ic:'tool',run:()=>openIntervention(null)}];
+ if(HAS_W())a.push({t:'Carico merce in magazzino',s:'M',ic:'box',run:()=>openMovement('carico')},{t:'Trasferisci sul furgone',s:'',ic:'arrow',run:()=>openMovement('trasferimento')},{t:'Scarica un ricambio',s:'',ic:'upload',run:()=>openMovement('scarico')});
+ return a;}
 function openCmd(){$('#cmd').hidden=false;const i=$('#cmd-q');i.value=ui.q||'';cmdRender();setTimeout(()=>{i.focus();i.select();},10);}
 function closeCmd(){$('#cmd').hidden=true;}
 function cmdRender(){const q=norm($('#cmd-q').value.trim());const out=[];
@@ -531,7 +556,8 @@ function cmdRender(){const q=norm($('#cmd-q').value.trim());const out=[];
   if(typeof W!=='undefined'&&W)W.items.filter(i=>i.search.includes(q)).slice(0,5).forEach(i=>out.push({g:'Magazzino',t:i.name,s:i.code+(i.barcode?' · '+i.barcode:'')+' · giacenza '+qf(i.total)+' '+i.unit,ic:'box',run:()=>openArticle(i.code)}));
   D.orders.filter(o=>norm(o.number).includes(q)).slice(0,4).forEach(o=>out.push({g:'Ordini',t:'Ordine '+o.number,s:o.client+' · '+o.status,ic:'bag',run:()=>o.clientCode?openClient(o.clientCode):go('orders')}));
   out.push({g:'Azioni',t:`Mostra tutti i risultati per “${$('#cmd-q').value.trim()}”`,s:'Elenco clienti filtrato',ic:'search',run:()=>{ui.q=$('#cmd-q').value.trim();go('clients',true);}});}
- else[['Sincronizza ora con Zucchetti','sync',()=>send('syncPortal')],['Esporta anagrafica clienti','download',()=>send('exportClients')],['Crea backup del database','shield',()=>send('backup')],['Cambia tema chiaro/scuro','moon',toggleTheme]].forEach(([t,ic,run])=>out.push({g:'Azioni',t,s:'',ic,run}));
+ else{out.unshift(...recentItems(),...quickActions().map(x=>({...x,g:'Azioni rapide'})));
+  (WEB?[]:[['Sincronizza ora con Zucchetti','sync',()=>send('syncPortal')],['Esporta anagrafica clienti','download',()=>send('exportClients')],['Crea backup del database','shield',()=>send('backup')]]).concat([['Cambia tema chiaro/scuro','moon',toggleTheme],['Scorciatoie da tastiera','sparkle',showKeys]]).forEach(([t,ic,run])=>out.push({g:'Altro',t,s:'',ic,run}));}
  cmdItems=out;cmdSel=0;let g='';$('#cmd-results').innerHTML=out.map((o,i)=>{const h=o.g!==g?`<div class="cmd-group">${o.g}</div>`:'';g=o.g;return h+`<button class="cmd-item${i===0?' sel':''}" data-cmd="${i}">${o.mark?markEl(o.mark.name,o.mark.code):`<span class="ico">${icon(o.ic)}</span>`}<span class="grow"><strong>${hl(o.t,$('#cmd-q').value.trim())}</strong>${o.s?`<small>${esc(o.s)}</small>`:''}</span>${icon('chevron')}</button>`;}).join('')||`<div class="empty">${icon('search')}<strong>Nessun risultato</strong></div>`;}
 function cmdMove(d){if(!cmdItems.length)return;cmdSel=(cmdSel+d+cmdItems.length)%cmdItems.length;$$('.cmd-item').forEach((b,i)=>b.classList.toggle('sel',i===cmdSel));$$('.cmd-item')[cmdSel]?.scrollIntoView({block:'nearest'});}
 function cmdRun(i){const it=cmdItems[i];if(!it)return;closeCmd();it.run();}
@@ -544,10 +570,10 @@ function render(animate){
  document.body.classList.toggle('anim',!!animate&&!reduced);
  main.innerHTML=`<div class="page">${html()}</div>`;
  $('#crumb').textContent=PAGES[page];
- $$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.page===page));moveIndicator();
+ $$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.page===page));$('#nav-more')?.classList.toggle('active',!MAIN_TABS.includes(page));moveIndicator();
  $('#nav-clients').textContent=fmt(D.clients.length);$('#nav-licenses').textContent=fmt(D.current.length);$('#nav-orders').textContent=D.orders.length?fmt(D.orders.length):'';$('#nav-interventions').textContent=D.openInterventions.length||'';$('#nav-machines').textContent=D.machines.length?fmt(D.machines.length):'';if(typeof W!=='undefined'&&W)$('#nav-warehouse').textContent=W.below.length||'';
  $('#nav-due').textContent=D.due30.length||'';const late=D.tasks.filter(c=>c.meta.followupState!=='Completato'&&c.meta.nextContact&&days(c.meta.nextContact)<=0).length;$('#nav-tasks').textContent=late||'';
- $('#alerts-dot').classList.toggle('on',D.due30.length>0);
+ $('#alerts-dot').classList.toggle('on',D.due30.length>0);$('#nav-more-dot').textContent=($('#nav-due').textContent||$('#nav-tasks').textContent)?'•':'';
  $('#nav-sync-dot').className='sync-dot '+(state.syncRunning?'run':state.portalConnected?'on':'');
  $('#sync-pill').hidden=!state.syncRunning;$('#sync-pill-text').textContent=state.syncProgress||'Sincronizzazione…';
  sideStatus();
@@ -562,7 +588,7 @@ function transition(fn){if(!document.startViewTransition||reduced||document.hidd
  let done=false;const once=()=>{if(!done){done=true;fn();}};setTimeout(once,350); // never block navigation if the window is not painting
  vt?.skipTransition();const t=vt=document.startViewTransition(once);for(const p of[t.ready,t.finished,t.updateCallbackDone])p.catch(()=>{});t.finished.finally(()=>{if(vt===t)vt=null;});}
 function moveIndicator(){const a=$('.nav-item.active'),ind=$('.nav-indicator');if(!a){ind.style.opacity=0;return;}ind.style.opacity=1;ind.style.transform=`translateY(${a.offsetTop}px)`;}
-function countUp(){if(reduced)return;$$('[data-count]').forEach(el=>{const to=+el.dataset.count;if(!to)return;const t0=performance.now(),dur=900;const step=t=>{const k=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-k,4);el.textContent=fmt(Math.round(to*e));if(k<1)requestAnimationFrame(step);};requestAnimationFrame(step);});}
+function countUp(){if(reduced)return;$$('[data-count]').forEach(el=>{const to=+el.dataset.count;if(!to)return;const t0=performance.now(),dur=600;const step=t=>{const k=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-k,4);el.textContent=fmt(Math.round(to*e));if(k<1)requestAnimationFrame(step);};requestAnimationFrame(step);});}
 function bind(){
  const q=$('#q');if(q)q.addEventListener('input',e=>{ui.q=e.target.value;ui.p=1;clearTimeout(searchTimer);searchTimer=setTimeout(()=>requestAnimationFrame(()=>render(false)),90);});
  const on=(id,key)=>{const el=$('#'+id);if(el)el.addEventListener('change',e=>{ui[key]=e.target.value;ui.p=1;render(false);});};
@@ -598,6 +624,9 @@ document.addEventListener('click',e=>{
  if(ds.ttab){ui.taskTab=ds.ttab;return render(false);}
  if(ds.itab){ui.itab=ds.itab;ui.p=1;return render(false);}
  if(ds.mtab){ui.mtab=ds.mtab;ui.p=1;return render(false);}
+ if(ds.devAct){(async()=>{const d=(usersData.devices||[]).find(x=>x.id===ds.dev);
+  if(ds.devAct!=='approve'&&!await ask({title:ds.devAct==='revoke'?'Bloccare il dispositivo?':'Eliminare il dispositivo?',text:`${esc(d?.name||ds.dev)} (${esc(ds.dev)}) non potrà più accedere da fuori ufficio${ds.devAct==='delete'?'; se ci riprova comparirà di nuovo come richiesta da approvare':''}.`,ok:ds.devAct==='revoke'?'Blocca':'Elimina',danger:true}))return;
+  try{await post('/api/devices/'+encodeURIComponent(ds.dev)+'/'+ds.devAct);toast(ds.devAct==='approve'?'Dispositivo autorizzato':ds.devAct==='revoke'?'Dispositivo bloccato':'Dispositivo eliminato','shield');usersData=await api('/api/users');render(false);}catch(x){toast(x.message,'alert');}})();return;}
  if(ds.int)return openIntervention(ds.int);
  if(ds.newint)return openIntervention(null,ds.newint);
  if(ds.cview){ui.clientView=ds.cview;ui.p=1;return render(false);}
@@ -607,14 +636,44 @@ document.addEventListener('click',e=>{
 document.addEventListener('keydown',e=>{
  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();return $('#cmd').hidden?openCmd():closeCmd();}
  if(!$('#cmd').hidden){if(e.key==='Escape')closeCmd();else if(e.key==='ArrowDown'){e.preventDefault();cmdMove(1);}else if(e.key==='ArrowUp'){e.preventDefault();cmdMove(-1);}else if(e.key==='Enter'){e.preventDefault();cmdRun(cmdSel);}return;}
+ // Ctrl+Invio salva il modulo aperto (intervento, movimento, articolo…)
+ if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){const f=document.querySelector('.modal:not(.out) form');if(f){e.preventDefault();f.requestSubmit();return;}}
+ const typing=e.target.closest?.('input,textarea,select,[contenteditable]');
+ if(!typing&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!document.querySelector('.modal')){
+  const k=e.key.toLowerCase();
+  if(k==='n'){e.preventDefault();return quickActions()[0].run();}
+  if(k==='m'&&HAS_W()){e.preventDefault();return openMovement('carico');}
+  if(e.key==='/'){e.preventDefault();const q=$('#q');return q?(q.focus(),q.select()):openCmd();}
+  if(e.key==='?'){e.preventDefault();return showKeys();}
+ }
  if(e.key==='Escape')return closeDrawer();
  if(e.altKey&&/^[1-9]$/.test(e.key)){e.preventDefault();return go(Object.keys(PAGES)[+e.key-1]);}
  if(e.key==='Enter'&&e.target.matches('[data-client],[data-go],[data-int]'))e.target.click();
 });
+function showKeys(){const K=(k,t)=>`<div class="key-row"><span>${t}</span><span>${k.split('+').map(x=>`<kbd>${x}</kbd>`).join('')}</span></div>`;
+ ask({title:'Scorciatoie da tastiera',html:`<div class="keys">${K('Ctrl+K','Ricerca rapida ovunque')}${K('/','Cerca nella pagina')}${K('N','Nuovo intervento')}${HAS_W()?K('M','Carico merce'):''}${K('Alt+1…9','Vai a una sezione')}${K('Ctrl+Invio','Salva il modulo aperto')}${K('Esc','Chiudi')}${K('?','Questo elenco')}</div>`,ok:'Ho capito',cancel:false});}
+// "Nuovo" in the top bar: the most frequent actions one click away
+{const b=$('#quick-new'),menu=$('#quick-menu');
+ b.addEventListener('click',()=>{menu.innerHTML=quickActions().map((a,i)=>`<button class="qm-item" data-qm="${i}" role="menuitem"><span class="ico">${icon(a.ic)}</span><span class="grow">${a.t}</span>${a.s?`<kbd>${a.s}</kbd>`:''}</button>`).join('');
+  const r=b.getBoundingClientRect();menu.style.top=r.bottom+8+'px';menu.style.right=Math.max(12,innerWidth-r.right)+'px';menu.togglePopover();});
+ menu.addEventListener('click',e=>{const x=e.target.closest('[data-qm]');if(!x)return;menu.hidePopover();quickActions()[+x.dataset.qm]?.run();});}
 $('#cmd-q').addEventListener('input',cmdRender);
 $('#cmd').addEventListener('click',e=>{if(e.target.id==='cmd')closeCmd();});
 $('#cmd-open').addEventListener('click',openCmd);
 $('#drawer-backdrop').addEventListener('click',closeDrawer);
+// phone: 4 main sections in the bottom bar, the rest in the "Altro" sheet
+$('#nav-more').addEventListener('click',openMoreSheet);
+function openMoreSheet(){if(document.querySelector('.more-sheet'))return;
+ const items=$$('.nav-item[data-page]').filter(b=>!MAIN_TABS.includes(b.dataset.page)&&!(b.dataset.page==='team'&&!(WEB&&me?.role==='admin')));
+ const m=document.createElement('div');m.className='modal more-sheet';
+ m.innerHTML=`<div class="sheet-box" role="dialog" aria-label="Altre sezioni"><i class="grip"></i><div class="more-grid">${items.map((b,i)=>{const em=b.querySelector('em.hot')?.textContent||'';return`<button class="more-item${b.dataset.page===page?' on':''}" data-more="${b.dataset.page}" style="--i:${i}">${b.querySelector('svg').outerHTML}<span>${b.querySelector('span').textContent}</span>${em?`<em>${esc(em)}</em>`:''}</button>`;}).join('')}</div></div>`;
+ document.body.append(m);
+ const close=()=>{m.classList.add('out');setTimeout(()=>m.remove(),260);};
+ m.addEventListener('click',e=>{const b=e.target.closest('[data-more]');if(b){close();go(b.dataset.more);}else if(!e.target.closest('.sheet-box'))close();});
+ document.addEventListener('keydown',function k(e){if(e.key==='Escape'){close();document.removeEventListener('keydown',k,true);}},true);
+ // swipe down to close
+ const box=m.querySelector('.sheet-box');let y0=null;box.addEventListener('pointerdown',e=>{y0=e.clientY;});box.addEventListener('pointerup',e=>{if(y0!==null&&e.clientY-y0>60)close();y0=null;});
+}
 $('#alerts').addEventListener('click',()=>go('expiry'));
 $('#theme-toggle').addEventListener('click',toggleTheme);
 addEventListener('resize',moveIndicator);
@@ -692,14 +751,33 @@ function showAuth(kind,err=''){
  setTimeout(()=>a.querySelector('input')?.focus(),50);
  $('#auth-form').addEventListener('submit',async e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));const btn=e.target.querySelector('button');
   if(setup&&f.password!==f.password2){e.target.querySelector('.auth-err').textContent='Le due password non coincidono.';return;}
-  btn.disabled=true;try{me=await post(setup?'/api/setup':'/api/login',setup?{name:f.name,username:f.username,password:f.password}:{username:f.username,password:f.password,remember:!!f.remember});startWeb();}
+  btn.disabled=true;try{me=await post(setup?'/api/setup':'/api/login',setup?{name:f.name,username:f.username,password:f.password}:{username:f.username,password:f.password,remember:!!f.remember,deviceName:deviceName(),platform:devicePlatform()});startWeb();}
   catch(x){e.target.querySelector('.auth-err').textContent=x.message;btn.disabled=false;e.target.querySelector('[name=password]').select();}});
 }
-function startWeb(){$('#auth').hidden=true;applyRole();etag='';scheduleLoad();openStream();if(host)host.postMessage({action:'hostInfo'});}
+// ───────────────────────── trusted devices (access from outside the office)
+function deviceName(){const u=navigator.userAgent;const os=/iPhone/.test(u)?'iPhone':/iPad/.test(u)?'iPad':/Android/.test(u)?'Android':/Mac OS/.test(u)?'Mac':/Windows/.test(u)?'Windows':'Dispositivo';
+ const br=host?'App Top Cash':/Edg\//.test(u)?'Edge':/Chrome\//.test(u)?'Chrome':/Firefox\//.test(u)?'Firefox':/Safari\//.test(u)?'Safari':'Browser';return os+' · '+br;}
+const devicePlatform=()=>host?'Windows (app)':'Browser';
+let devTimer=0;
+function showDevice(status,code){
+ $('#splash').classList.add('gone');es?.close();clearTimeout(devTimer);const a=$('#auth');a.hidden=false;const blocked=status==='revoked';
+ a.innerHTML=`<div class="auth-card device-card">
+  <img src="assets/tcs-app@2x.png" alt="Top Cash Service" class="auth-logo">
+  <h1>${blocked?'Dispositivo bloccato':'Autorizza questo dispositivo'}</h1>
+  <p>${blocked?'L’amministratore ha bloccato l’accesso da fuori ufficio per questo dispositivo.':'Per sicurezza, da fuori ufficio Top Cash Studio si apre solo sui dispositivi approvati. Comunica questo codice all’amministratore: lo trova in <strong>Utenti → Dispositivi</strong>.'}</p>
+  ${code?`<div class="device-code" aria-label="Codice dispositivo">${esc(code)}</div>`:''}
+  ${blocked?'':`<p class="device-wait"><span class="spinner"></span>In attesa dell’approvazione: la pagina si sblocca da sola.</p>`}
+  <button class="btn ghost" type="button" id="dev-retry">${icon('sync')}Controlla ora</button></div>`;
+ const check=async()=>{try{const h=await post('/api/device/hello',{name:deviceName(),platform:devicePlatform()});if(h.status==='approved'||h.status==='office')return location.reload();if(h.status!==status||h.code!==code)return showDevice(h.status,h.code);}catch{}if(!blocked)devTimer=setTimeout(check,8000);};
+ $('#dev-retry').addEventListener('click',()=>{clearTimeout(devTimer);check();});
+ if(!blocked)devTimer=setTimeout(check,8000);
+}
+function startWeb(){$('#auth').hidden=true;applyRole();etag='';loadState();openStream();if(host)host.postMessage({action:'hostInfo'});}
 async function logout(){try{await post('/api/logout');}catch{}try{await caches.delete('tcs-api');}catch{}me=null;location.reload();}
 async function bootWeb(){
  if('serviceWorker' in navigator&&isSecureContext)navigator.serviceWorker.register('sw.js').catch(()=>{});
- try{const s=await api('/api/session');if(s.setupNeeded)return showAuth('setup');if(!s.user)return showAuth('login');me=s.user;startWeb();}
+ try{try{const h=await post('/api/device/hello',{name:deviceName(),platform:devicePlatform()});if(h.remote&&h.status!=='approved')return showDevice(h.status,h.code);}catch(x){if(/fetch|network/i.test(x.message))throw x;}
+  const s=await api('/api/session');if(s.setupNeeded)return showAuth('setup');if(!s.user)return showAuth('login');me=s.user;startWeb();}
  catch{$('#splash').classList.add('gone');$('#main').innerHTML=`<div class="error-box"><img src="assets/tcs-app@2x.png" alt="Top Cash Service" class="tile"><h2>Server non raggiungibile</h2><p>Controlla la connessione alla rete dell’ufficio e riprova.</p><p style="margin-top:16px"><button class="btn accent" data-action-local="reload">Riprova</button></p></div>`;}
 }
 

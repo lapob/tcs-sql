@@ -54,6 +54,7 @@
 <symbol id="i-register" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M7 10V5h10v5M8 14h2M12 14h2M16 14h0M8 17h8"/></symbol>
 <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5Z"/><path d="m3 8 9 5 9-5M12 13v8"/></symbol>
 <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="2"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="2"/></symbol>
 <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></symbol>
 </defs></svg>
 
@@ -82,6 +83,7 @@
   <button class="nav-item" data-page="sync"><svg><use href="#i-sync"/></svg><span>Sincronizzazione</span><i id="nav-sync-dot" class="sync-dot"></i></button>
   <button class="nav-item" data-page="settings"><svg><use href="#i-settings"/></svg><span>Impostazioni</span></button>
   <button class="nav-item need-admin web-only" data-page="team"><svg><use href="#i-shield"/></svg><span>Utenti</span></button>
+  <button class="nav-item nav-more" id="nav-more" aria-haspopup="dialog"><svg><use href="#i-grid"/></svg><span>Altro</span><em id="nav-more-dot" class="hot"></em></button>
  </nav>
  <div class="sidebar-foot">
   <div class="company"><span class="avatar">TC</span><div><strong>Top Cash Service S.r.l.</strong><small id="side-status">Archivio locale</small></div></div>
@@ -95,6 +97,8 @@
   <div class="top-actions">
    <div id="sync-pill" class="sync-pill" hidden><span class="spinner"></span><span id="sync-pill-text">Sincronizzazione…</span></div>
    <button class="icon-btn" id="alerts" aria-label="Scadenze imminenti"><svg><use href="#i-bell"/></svg><i id="alerts-dot"></i></button>
+   <button class="btn accent sm" id="quick-new" aria-haspopup="menu" data-tip="Azioni rapide (N = nuovo intervento)"><svg><use href="#i-plus"/></svg>Nuovo</button>
+   <div id="quick-menu" class="quick-menu" popover role="menu" aria-label="Azioni rapide"></div>
    <button class="btn primary sm" data-action="syncPortal"><svg><use href="#i-sync"/></svg>Sincronizza</button>
   </div>
  </header>
@@ -112,7 +116,7 @@
  <div class="cmd-box" role="dialog" aria-label="Ricerca rapida">
   <label class="cmd-input"><svg><use href="#i-search"/></svg><input id="cmd-q" placeholder="Cliente, matricola, P.IVA, città, email, ordine…" autocomplete="off"><kbd>Esc</kbd></label>
   <div id="cmd-results" class="cmd-results"></div>
-  <div class="cmd-foot"><span><kbd>↑</kbd><kbd>↓</kbd> naviga</span><span><kbd>Invio</kbd> apri</span></div>
+  <div class="cmd-foot"><span><kbd>↑</kbd><kbd>↓</kbd> naviga</span><span><kbd>Invio</kbd> apri</span><span><kbd>?</kbd> scorciatoie</span></div>
  </div>
 </div>
 

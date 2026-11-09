@@ -17,13 +17,24 @@ Directory.CreateDirectory(dataDir);
 var store=new Store(dataDir);
 var users=new Users(store.DatabasePath);
 var hub=new Hub(store);
+var devices=new Devices(store.DatabasePath);
 var uiDir=Path.Combine(AppContext.BaseDirectory,"ui");
 
 var builder=WebApplication.CreateBuilder(new WebApplicationOptions{Args=args,ContentRootPath=AppContext.BaseDirectory});
 builder.Host.UseWindowsService(o=>o.ServiceName="TopCashStudio");
-if(!args.Any(a=>a.StartsWith("--urls"))&&builder.Configuration["Kestrel:Endpoints:Http:Url"]==null&&Environment.GetEnvironmentVariable("ASPNETCORE_URLS")==null)
- builder.WebHost.UseUrls("http://0.0.0.0:8470");
-builder.Services.AddSingleton(store).AddSingleton(users).AddSingleton(hub);
+// Two doors: the office network (LAN, default 8470) and the private tunnel (Cloudflare → 127.0.0.1 only, default LAN+2).
+// Everything that arrives on the tunnel door is "outside the office" and needs an approved device.
+var lanUrl=new Uri((args.FirstOrDefault(a=>a.StartsWith("--urls="))?[7..]??Environment.GetEnvironmentVariable("ASPNETCORE_URLS")??"http://0.0.0.0:8470").Split(';')[0].Replace("://*","://0.0.0.0").Replace("://+","://0.0.0.0"));
+var tunnelPort=int.TryParse(args.FirstOrDefault(a=>a.StartsWith("--tunnel-port="))?[14..],out var tp)?tp:lanUrl.Port+2;
+builder.WebHost.UseSetting("urls","");
+builder.WebHost.ConfigureKestrel(k=>
+{
+ if(lanUrl.Host is "0.0.0.0")k.ListenAnyIP(lanUrl.Port);else k.Listen(System.Net.IPAddress.Parse(lanUrl.Host is "localhost"?"127.0.0.1":lanUrl.Host),lanUrl.Port);
+ k.ListenLocalhost(tunnelPort);
+});
+builder.Services.AddSingleton(store).AddSingleton(users).AddSingleton(hub).AddSingleton(devices);
+// the tunnel (cloudflared on this PC) forwards the real client IP and https: trusted only from loopback
+builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(o=>{o.ForwardedHeaders=Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor|Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;o.ForwardLimit=1;});
 // Session-cookie keys: on disk next to the data, encrypted with machine DPAPI (works for the service and the console run).
 builder.Services.AddDataProtection().SetApplicationName("TopCashStudio").PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDir,"keys"))).ProtectKeysWithDpapi(protectToLocalMachine:true);
 builder.Services.AddResponseCompression(o=>{o.EnableForHttps=true;o.Providers.Add<BrotliCompressionProvider>();o.Providers.Add<GzipCompressionProvider>();o.MimeTypes=ResponseCompressionDefaults.MimeTypes.Concat(["application/json","image/svg+xml","application/manifest+json"]);});
@@ -61,6 +72,30 @@ builder.WebHost.ConfigureKestrel(k=>k.Limits.MaxRequestBodySize=25_000_000);
 var app=builder.Build();
 
 // ───────────────────────── pipeline
+bool IsRemote(HttpContext c)=>c.Connection.LocalPort==tunnelPort;
+// forwarded headers only make sense on the tunnel door (on the LAN door they could be spoofed)
+app.UseWhen(IsRemote,a=>a.UseForwardedHeaders());
+string? DeviceKey(HttpContext c){var h=c.Request.Headers["X-Device-Key"].ToString();if(Devices.ValidKey(h))return h;var k=c.Request.Cookies["tcs.dev"];return Devices.ValidKey(k)?k:null;}
+string Ip(HttpContext c)=>c.Connection.RemoteIpAddress?.ToString()??"";
+app.Use(async(ctx,next)=>
+{
+ var remote=IsRemote(ctx);var key=DeviceKey(ctx);var dev=key==null?null:devices.Find(key);
+ ctx.Items["device"]=dev;
+ if(remote)
+ {
+  ctx.Response.Headers.StrictTransportSecurity="max-age=31536000";
+  // outside the office: only approved devices reach the API (the app shell itself is public and harmless)
+  var p=ctx.Request.Path;
+  if(p.StartsWithSegments("/api")&&!p.StartsWithSegments("/api/device/hello")&&!p.StartsWithSegments("/api/health")&&dev?.Status!=Devices.Approved)
+  {
+   ctx.Response.StatusCode=403;
+   await ctx.Response.WriteAsJsonAsync(new{error=dev?.Status==Devices.Revoked?"Questo dispositivo è stato bloccato dall'amministratore.":"Dispositivo non ancora autorizzato per l'accesso da fuori ufficio.",device=dev?.Status??"unknown",code=dev?.Id??""});
+   return;
+  }
+ }
+ if(dev!=null&&key!=null)devices.Touch(key,Ip(ctx),remote,null);
+ await next();
+});
 app.Use(async(ctx,next)=>
 {
  var h=ctx.Response.Headers;h["X-Content-Type-Options"]="nosniff";h["Referrer-Policy"]="no-referrer";h["X-Frame-Options"]="DENY";h["Permissions-Policy"]="camera=(), microphone=(), geolocation=()";
@@ -105,7 +140,18 @@ app.MapPost("/api/login",async(HttpContext ctx,LoginRequest r)=>
 {
  var v=users.Verify(r.Username??"",r.Password??"");
  if(v==null){await Task.Delay(Random.Shared.Next(200,500));return Results.Json(new{error="Nome utente o password non corretti."},statusCode:401);}
- await SignIn(ctx,v.Value.User,v.Value.Stamp,r.Remember);return Results.Ok(Me(v.Value.User));
+ await SignIn(ctx,v.Value.User,v.Value.Stamp,r.Remember);
+ if(DeviceKey(ctx) is string key)
+ {
+  try
+  {
+   var d=devices.Find(key)??devices.Register(key,r.DeviceName??"",r.Platform??"",Ip(ctx),IsRemote(ctx),v.Value.User.Name);
+   devices.Touch(key,Ip(ctx),IsRemote(ctx),v.Value.User.Name);
+   // an administrator signing in from the office network trusts their own device
+   if(d.Status==Devices.Pending&&!IsRemote(ctx)&&v.Value.User.Role==Roles.Admin){devices.SetStatus(d.Id,Devices.Approved,v.Value.User.Name);store.Log("users",$"Dispositivo {d.Id} di {v.Value.User.Name} autorizzato.");}
+  }catch(InvalidDataException){}
+ }
+ return Results.Ok(Me(v.Value.User));
 }).RequireRateLimiting("login");
 app.MapPost("/api/logout",async(HttpContext ctx)=>{await ctx.SignOutAsync();return Results.Ok();});
 app.MapPost("/api/password",(HttpContext ctx,PasswordRequest r)=>
@@ -115,7 +161,42 @@ app.MapPost("/api/password",(HttpContext ctx,PasswordRequest r)=>
  return Results.Ok(new{message="Password aggiornata. Accedi di nuovo con la nuova password."});
 }).RequireAuthorization("read");
 
-app.MapGet("/api/users",()=>Results.Ok(new{users=users.List().Select(u=>new{u.Username,u.Name,u.Role,roleLabel=Roles.Label(u.Role),u.Disabled,u.Created,u.LastLogin}),syncTokenCreated=users.SyncTokenCreated(),stationLastContact=hub.LastStationContact==default?"":hub.LastStationContact.ToString("O"),connected=hub.Connected})).RequireAuthorization("admin");
+// ───────────────────────── trusted devices
+app.MapPost("/api/device/hello",(HttpContext ctx,DeviceHello r)=>
+{
+ var key=DeviceKey(ctx);
+ if(key==null)
+ {
+  // browsers / WebView: the secret lives in an HttpOnly cookie that scripts cannot read
+  key=Devices.NewKey();
+  ctx.Response.Cookies.Append("tcs.dev",key,new CookieOptions{HttpOnly=true,SameSite=SameSiteMode.Strict,Secure=ctx.Request.IsHttps,MaxAge=TimeSpan.FromDays(400),IsEssential=true});
+ }
+ var remote=IsRemote(ctx);var dev=devices.Find(key);
+ var who=ctx.User.Identity?.IsAuthenticated==true?Who(ctx):"";
+ if(dev==null&&(remote||who!=""))
+ {
+  try{dev=devices.Register(key,r?.Name??"",r?.Platform??"",Ip(ctx),remote,who);if(remote)store.Log("users",$"Nuova richiesta di accesso da fuori ufficio: dispositivo {dev.Id} ({dev.Name}).");}
+  catch(InvalidDataException ex){return Bad(ex.Message);}
+ }
+ if(dev!=null&&dev.Status==Devices.Pending&&!remote&&ctx.User.IsInRole(Roles.Admin)){devices.SetStatus(dev.Id,Devices.Approved,Who(ctx));dev=devices.Find(key);}
+ return Results.Ok(new{status=dev?.Status??(remote?"unknown":"office"),code=dev?.Id??"",remote,name=dev?.Name??""});
+}).RequireRateLimiting("login");
+app.MapPost("/api/devices/{id}/{action}",(HttpContext ctx,string id,string action,DeviceRename? r)=>
+{
+ try
+ {
+  switch(action)
+  {
+   case "approve":devices.SetStatus(id,Devices.Approved,Who(ctx));store.Log("users",$"{Who(ctx)} ha autorizzato il dispositivo {id}.");break;
+   case "revoke":devices.SetStatus(id,Devices.Revoked,Who(ctx));store.Log("users",$"{Who(ctx)} ha bloccato il dispositivo {id}.");break;
+   case "delete":devices.Delete(id);store.Log("users",$"{Who(ctx)} ha eliminato il dispositivo {id}.");break;
+   case "rename":devices.Rename(id,r?.Name??"");break;
+   default:return Results.NotFound();
+  }
+ }catch(InvalidDataException ex){return Bad(ex.Message);}
+ return Results.Ok();
+}).RequireAuthorization("admin");
+app.MapGet("/api/users",(HttpContext ctx)=>Results.Ok(new{devices=devices.List(),thisDevice=(ctx.Items["device"] as DeviceInfo)?.Id??"",tunnelPort,users=users.List().Select(u=>new{u.Username,u.Name,u.Role,roleLabel=Roles.Label(u.Role),u.Disabled,u.Created,u.LastLogin}),syncTokenCreated=users.SyncTokenCreated(),stationLastContact=hub.LastStationContact==default?"":hub.LastStationContact.ToString("O"),connected=hub.Connected})).RequireAuthorization("admin");
 app.MapPost("/api/users",(HttpContext ctx,UserRequest r)=>
 {
  try{users.Create(r.Username??"",r.Name??"",r.Role??"",r.Password??"");}catch(InvalidDataException ex){return Bad(ex.Message);}
@@ -268,7 +349,9 @@ static string FindDataFolder()
 }
 
 record SetupRequest(string Username,string Name,string Password);
-record LoginRequest(string? Username,string? Password,bool Remember);
+record LoginRequest(string? Username,string? Password,bool Remember,string? DeviceName=null,string? Platform=null);
+record DeviceHello(string? Name,string? Platform);
+record DeviceRename(string? Name);
 record PasswordRequest(string? Current,string? Password);
 record UserRequest(string? Username,string? Name,string? Role,string? Password);
 record UserUpdate(string? Role,bool? Disabled,string? Name,string? Password);

@@ -25,6 +25,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -56,7 +57,8 @@ private val filters = listOf("Tutti", "Preferiti", "In scadenza", "Con macchine"
     }
     Page(vm, "Clienti", "${list.size} di ${a.clients.size}") {
         item(key = "search") {
-            SearchField(q, { q = it }, "Cerca nome, P.IVA, telefono", Modifier.padding(top = 2.dp))
+            val fs by vm.focusSearch.collectAsStateWithLifecycle()
+            SearchField(q, { q = it }, "Cerca nome, P.IVA, telefono", Modifier.padding(top = 2.dp), focus = fs) { vm.focusSearch.value = false }
         }
         item(key = "filters") {
             ChoiceChips(filters, filter, { filter = it }, Modifier.padding(vertical = 10.dp))

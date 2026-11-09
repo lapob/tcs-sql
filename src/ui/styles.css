@@ -138,6 +138,7 @@ nav{position:relative;display:flex;flex-direction:column;gap:2px;flex:1;overflow
 .nav-item em.hot:not(:empty){color:#fff;background:var(--bad);padding:1px 7px;border-radius:99px;font-size:10.5px}
 .nav-indicator{position:absolute;z-index:0;left:4px;right:4px;height:38px;border-radius:11px;background:var(--surface);box-shadow:var(--shadow);border:1px solid var(--line);transition:transform .55s var(--spring),opacity .3s;opacity:0}
 .sync-dot{width:7px;height:7px;border-radius:50%;background:var(--text-3);opacity:.5}
+.splash.gone .bar i{animation:none} /* the hidden splash must not keep animating */
 .sync-dot.on{background:var(--ok);opacity:1;box-shadow:0 0 0 0 var(--ok);animation:ping 1.8s infinite}
 .sync-dot.run{background:var(--accent);opacity:1;animation:ping 1s infinite}
 @keyframes ping{0%{box-shadow:0 0 0 0 color-mix(in srgb,currentColor 0%,var(--ok) 60%)}100%{box-shadow:0 0 0 8px transparent}}
@@ -434,16 +435,16 @@ mark{background:var(--due-soft);color:inherit;border-radius:3px;padding:0 1px}
 @keyframes shimmer{to{background-position:-200% 0}}
 
 /* Entrance motion */
-.anim .reveal{animation:rise .7s var(--spring) both;animation-delay:calc(var(--i,0)*55ms)}
+.anim .reveal{animation:rise .55s var(--spring) both;animation-delay:min(calc(var(--i,0)*38ms),300ms)}
 @keyframes rise{from{opacity:0;transform:translateY(14px)}}
 .anim tbody tr.reveal{animation:rowin .5s var(--ease) both;animation-delay:calc(var(--i,0)*18ms)}
 @keyframes rowin{from{opacity:0;transform:translateY(6px)}}
 
 /* View transitions between pages */
-::view-transition-old(main-content){animation:vt-out .18s var(--ease) both}
-::view-transition-new(main-content){animation:vt-in .45s var(--ease) both}
+::view-transition-old(main-content){animation:vt-out .14s var(--ease) both}
+::view-transition-new(main-content){animation:vt-in .38s var(--spring) both}
 @keyframes vt-out{to{opacity:0;transform:translateY(-6px)}}
-@keyframes vt-in{from{opacity:0;transform:translateY(10px)}}
+@keyframes vt-in{from{opacity:0;transform:translateY(8px) scale(.992)}}
 main{view-transition-name:main-content}
 
 .error-box{max-width:520px;margin:15vh auto;text-align:center}
@@ -583,3 +584,63 @@ main{view-transition-name:main-content}
 .sign-banner{display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:14px;background:var(--ok-soft);color:var(--ok)}
 .sign-banner strong{display:block;color:var(--text)}.sign-banner small{color:var(--text-2);font-size:12px}
 @media (max-width:760px){.sign-sum{grid-template-columns:1fr}.sign-pad{height:220px}}
+
+/* ── quick actions menu (popover, top layer) */
+.quick-menu{inset:auto;position:fixed;margin:0;min-width:270px;padding:6px;border-radius:16px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow-lg);color:var(--text);
+ opacity:1;transform:none;transform-origin:top right;transition:opacity .18s,transform .4s var(--spring),overlay .2s allow-discrete,display .2s allow-discrete}
+.quick-menu:not(:popover-open){opacity:0;transform:scale(.94) translateY(-6px)}
+@starting-style{.quick-menu:popover-open{opacity:0;transform:scale(.94) translateY(-6px)}}
+.qm-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border-radius:11px;font-size:13.5px;text-align:left;color:var(--text);transition:background .15s}
+.qm-item:hover,.qm-item:focus-visible{background:var(--hover,rgba(127,127,160,.1))}
+.qm-item .ico{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--accent-soft,rgba(99,102,241,.12));color:var(--accent)}
+.qm-item .ico svg{width:16px;height:16px}
+.qm-item kbd,.key-row kbd{font:600 11px/1 var(--mono);padding:4px 6px;border-radius:6px;border:1px solid var(--line-2);background:var(--bg);color:var(--text-2)}
+.keys{display:grid;gap:2px;margin-top:2px}
+.key-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 2px;border-bottom:1px solid var(--line);font-size:13.5px}
+.key-row:last-child{border-bottom:0}.key-row kbd+kbd{margin-left:4px}
+/* tactile feedback on clickable rows and cards */
+tbody tr[data-client],tbody tr[data-int],.card[data-go]{transition:transform .35s var(--spring),background .15s}
+tbody tr[data-client]:active,tbody tr[data-int]:active,.card[data-go]:active{transform:scale(.992)}
+@media (max-width:720px){#quick-new{font-size:0;gap:0;width:34px;padding:0;justify-content:center}}
+
+/* ── trusted devices */
+.devices-card{grid-column:1/-1}
+.device-card{text-align:center;justify-items:center}
+.device-code{font:700 34px/1 var(--mono);letter-spacing:.12em;padding:18px 26px;border-radius:18px;background:var(--accent-soft);color:var(--accent);border:1px dashed color-mix(in srgb,var(--accent) 45%,transparent);user-select:all;margin:6px 0;animation:pop .6s var(--spring) both}
+.device-wait{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--text-2);font-size:13px}
+.count.due{background:color-mix(in srgb,var(--due) 16%,transparent);color:var(--due)}
+
+/* ── phone navigation: 4 tabs + "Altro" sheet */
+.nav-more{display:none}
+@media (max-width:760px){
+ nav{overflow:visible}
+ .nav-item{flex:1 1 0;min-width:0}
+ .nav-item span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .nav-item[data-page]:not([data-page="overview"]):not([data-page="clients"]):not([data-page="interventions"]):not([data-page="warehouse"]){display:none}
+ .nav-more{display:flex}
+ .nav-more em:empty{display:none}
+}
+.more-sheet{place-items:end center;padding:0}
+.sheet-box{width:min(560px,100%);padding:10px 16px calc(18px + env(safe-area-inset-bottom));border-radius:26px 26px 0 0;background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:blur(24px) saturate(1.6);-webkit-backdrop-filter:blur(24px) saturate(1.6);border:1px solid var(--line);border-bottom:0;box-shadow:var(--shadow-lg);animation:sheetin .5s var(--spring) both;touch-action:none}
+.more-sheet.out .sheet-box{animation:sheetout .24s var(--ease) both}
+@keyframes sheetin{from{transform:translateY(100%)}}
+@keyframes sheetout{to{transform:translateY(100%)}}
+.sheet-box .grip{display:block;width:40px;height:5px;border-radius:9px;background:var(--line-2);margin:0 auto 12px}
+.more-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.more-item{position:relative;display:grid;justify-items:center;gap:7px;padding:16px 6px 13px;border-radius:18px;background:var(--surface);border:1px solid var(--line);font-size:12.5px;font-weight:550;color:var(--text);animation:rise .45s var(--spring) both;animation-delay:calc(var(--i)*28ms);transition:transform .35s var(--spring)}
+.more-item:active{transform:scale(.95)}
+.more-item svg{width:24px;height:24px;color:var(--accent)}
+.more-item.on{background:var(--accent-soft);border-color:transparent}
+.more-item em{position:absolute;top:8px;right:10px;font:700 10.5px/1 var(--font);font-style:normal;padding:3px 6px;border-radius:99px;background:var(--bad);color:#fff}
+[data-perf="lite"] .sheet-box{backdrop-filter:none;background:var(--surface)}
+
+/* horizontally scrollable segmented filters: soft fade on the side that has more options (scroll-driven, no JS) */
+@property --fl{syntax:"<length>";inherits:false;initial-value:0px}
+@property --fr{syntax:"<length>";inherits:false;initial-value:0px}
+@supports (animation-timeline:scroll()){
+ .seg{mask-image:linear-gradient(to right,transparent 0,#000 var(--fl),#000 calc(100% - var(--fr)),transparent 100%);animation:segfade linear both;animation-timeline:scroll(self inline)}
+ @keyframes segfade{0%{--fl:0px;--fr:30px}10%{--fl:30px}90%{--fr:30px}100%{--fl:30px;--fr:0px}}
+}
+/* long lists: rows outside the screen are not laid out or painted until they scroll into view */
+.month{content-visibility:auto;contain-intrinsic-size:auto 420px}
+.list-row{content-visibility:auto;contain-intrinsic-size:auto 58px}
