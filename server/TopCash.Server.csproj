@@ -22,6 +22,7 @@
     <Compile Include="..\src\Imports.cs" Link="Shared\Imports.cs" />
     <Compile Include="..\src\Gestionale.cs" Link="Shared\Gestionale.cs" />
     <Compile Include="..\src\Paths.cs" Link="Shared\Paths.cs" />
+    <Compile Include="..\src\Magazzino.cs" Link="Shared\Magazzino.cs" />
     <Content Include="..\src\ui\**\*" LinkBase="ui" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>

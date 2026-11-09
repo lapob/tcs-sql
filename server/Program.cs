@@ -193,6 +193,26 @@ app.MapPost("/api/interventions/{id}/delete",(HttpContext ctx,string id)=>
  try{store.DeleteIntervention(id);store.Log("edit",$"{Who(ctx)} ha eliminato un intervento.");hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}
 }).RequireAuthorization("export");
 
+// ───────────────────────── warehouse
+bool CanManage(HttpContext ctx)=>ctx.User.IsInRole(Roles.Admin)||ctx.User.IsInRole(Roles.Office);
+app.MapPost("/api/warehouse/movements",(HttpContext ctx,MovementsRequest r)=>
+{
+ if(r?.Movements==null||r.Movements.Count==0)return Bad("Nessun movimento.");
+ // technicians move stock (load, unload, transfer); corrections and stock counts are for office / admin
+ if(!CanManage(ctx)&&r.Movements.Any(m=>m?.Type is "rettifica" or "inventario"))return Results.StatusCode(403);
+ try{var saved=store.AddMovements(r.Movements,Who(ctx));hub.Changed();return Results.Ok(new{count=saved.Count});}catch(InvalidDataException ex){return Bad(ex.Message);}
+}).RequireAuthorization("read");
+app.MapPost("/api/warehouse/inventory",(HttpContext ctx,InventoryRequest r)=>
+{
+ if(r==null||string.IsNullOrWhiteSpace(r.Warehouse)||r.Counted==null)return Bad("Inventario incompleto.");
+ try{var n=store.RecordInventory(r.Warehouse,r.Counted,Who(ctx));hub.Changed();return Results.Ok(new{differences=n});}catch(InvalidDataException ex){return Bad(ex.Message);}
+}).RequireAuthorization("export");
+app.MapPost("/api/warehouse/articles",(HttpContext ctx,Article a)=>{try{var r=store.SaveArticle(a,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("export");
+app.MapPost("/api/warehouse/warehouses",(HttpContext ctx,Warehouse w)=>{try{var r=store.SaveWarehouse(w,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("export");
+app.MapPost("/api/warehouse/levels",(HttpContext ctx,StockLevel l)=>{try{store.SaveStockLevel(l);hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("export");
+app.MapGet("/api/export/stock.csv",()=>Results.File(Utf8Bom(WarehouseReports.StockCsv(store)),"text/csv; charset=utf-8",$"TopCash-giacenze-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("export");
+app.MapGet("/api/export/reorder.csv",()=>Results.File(Utf8Bom(WarehouseReports.ReorderCsv(store)),"text/csv; charset=utf-8",$"TopCash-proposta-ordine-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("export");
+
 // ───────────────────────── sync station (token, no user session)
 bool Station(HttpContext ctx){var ok=users.CheckSyncToken(ctx.Request.Headers["X-Sync-Token"]);if(ok)hub.StationSeen();return ok;}
 app.MapPost("/api/sync/batch",(HttpContext ctx,BatchRequest b)=>
@@ -244,3 +264,5 @@ record MetaRequest(string Code,ClientMeta Meta);
 record BatchRequest(string Kind,string Product,string Scope,List<string> Headers,List<List<string>> Rows,string CapturedAt);
 record LogRequest(string Kind,string Message);
 record ProgressRequest(bool Running,bool Connected,string Text);
+record MovementsRequest(List<Movement> Movements);
+record InventoryRequest(string Warehouse,Dictionary<string,decimal> Counted);

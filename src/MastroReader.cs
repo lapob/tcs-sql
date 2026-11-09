@@ -10,7 +10,8 @@ namespace TopCash.Licenze;
 public static class MastroReader
 {
  public sealed record Config(string Host,int Port,string Database,string User,string Password,string IniPath);
- public sealed record Preview(int Clients,int Machines,int Interventions,int WithPhone,int WithEmail,List<string> ClientColumns,List<string> MachineColumns,string InterventionTable,List<MastroClient> Sample,List<string> Warnings);
+ public sealed record Preview(int Clients,int Machines,int Interventions,int WithPhone,int WithEmail,List<string> ClientColumns,List<string> MachineColumns,string InterventionTable,List<MastroClient> Sample,List<string> Warnings,
+  int Articles=0,int StockRows=0,int Warehouses=0);
 
  public static readonly string[] IniCandidates=[@"C:\MastroSQL\RETE.ini",@"C:\mastro20\RETE.ini",@"C:\MastroSQL\utility\RETE.ini"];
  public static Config? FromIni(string? path=null)
@@ -129,8 +130,36 @@ public static class MastroReader
   }
   else warnings.Add("Archivio interventi di Mastro non trovato: verranno usati solo quelli creati nell'app.");
 
-  var batch=new MastroBatch(clients,machines,interventions,DateTimeOffset.Now.ToString("O"),$"MastroSQL {cfg.Host}/{cfg.Database}");
-  var preview=new Preview(clients.Count,machines.Count,interventions.Count,clients.Count(x=>x.Phones.Count>0),clients.Count(x=>x.Emails.Count>0),cols,machineCols,interTable,clients.Take(6).ToList(),warnings);
+  // ── warehouse: catalogue (arti), stock per warehouse (art_giace), categories (reparti), suppliers (fornito)
+  var articles=new List<Article>();var stock=new List<MastroStock>();
+  static decimal D(string s)=>decimal.TryParse(s,NumberStyles.Any,CultureInfo.InvariantCulture,out var v)?v:0;
+  var tArti=Tab("arti");
+  if(tArti!=null)
+  {
+   var cats=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);var sups=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+   if(Tab("reparti") is string tr)foreach(var r in await All(tr,10_000)){var k=F(r,"NUME","CODI","REPA","CODICE");if(k.Length>0)cats[k]=F(r,"DESCRI");}
+   if(Tab("fornito") is string tf)foreach(var r in await All(tf,50_000)){var k=F(r,"CODI","CODICE");if(k.Length>0)sups[k]=F(r,"DESCRI");}
+   var seenBarcodes=new HashSet<string>();
+   foreach(var d in await All(tArti,300_000))
+   {
+    var code=F(d,"CODI","CODICE");var name=(F(d,"DESCRI")+" "+F(d,"DESCRI2")).Trim();if(code.Length==0||name.Length==0)continue;
+    var barcode=F(d,"BARCODE","EAN","CORTO");if(barcode.Length>0&&!seenBarcodes.Add(barcode))barcode=""; // a barcode identifies one article only
+    var cost=D(F(d,"COSM"));if(cost<=0)cost=D(F(d,"COST"));
+    var repa=F(d,"REPA");var forn=F(d,"FORNITO");
+    articles.Add(new(code,name.Length>200?name[..200]:name,barcode,cats.GetValueOrDefault(repa,repa),F(d,"MISU").ToUpperInvariant(),Math.Max(0,cost),Math.Max(0,D(F(d,"VEND"))),
+     Math.Clamp(D(F(d,"IVA")),0,100),sups.GetValueOrDefault(forn,forn),F(d,"CFOR"),false,true,"","mastro",""));
+   }
+   articles=articles.DistinctBy(a=>a.Code.ToUpperInvariant()).ToList();
+   if(Tab("art_giace") is string tg)
+    foreach(var d in await All(tg,500_000))
+    {var q=D(F(d,"ESIS"));var code=F(d,"CODI","ARTI","ART_CODI","CODICE");if(q!=0&&code.Length>0)stock.Add(new(code,F(d,"MAGA").Length>0?F(d,"MAGA"):"1",q));}
+   else warnings.Add("Tabella delle giacenze (art_giace) non trovata: verrà importato solo il catalogo articoli.");
+  }
+  else warnings.Add("Tabella articoli (arti) non trovata: magazzino non importato.");
+
+  var batch=new MastroBatch(clients,machines,interventions,DateTimeOffset.Now.ToString("O"),$"MastroSQL {cfg.Host}/{cfg.Database}",articles,stock,false);
+  var preview=new Preview(clients.Count,machines.Count,interventions.Count,clients.Count(x=>x.Phones.Count>0),clients.Count(x=>x.Emails.Count>0),cols,machineCols,interTable,clients.Take(6).ToList(),warnings,
+   articles.Count,stock.Count,stock.Select(s=>s.Warehouse).Distinct().Count());
   return(batch,preview);
  }
 }

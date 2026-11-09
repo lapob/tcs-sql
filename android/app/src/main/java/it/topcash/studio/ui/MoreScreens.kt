@@ -63,7 +63,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
                 (n.isEmpty() || norm(m.clientName + " " + m.m.model + " " + m.m.serial + " " + m.m.fiscalSerial).contains(n))
         }.sortedBy { if (tab == "Abbonamenti") it.contractEnd ?: java.time.LocalDate.MAX else it.nextVerification ?: java.time.LocalDate.MAX }
     }
-    Page(null, "Macchine", "${a.machines.count { it.m.active }} attive · ${a.verificationsDue.size} verificazioni entro 60 gg") {
+    Page(null, "Macchine", "${a.machines.count { it.m.active }} attive · ${a.verificationsDue.size} verificazioni entro 60 gg", onBack = { nav.popBackStack() }) {
         item(key = "search") { SearchField(q, { q = it }, "Cerca cliente o matricola") }
         item(key = "tabs") { ChoiceChips(mtabs, tab, { tab = it }, Modifier.padding(vertical = 10.dp)) }
         if (a.machines.isEmpty()) item(key = "none") { Empty(Icons.Rounded.PointOfSale, "Nessuna macchina in archivio", "Importa il parco macchine da MastroSQL dall'app Windows (Impostazioni → Importa da MastroSQL).") }
@@ -101,6 +101,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
     Page(vm, "Altro", me?.let { "${it.name} · ${it.roleLabel}" }) {
         item(key = "items") {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                MoreRow(Icons.Rounded.PointOfSale, "Parco macchine", "${a.machines.count { it.m.active }} attive · ${a.verificationsDue.size} verificazioni entro 60 gg", Modifier.appear(0)) { nav.navigate("machines") }
                 MoreRow(Icons.Rounded.CalendarMonth, "Scadenziario", "${a.deadlines(0, 120).size} scadenze nei prossimi 120 giorni", Modifier.appear(0)) { nav.navigate("deadlines") }
                 MoreRow(Icons.Rounded.Key, "Licenze Zucchetti", "${a.currentLicenses.size} correnti · ${a.licenses.size - a.currentLicenses.size} storiche", Modifier.appear(1)) { nav.navigate("licenses") }
                 MoreRow(Icons.Rounded.ShoppingBag, "Ordini web", "${a.orders.size} ordini in archivio", Modifier.appear(2)) { nav.navigate("orders") }

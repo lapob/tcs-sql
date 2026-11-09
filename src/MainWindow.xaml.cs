@@ -128,10 +128,24 @@ public partial class MainWindow : Window
     case "mastroRead":await MastroRead();break;
     case "mastroImport":
      if(lastMastro==null){await Notify("Prima esegui la lettura da MastroSQL.");break;}
-     var mmsg=store.ImportMastro(lastMastro,Environment.UserName);lastMastro=null;await Push();await Notify(mmsg);break;
+     var align=root.TryGetProperty("align",out var al)&&al.ValueKind==JsonValueKind.True;
+     var mmsg=store.ImportMastro(lastMastro with{AlignStock=align},Environment.UserName);lastMastro=null;await Push();await Notify(mmsg);break;
     case "intervention":
      var iv=JsonSerializer.Deserialize<Intervention>(root.GetProperty("item").GetRawText(),jsonIn)!;
      try{store.SaveIntervention(iv,Environment.UserName);await Push();await Notify("Intervento salvato.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
+    case "movements":
+     try{var mv=JsonSerializer.Deserialize<List<Movement>>(root.GetProperty("movements").GetRawText(),jsonIn)!;store.AddMovements(mv,Environment.UserName);await Push();await Notify(mv.Count==1?"Movimento registrato.":$"{mv.Count} movimenti registrati.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
+    case "inventory":
+     try{var counted=JsonSerializer.Deserialize<Dictionary<string,decimal>>(root.GetProperty("counted").GetRawText(),jsonIn)!;var nd=store.RecordInventory(root.GetProperty("warehouse").GetString()??"",counted,Environment.UserName);await Push();await Notify($"Inventario registrato: {nd} differenze.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
+    case "articleSave":
+     try{store.SaveArticle(JsonSerializer.Deserialize<Article>(root.GetProperty("item").GetRawText(),jsonIn)!,Environment.UserName);await Push();await Notify("Articolo salvato.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
+    case "warehouseSave":
+     try{store.SaveWarehouse(JsonSerializer.Deserialize<Warehouse>(root.GetProperty("item").GetRawText(),jsonIn)!,Environment.UserName);await Push();await Notify("Magazzino salvato.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
+    case "levelSave":
+     try{store.SaveStockLevel(JsonSerializer.Deserialize<StockLevel>(root.GetProperty("item").GetRawText(),jsonIn)!);await Push();}catch(InvalidDataException ex){await Notify(ex.Message);}break;
+    case "exportStock":case "exportReorder":
+     var sp=new SaveFileDialog{Filter="CSV italiano|*.csv",FileName=(action=="exportStock"?"TopCash-giacenze-":"TopCash-proposta-ordine-")+DateTime.Today.ToString("yyyyMMdd")+".csv"};
+     if(sp.ShowDialog(this)==true){File.WriteAllText(sp.FileName,action=="exportStock"?WarehouseReports.StockCsv(store):WarehouseReports.ReorderCsv(store),new UTF8Encoding(true));await Notify("File salvato.");}break;
     case "interventionDelete":
      try{store.DeleteIntervention(root.GetProperty("id").GetString()??"");await Push();await Notify("Intervento eliminato.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
     case "hostInfo":Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,portalOpen=portal!=null});break;
@@ -209,7 +223,7 @@ public partial class MainWindow : Window
   await PushNow();
  }
  Task PushNow(){lastPush=DateTime.UtcNow;if(ServerMode)return Task.CompletedTask; // the shared server feeds the UI itself
-  if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="state",records=store.All(),clients=store.Clients(),orders=store.Orders(),mastroClients=store.MastroClients(),machines=store.Machines(),interventions=store.Interventions(),syncRunning=portal?.Running??false,syncProgress=portal?.Progress??"",sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),sourceFolder,dataFolder=store.Folder,autoImport=true,portalConnected=portal?.Authenticated??false},json));return Task.CompletedTask;}
+  if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="state",records=store.All(),clients=store.Clients(),orders=store.Orders(),mastroClients=store.MastroClients(),machines=store.Machines(),interventions=store.Interventions(),warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),syncRunning=portal?.Running??false,syncProgress=portal?.Progress??"",sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),sourceFolder,dataFolder=store.Folder,autoImport=true,portalConnected=portal?.Authenticated??false},json));return Task.CompletedTask;}
  // In server mode the progress also reaches every browser through the server; locally it goes straight to the page.
  Task Notify(string message){Dashboard.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="toast",message},json));return Task.CompletedTask;}
 }

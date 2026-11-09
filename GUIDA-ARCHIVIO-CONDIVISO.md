@@ -74,7 +74,23 @@ I clienti Mastro vengono collegati a quelli Zucchetti tramite partita IVA o codi
 
 > **Sola lettura:** l'app esegue solo letture sul database di Mastro e non modifica nulla. Puoi ripetere l'importazione quando vuoi: i dati Mastro vengono sostituiti con l'ultima lettura, mentre interventi creati nell'app, note e promemoria restano invariati.
 
-## 6. App Android
+## 6. Magazzino
+
+Ricambi e consumabili in **sede** e su ogni **furgone** (un magazzino per tecnico). Menu **Magazzino** su PC, browser e Android.
+
+1. **Magazzini e furgoni** → *Nuovo furgone*: nome e tecnico assegnato (scrivilo come negli interventi).
+2. **Nuovo articolo** (o importa il catalogo da MastroSQL): codice, codice a barre, categoria, costo, prezzo, fornitore, *gestito a matricola* per i registratori.
+3. **Carico** quando arriva la merce (con costo e numero DDT), **Trasferisci** sul furgone del tecnico.
+4. Negli **interventi** aggiungi i *Ricambi usati*: vengono scaricati in automatico dal furgone del tecnico (se modifichi l'intervento non vengono scaricati due volte; se lo elimini tornano a magazzino).
+5. Nella scheda di un articolo imposta **scorta minima e massima** per sede o furgone → la scheda **Riordino** propone cosa ordinare, raggruppato per fornitore (esportabile in CSV).
+6. **Inventario**: conta la merce, scrivi le quantità reali e registra; vengono salvate solo le differenze.
+
+Codici a barre: su PC funzionano i lettori USB/Bluetooth (scansiona nel campo di ricerca); su Android tocca l'icona di scansione per usare la fotocamera.
+I tecnici registrano carichi, scarichi e trasferimenti; rettifiche, inventario e anagrafica articoli spettano a ufficio e amministratore. Ogni movimento resta nel registro con utente, data e note.
+
+**Da MastroSQL** (Impostazioni → *Importa da MastroSQL*): vengono importati articoli, categorie e fornitori; spuntando *Allinea anche le giacenze* le quantità di Mastro diventano quelle di partenza (registrate come rettifiche, quindi tracciate). Da quel momento il magazzino operativo è Top Cash Studio.
+
+## 7. App Android
 
 App **nativa** (Kotlin + Jetpack Compose, Material 3) — File: `D:\TopCashSQL\android\TopCash-Studio.apk`.
 

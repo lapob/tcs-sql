@@ -29,7 +29,7 @@ const famOfScope=s=>s.replace(/-(attive|scadute)$/,'');
 const famLabel=f=>FAMILY[f]||f;
 
 // ───────────────────────── state
-let state={records:[],clients:[],orders:[],mastroClients:[],machines:[],interventions:[],sources:[],events:[],notes:{},metadata:{},sourceFolder:'',dataFolder:'',portalConnected:false,syncRunning:false,syncProgress:''};
+let state={records:[],clients:[],orders:[],mastroClients:[],machines:[],interventions:[],warehouses:[],articles:[],stockLevels:[],stock:[],movements:[],sources:[],events:[],notes:{},metadata:{},sourceFolder:'',dataFolder:'',portalConnected:false,syncRunning:false,syncProgress:''};
 let D=null; // derived data
 let page=store.get('page','overview'),ui={q:'',status:'',product:'',city:'',tab:'current',p:1,sort:{key:'name',dir:1},ostatus:'',ofam:'',taskTab:'open',clientView:'all',itab:'open',mtab:'active',tech:''};
 let drawerCode=null,firstState=true,searchTimer=0;
@@ -87,6 +87,7 @@ function derive(){
   openInterventions:interventions.filter(i=>i.status!=='Chiuso'),
   verDue:machines.filter(m=>m.active&&m.verDays!==null&&m.verDays<=60),
   contractDue:machines.filter(m=>m.subscribed&&m.endDays!==null&&m.endDays<=60)};
+ if(typeof deriveWarehouse==='function')deriveWarehouse();
 }
 
 // ───────────────────────── bridge
@@ -116,6 +117,8 @@ function send(action,data={}){
   case'exportClients':download('/api/export/clients.csv');break;
   case'export':download('/api/export/licenses.csv');break;
   case'calendar':download('/api/export/calendar.ics');break;
+  case'exportStock':download('/api/export/stock.csv');break;
+  case'exportReorder':download('/api/export/reorder.csv');break;
   case'backup':download('/api/backup');break;
   case'import':pickAndUpload();break;
   case'external':if(data.url.startsWith('https://'))window.open(data.url,'_blank','noopener');else location.href=data.url;break;
@@ -137,18 +140,19 @@ function hideTip(){clearTimeout(tipTimer);tipEl=null;tipBox.classList.remove('on
 document.addEventListener('pointerover',e=>{if(e.pointerType==='touch')return;const el=e.target.closest?.('[data-tip]');if(el===tipEl)return;hideTip();if(el?.dataset.tip)tipTimer=setTimeout(()=>showTip(el),320);});
 ['scroll','pointerdown','keydown','wheel'].forEach(ev=>addEventListener(ev,hideTip,{capture:true,passive:true}));
 // ── in-app confirmation dialog (replaces the browser's grey confirm boxes)
+let lastAskAlign=false;
 function ask({title,text='',ok='Conferma',danger=false,html=''}){return new Promise(res=>{
  const m=document.createElement('div');m.className='modal';
  m.innerHTML=`<div class="modal-box" role="alertdialog" aria-modal="true" aria-label="${esc(title)}"><h3>${esc(title)}</h3>${text?`<p>${text}</p>`:''}${html}<div class="btn-row"><button class="btn ghost" data-m="0">Annulla</button><button class="btn ${danger?'danger':'accent'}" data-m="1">${esc(ok)}</button></div></div>`;
  document.body.append(m);const prev=document.activeElement;
  const key=e=>{if(e.key==='Escape'){e.stopPropagation();e.preventDefault();close(false);}if(e.key==='Tab'){const f=[...m.querySelectorAll('button')];const i=f.indexOf(document.activeElement);e.preventDefault();f[(i+(e.shiftKey?-1:1)+f.length)%f.length].focus();}};
- const close=v=>{document.removeEventListener('keydown',key,true);m.classList.add('out');setTimeout(()=>m.remove(),220);prev?.focus?.({preventScroll:true});res(v);};
+ const close=v=>{lastAskAlign=!!m.querySelector('#mastro-align')?.checked;document.removeEventListener('keydown',key,true);m.classList.add('out');setTimeout(()=>m.remove(),220);prev?.focus?.({preventScroll:true});res(v);};
  document.addEventListener('keydown',key,true);m.addEventListener('click',e=>{const b=e.target.closest('[data-m]');if(b)close(b.dataset.m==='1');else if(e.target===m)close(false);});
  setTimeout(()=>m.querySelector('[data-m="1"]').focus(),30);});}
 async function copy(text){try{await navigator.clipboard.writeText(text);toast('Copiato negli appunti');}catch{toast('Copia non riuscita','alert');}}
 
 // ───────────────────────── shared UI pieces
-const PAGES={overview:'Panoramica',clients:'Clienti',interventions:'Interventi',machines:'Macchine',licenses:'Licenze',expiry:'Scadenze',orders:'Ordini',tasks:'Attività',sync:'Sincronizzazione',settings:'Impostazioni',team:'Utenti'};
+const PAGES={overview:'Panoramica',clients:'Clienti',interventions:'Interventi',machines:'Macchine',warehouse:'Magazzino',licenses:'Licenze',expiry:'Scadenze',orders:'Ordini',tasks:'Attività',sync:'Sincronizzazione',settings:'Impostazioni',team:'Utenti'};
 function hero(title,text,actions=''){return`<section class="hero reveal"><div><h1>${title}</h1><p>${text}</p></div><div class="btn-row">${actions}</div></section>`;}
 function explain(id,html){if(store.get('hide.'+id,false))return'';return`<div class="explain reveal" style="--i:1"><span class="orb">${icon('sparkle')}</span><div>${html}</div><button class="x" data-hide-explain="${id}" aria-label="Nascondi spiegazione" data-tip="Nascondi questa spiegazione">${icon('close')}</button></div>`;}
 function kpi(label,value,note,ic,tone,go,i,tip){return`<div class="card kpi ${tone} reveal" style="--i:${i}" data-go="${go}" tabindex="0" ${tip?`data-tip="${esc(tip)}"`:''}><div class="kpi-top"><span>${label}</span><span class="kpi-icon">${icon(ic)}</span></div><div class="kpi-value" data-count="${value}">${fmt(value)}</div><div class="kpi-note">${note}</div></div>`;}
@@ -383,6 +387,7 @@ function openIntervention(id,clientCode){
   <label class="field">Titolo<input class="input" name="title" value="${esc(v.title)}" maxlength="200" required placeholder="es. Sostituzione stampante, verificazione periodica…" ${ro?'disabled':''}></label>
   <div class="form-row"><label class="field">Stato<select class="select" name="status" ${ro?'disabled':''}>${opts(ISTATES,v.status)}</select></label><label class="field">Priorità<select class="select" name="priority" ${ro?'disabled':''}>${opts(PRIOS,v.priority)}</select></label></div>
   <label class="field">Macchina<select class="select" name="machine" id="int-machine" ${ro?'disabled':''}>${machOpts(v.clientCode)}</select></label>
+  ${typeof partsSection==='function'?partsSection(it?.parts||[],ro,v.technician):''}
   <label class="field">Lavoro svolto / note<textarea class="textarea" name="work" maxlength="20000" ${ro?'disabled':''} placeholder="Descrizione del problema e del lavoro eseguito…">${esc(v.work||'')}</textarea></label>
   ${it?`<p class="muted" style="font-size:12px">${it.source==='mastro'?'Importato da MastroSQL'+(it.total&&it.total!=='0'?' · totale documento '+esc(it.total)+' €':''):`Creato ${it.created?dTime(it.created):''} ${it.createdBy?'da '+esc(it.createdBy):''}${it.updated&&it.updated!==it.created?` · modificato ${dTime(it.updated)} ${it.updatedBy?'da '+esc(it.updatedBy):''}`:''}`}</p>`:''}
   <div class="btn-row">${it&&!ro?`<button type="button" class="btn ghost need-export" data-m="del" style="margin-right:auto;color:var(--bad)">Elimina</button>`:''}${c?`<button type="button" class="btn ghost" data-m="client">Apri cliente</button>`:''}<button type="button" class="btn ghost" data-m="0">${ro?'Chiudi':'Annulla'}</button>${ro?'':`<button class="btn accent" type="submit">${icon('check')}Salva</button>`}</div></form>`;
@@ -398,7 +403,8 @@ function openIntervention(id,clientCode){
   if(b.dataset.m==='del'){if(await ask({title:'Eliminare l’intervento?',text:'L’operazione non si può annullare.',ok:'Elimina',danger:true})){close();if(WEB)post('/api/interventions/'+encodeURIComponent(it.id)+'/delete').then(()=>toast('Intervento eliminato')).catch(x=>toast(x.message,'alert'));else send('interventionDelete',{id:it.id});}}});
  form.addEventListener('submit',e=>{e.preventDefault();if(ro)return;const cl=resolve();if(!cl){toast('Scegli un cliente dall’elenco','alert');clientInput.focus();return;}
   const f=Object.fromEntries(new FormData(form));
-  const item={id:v.id||'',clientCode:cl.code,clientName:cl.name,date:f.date||'',machine:f.machine||'',title:f.title.trim(),work:f.work||'',status:f.status,technician:(f.technician||'').trim(),priority:f.priority,total:v.total||'',source:'app',created:'',createdBy:'',updated:'',updatedBy:''};
+  const parts=typeof readParts==='function'?readParts(form):[];const bad=parts.find(p=>!p._ok||!(p.qty>0));if(bad){toast(`Ricambio non valido: ${bad.article}`,'alert');return;}
+  const item={id:v.id||'',clientCode:cl.code,clientName:cl.name,date:f.date||'',machine:f.machine||'',title:f.title.trim(),work:f.work||'',status:f.status,technician:(f.technician||'').trim(),priority:f.priority,total:v.total||'',source:'app',created:'',createdBy:'',updated:'',updatedBy:'',parts:parts.map(({_ok,...p})=>p)};
   if(WEB)post('/api/interventions',item).then(()=>{toast('Intervento salvato e condiviso');close();}).catch(x=>toast(x.message,'alert'));else{send('intervention',{item});close();}});
  setTimeout(()=>(c?m.querySelector('[name=title]'):clientInput)?.focus(),40);
 }
@@ -417,10 +423,12 @@ async function mastroPreview(v){
  const p=v.preview;
  const sample=p.sample.map(c=>`<div class="stat-line"><span>${esc(c.name)}<br><small class="muted">${esc([c.city,c.vat].filter(Boolean).join(' · '))}</small></span><span class="muted" style="text-align:right">${esc(c.phones[0]||'')}<br>${esc(c.emails[0]||'')}</span></div>`).join('');
  const ok=await ask({title:'Anteprima importazione MastroSQL',text:`Origine: <strong>${esc(v.source)}</strong>. I dati Mastro già presenti verranno sostituiti con questa lettura; interventi creati nell’app, note e promemoria restano invariati.`,
-  html:`<div class="stat-line"><span>Clienti</span><strong>${fmt(p.clients)}</strong></div><div class="stat-line"><span>con telefono / con email</span><strong>${fmt(p.withPhone)} / ${fmt(p.withEmail)}</strong></div><div class="stat-line"><span>Macchine</span><strong>${fmt(p.machines)}</strong></div><div class="stat-line"><span>Interventi storici</span><strong>${fmt(p.interventions)}</strong></div>
+  html:`<div class="stat-line"><span>Clienti</span><strong>${fmt(p.clients)}</strong></div><div class="stat-line"><span>con telefono / con email</span><strong>${fmt(p.withPhone)} / ${fmt(p.withEmail)}</strong></div><div class="stat-line"><span>Macchine</span><strong>${fmt(p.machines)}</strong></div><div class="stat-line"><span>Interventi storici</span><strong>${fmt(p.interventions)}</strong></div><div class="stat-line"><span>Articoli di magazzino</span><strong>${fmt(p.articles||0)}</strong></div>
+   ${p.stockRows?`<label class="check" style="margin-top:8px"><input type="checkbox" id="mastro-align"> Allinea anche le giacenze a quelle di Mastro (${fmt(p.stockRows)} righe, ${fmt(p.warehouses)} magazzini)</label><p class="muted" style="font-size:12px">Senza spunta viene importato solo il catalogo: le quantità restano quelle registrate in Top Cash Studio. L’allineamento registra delle rettifiche, quindi resta tutto tracciato.</p>`:''}
    ${p.warnings.map(w=>`<p class="muted" style="font-size:12px">⚠ ${esc(w)}</p>`).join('')}<details style="font-size:12.5px"><summary style="cursor:pointer;color:var(--accent)">Esempio dei primi clienti</summary>${sample}</details>`,ok:`Importa ${fmt(p.clients)} clienti`});
+ const align=!!lastAskAlign;
  if(!ok){toast('Importazione annullata: nessun dato modificato');return;}
- if(WEB){try{const r=await post('/api/mastro/import',v.batch);toast(r.message);}catch(x){toast(x.message,'alert');}}else send('mastroImport');
+ if(WEB){try{const r=await post('/api/mastro/import',{...v.batch,alignStock:align});toast(r.message);}catch(x){toast(x.message,'alert');}}else send('mastroImport',{align});
 }
 
 // ───────────────────────── team & shared-archive settings
@@ -513,9 +521,10 @@ let cmdSel=0,cmdItems=[];
 function openCmd(){$('#cmd').hidden=false;const i=$('#cmd-q');i.value=ui.q||'';cmdRender();setTimeout(()=>{i.focus();i.select();},10);}
 function closeCmd(){$('#cmd').hidden=true;}
 function cmdRender(){const q=norm($('#cmd-q').value.trim());const out=[];
- Object.entries(PAGES).forEach(([k,l],i)=>{if(k==='team'&&!(WEB&&me?.role==='admin'))return;if(!q||norm(l).includes(q))out.push({g:'Sezioni',t:l,s:'Alt + '+(i+1),ic:{overview:'home',clients:'users',licenses:'key',expiry:'calendar',orders:'bag',tasks:'task',sync:'sync',settings:'settings',team:'shield',interventions:'tool',machines:'register'}[k],run:()=>go(k)});});
+ Object.entries(PAGES).forEach(([k,l],i)=>{if(k==='team'&&!(WEB&&me?.role==='admin'))return;if(!q||norm(l).includes(q))out.push({g:'Sezioni',t:l,s:'Alt + '+(i+1),ic:{overview:'home',clients:'users',licenses:'key',expiry:'calendar',orders:'bag',tasks:'task',sync:'sync',settings:'settings',team:'shield',interventions:'tool',machines:'register',warehouse:'box'}[k],run:()=>go(k)});});
  if(q){D.clients.filter(c=>c.search.includes(q)).slice(0,8).forEach(c=>out.push({g:'Clienti',t:c.name,s:[c.city,c.phone,c.email].filter(Boolean).join(' · ')||'Cod. '+c.code,mark:c,run:()=>openClient(c.code)}));
   state.records.filter(r=>norm(r.serial).includes(q)).slice(0,5).forEach(r=>out.push({g:'Matricole',t:r.serial,s:r.client+' · scade '+(r.expiry||'—'),ic:'key',run:()=>openClient(r.clientCode)}));
+  if(typeof W!=='undefined'&&W)W.items.filter(i=>i.search.includes(q)).slice(0,5).forEach(i=>out.push({g:'Magazzino',t:i.name,s:i.code+(i.barcode?' · '+i.barcode:'')+' · giacenza '+qf(i.total)+' '+i.unit,ic:'box',run:()=>openArticle(i.code)}));
   D.orders.filter(o=>norm(o.number).includes(q)).slice(0,4).forEach(o=>out.push({g:'Ordini',t:'Ordine '+o.number,s:o.client+' · '+o.status,ic:'bag',run:()=>o.clientCode?openClient(o.clientCode):go('orders')}));
   out.push({g:'Azioni',t:`Mostra tutti i risultati per “${$('#cmd-q').value.trim()}”`,s:'Elenco clienti filtrato',ic:'search',run:()=>{ui.q=$('#cmd-q').value.trim();go('clients',true);}});}
  else[['Sincronizza ora con Zucchetti','sync',()=>send('syncPortal')],['Esporta anagrafica clienti','download',()=>send('exportClients')],['Crea backup del database','shield',()=>send('backup')],['Cambia tema chiaro/scuro','moon',toggleTheme]].forEach(([t,ic,run])=>out.push({g:'Azioni',t,s:'',ic,run}));
@@ -527,12 +536,12 @@ function cmdRun(i){const it=cmdItems[i];if(!it)return;closeCmd();it.run();}
 function render(animate){
  if(!D)return;const main=$('#main');const scroll=main.scrollTop;const focus=document.activeElement?.id;const caret=document.activeElement?.selectionStart;
  if(page==='team'&&!(WEB&&me?.role==='admin'))page='overview';
- const html={overview,clients:clientsPage,licenses:licensesPage,expiry:expiryPage,orders:ordersPage,tasks:tasksPage,sync:syncPage,settings:settingsPage,team:teamPage,interventions:interventionsPage,machines:machinesPage}[page]||overview;
+ const html={overview,clients:clientsPage,licenses:licensesPage,expiry:expiryPage,orders:ordersPage,tasks:tasksPage,sync:syncPage,settings:settingsPage,team:teamPage,interventions:interventionsPage,machines:machinesPage,warehouse:typeof warehousePage==='function'?warehousePage:overview}[page]||overview;
  document.body.classList.toggle('anim',!!animate&&!reduced);
  main.innerHTML=`<div class="page">${html()}</div>`;
  $('#crumb').textContent=PAGES[page];
  $$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.page===page));moveIndicator();
- $('#nav-clients').textContent=fmt(D.clients.length);$('#nav-licenses').textContent=fmt(D.current.length);$('#nav-orders').textContent=D.orders.length?fmt(D.orders.length):'';$('#nav-interventions').textContent=D.openInterventions.length||'';$('#nav-machines').textContent=D.machines.length?fmt(D.machines.length):'';
+ $('#nav-clients').textContent=fmt(D.clients.length);$('#nav-licenses').textContent=fmt(D.current.length);$('#nav-orders').textContent=D.orders.length?fmt(D.orders.length):'';$('#nav-interventions').textContent=D.openInterventions.length||'';$('#nav-machines').textContent=D.machines.length?fmt(D.machines.length):'';if(typeof W!=='undefined'&&W)$('#nav-warehouse').textContent=W.below.length||'';
  $('#nav-due').textContent=D.due30.length||'';const late=D.tasks.filter(c=>c.meta.followupState!=='Completato'&&c.meta.nextContact&&days(c.meta.nextContact)<=0).length;$('#nav-tasks').textContent=late||'';
  $('#alerts-dot').classList.toggle('on',D.due30.length>0);
  $('#nav-sync-dot').className='sync-dot '+(state.syncRunning?'run':state.portalConnected?'on':'');
@@ -633,7 +642,7 @@ function receive(v){
  if(v.type==='mastro'){mastroState=v;if(v.stage==='preview'){mastroState=null;mastroPreview(v);}if(page==='settings')render(false);if(v.ok===false)toast(v.error,'alert');return;}
  if(v.type==='host'){hostInfo=v;if(v.syncStation)document.documentElement.dataset.station='1';else delete document.documentElement.dataset.station;if(page==='settings'||page==='team'||page==='sync')render(false);return;}
  if(v.type!=='state')return;
- state={...state,...v,clients:v.clients||[],orders:v.orders||[],mastroClients:v.mastroClients||[],machines:v.machines||[],interventions:v.interventions||[],metadata:v.metadata||{},notes:v.notes||{}};derive();
+ state={...state,...v,clients:v.clients||[],orders:v.orders||[],mastroClients:v.mastroClients||[],machines:v.machines||[],interventions:v.interventions||[],warehouses:v.warehouses||[],articles:v.articles||[],stockLevels:v.stockLevels||[],stock:v.stock||[],movements:v.movements||[],metadata:v.metadata||{},notes:v.notes||{}};derive();
  render(firstState);firstState=false;if(drawerCode)openClient(drawerCode,true);
  $('#splash').classList.add('gone');
 }

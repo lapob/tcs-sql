@@ -110,6 +110,11 @@ details.extra{margin-top:12px;font-size:13px}
 details.extra summary{cursor:pointer;color:var(--accent);font-weight:550;margin-bottom:10px}
 details.extra .facts{margin-top:6px}
 .d-section h3 .btn{height:28px;padding:0 10px;font-size:12px}
+/* Warehouse: spare-part rows in the intervention editor */
+.part-row{display:grid;grid-template-columns:minmax(0,1fr) 72px minmax(110px,160px) 120px 34px;gap:6px;align-items:center;margin:4px 0 6px}
+.part-row .select,.part-row .input{height:38px}
+.part-row .icon-btn{width:34px;height:34px}
+#parts:empty+button{margin-top:2px}
 .btn.danger{background:var(--bad);color:#fff;border-color:transparent}
 .toast.warn svg{color:var(--due)}
 .help{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;background:var(--muted-soft);color:var(--text-3);font-size:10.5px;font-weight:700;margin-left:6px;cursor:help;vertical-align:1px}
@@ -514,6 +519,8 @@ main{view-transition-name:main-content}
  .toolbar .select{flex:1}
  .explain{font-size:12.5px}
  .card-head{flex-wrap:wrap}
+ .part-row{grid-template-columns:1fr 64px 34px;grid-template-areas:"a q x" "w w w" "s s s";padding-bottom:8px;border-bottom:1px solid var(--line)}
+ .part-row [data-p=article]{grid-area:a}.part-row [data-p=qty]{grid-area:q}.part-row [data-p=warehouse]{grid-area:w}.part-row [data-p=serial]{grid-area:s;width:auto!important}.part-row .icon-btn{grid-area:x}
  .card-head .seg{width:100%}
  .card-head .seg button{flex:1}
  .toolbar .select{flex:1 1 30%;min-width:0;padding-right:26px;font-size:14px}

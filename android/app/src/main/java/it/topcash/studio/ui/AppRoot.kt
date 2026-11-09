@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.PointOfSale
+import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -99,13 +100,14 @@ data class EditorRequest(val interventionId: String? = null, val clientCode: Str
 
 private data class Tab(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
 private val tabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("clients", "Clienti", Icons.Rounded.Groups),
-    Tab("interventions", "Interventi", Icons.Rounded.Build), Tab("machines", "Macchine", Icons.Rounded.PointOfSale), Tab("more", "Altro", Icons.Rounded.MoreHoriz))
+    Tab("interventions", "Interventi", Icons.Rounded.Build), Tab("warehouse", "Magazzino", Icons.Rounded.Inventory2), Tab("more", "Altro", Icons.Rounded.MoreHoriz))
 
 @Composable fun MainScreen(vm: AppViewModel) {
     val nav = rememberNavController()
     val archive by vm.archive.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var editor by remember { mutableStateOf<EditorRequest?>(null) }
+    var movement by remember { mutableStateOf<Pair<String, String?>?>(null) } // (type, article)
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route ?: "home"
@@ -120,7 +122,7 @@ private val tabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("cli
                 NavigationBar(Modifier.glass(haze, strong = true), containerColor = androidx.compose.ui.graphics.Color.Transparent, tonalElevation = androidx.compose.ui.unit.Dp(0f)) {
                     tabs.forEach { t ->
                         NavigationBarItem(selected = route == t.route, onClick = { nav.switchTab(t.route) }, label = { Text(t.label) }, icon = {
-                            val n = when (t.route) { "interventions" -> archive?.openInterventions?.size ?: 0; else -> 0 }
+                            val n = when (t.route) { "interventions" -> archive?.openInterventions?.size ?: 0; "warehouse" -> archive?.wh?.belowMin?.size ?: 0; else -> 0 }
                             if (n > 0) BadgedBox(badge = { Badge { Text("$n") } }) { Icon(t.icon, t.label) } else Icon(t.icon, t.label)
                         })
                     }
@@ -146,11 +148,17 @@ private val tabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("cli
                     screen("clients") { ClientsScreen(vm, it, nav) }
                     screen("interventions") { InterventionsScreen(vm, it, onOpen = { id -> editor = EditorRequest(interventionId = id) }, onNew = { editor = EditorRequest() }) }
                     screen("machines") { MachinesScreen(it, nav) }
+                    screen("warehouse") { WarehouseScreen(vm, it, nav) { t, art -> movement = t to art } }
                     screen("more") { MoreScreen(vm, it, nav) }
                     screen("deadlines") { DeadlinesScreen(it, nav) }
                     screen("licenses") { LicensesScreen(it, nav) }
                     screen("orders") { OrdersScreen(it, nav) }
                     screen("account") { AccountScreen(vm, nav) }
+                    composable("article/{code}") { e ->
+                        CompositionLocalProvider(LocalAnim provides this) {
+                            if (a == null) LoadingArchive() else ArticleScreen(vm, a, e.arguments?.getString("code").orEmpty(), nav) { t, art -> movement = t to art }
+                        }
+                    }
                     composable("client/{code}") { e ->
                         CompositionLocalProvider(LocalAnim provides this) {
                             val code = e.arguments?.getString("code").orEmpty()
@@ -163,11 +171,13 @@ private val tabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("cli
             }
         }
         val ed = editor
+        val mv = movement
+        if (mv != null && a != null) MovementSheet(vm, a, mv.first, mv.second, onDismiss = { movement = null })
         if (ed != null && a != null) InterventionEditor(vm, a, ed, onDismiss = { editor = null }, onOpenClient = { code -> editor = null; nav.navigate("client/$code") })
     }
 }
 
-private val tabRoutes = setOf("home", "clients", "interventions", "machines", "more")
+private val tabRoutes = setOf("home", "clients", "interventions", "warehouse", "more")
 fun NavHostController.switchTab(route: String) = navigate(route) {
     popUpTo(graph.startDestinationId) { saveState = true }; launchSingleTop = true; restoreState = true
 }

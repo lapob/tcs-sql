@@ -24,6 +24,7 @@ public sealed partial class Store
    CREATE INDEX IF NOT EXISTS orders_family ON orders(family);
    """;cmd.ExecuteNonQuery();
   InitGestionale(c);
+  InitMagazzino(c);
  }
  public List<ClientRecord> Clients(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM clients";using var r=q.ExecuteReader();var list=new List<ClientRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<ClientRecord>(r.GetString(0))!);return list;}
  public List<OrderRecord> Orders(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM orders";using var r=q.ExecuteReader();var list=new List<OrderRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<OrderRecord>(r.GetString(0))!);return list;}
@@ -137,6 +138,25 @@ public sealed partial class Store
   var ini=Path.Combine(folder,"RETE.ini");File.WriteAllText(ini,"[Server]\r\nuser=u\r\npsw=p\r\nhost=10.0.0.5\r\nport=3307\r\ndbname=db1\r\n[Altro]\r\nhost=nope\r\n");
   var cfg=MastroReader.FromIni(ini)!;if(cfg.Host!="10.0.0.5"||cfg.Port!=3307||cfg.Database!="db1")throw new Exception("Lettura RETE.ini");
 #endif
+  // warehouse: ledger, negative-stock guard, intervention parts (edit-safe), inventory, Mastro alignment
+  decimal Q(string a,string w)=>store.Stock().Where(s=>s.Article==a&&s.Warehouse==w).Sum(s=>s.Qty);
+  store.SaveArticle(new("ROT-80","Rotolo carta 80mm","8001234567890","Consumabili","PZ",0.5m,1.2m,22,"","",false,true,"","",""),"test");
+  store.SaveArticle(new("RT-200","RT Form 200","","Registratori","PZ",350,590,22,"","",true,true,"","",""),"test");
+  var van=store.SaveWarehouse(new("","Furgone Mario","furgone","Mario",true,""),"test");
+  store.AddMovements([new("","","carico","ROT-80",100,"","sede",0.45m,"","","","DDT 1","",""),new("","","trasferimento","ROT-80",20,"sede",van.Id,0,"","","","","","")],"test");
+  if(Q("ROT-80","sede")!=80||Q("ROT-80",van.Id)!=20)throw new Exception("Giacenze dopo carico/trasferimento");
+  try{store.AddMovements([new("","","scarico","ROT-80",21,van.Id,"",0,"","","","","","")],"test");throw new Exception("Giacenza negativa accettata");}catch(InvalidDataException){}
+  try{store.AddMovements([new("","","carico","RT-200",1.5m,"","sede",0,"","","","","","")],"test");throw new Exception("Decimali su articolo a matricola");}catch(InvalidDataException){}
+  try{store.SaveArticle(new("ALTRO","x","8001234567890","","PZ",0,0,22,"","",false,true,"","",""),"test");throw new Exception("Codice a barre duplicato");}catch(InvalidDataException){}
+  store.ImportMastro(new([mc],[],[],"t","test"),"test");
+  var iv=store.SaveIntervention(new("","M15","Cliente Mastro","2026-11-09","","Cambio rotoli","","Chiuso","Mario","Normale","","","","","","",[new("ROT-80",5,van.Id,"")]),"test");
+  store.SaveIntervention(iv with{Parts=[new("ROT-80",3,van.Id,"")]},"test"); // edit: 3 instead of 5, not 5+3
+  if(Q("ROT-80",van.Id)!=17)throw new Exception("Ricambi intervento non idempotenti");
+  store.DeleteIntervention(iv.Id);if(Q("ROT-80",van.Id)!=20)throw new Exception("Ricambi non restituiti alla cancellazione");
+  if(store.RecordInventory("sede",new(){["ROT-80"]=78},"test")!=1||Q("ROT-80","sede")!=78)throw new Exception("Inventario");
+  store.ImportMastro(new([mc],[],[],"t","test",[new("ROT-80","Rotolo carta 80mm","","Consumabili","PZ",0.5m,1.2m,22,"","",false,true,"","",""),new("NUOVO","Articolo Mastro","","","PZ",1,2,22,"","",false,true,"","","")],[new("ROT-80","1",90),new("NUOVO","1",4)],true),"test");
+  if(Q("ROT-80","sede")!=90||Q("NUOVO","sede")!=4||Q("ROT-80",van.Id)!=20)throw new Exception("Allineamento giacenze Mastro");
+  if(store.Articles().Single(a=>a.Code=="ROT-80").Barcode!="8001234567890")throw new Exception("Import Mastro ha cancellato il codice a barre");
   store.Backup(Path.Combine(folder,"backup.sqlite"));Console.WriteLine("PASS: upsert, deduplicazione, validazione atomica, note, backup.");
  }
 }

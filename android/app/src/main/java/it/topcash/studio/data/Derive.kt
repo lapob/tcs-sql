@@ -138,6 +138,8 @@ class Archive(val state: ArchiveState) {
         @Suppress("UNUSED_VARIABLE") val unused = today
     }
 
+    /** Warehouse: stock per location, average costs, reorder state. */
+    val wh: WarehouseView by lazy { WarehouseView(state) }
     val currentLicenses by lazy { licenses.filter { it.current } }
     val due30 by lazy { currentLicenses.filter { (it.days ?: -1) in 0..30 } }
     val overdue by lazy { currentLicenses.filter { (it.days ?: 0) < 0 } }

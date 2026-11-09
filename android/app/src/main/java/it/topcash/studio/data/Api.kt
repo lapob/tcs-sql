@@ -86,6 +86,7 @@ class Api(context: Context) {
     suspend fun saveNote(code: String, note: String) { post("/api/note", json.encodeToString(NoteRequest(code, note))) }
     suspend fun saveMeta(code: String, meta: ClientMeta) { post("/api/meta", json.encodeToString(MetaRequest(code, meta))) }
     suspend fun saveIntervention(i: Intervention): Intervention = json.decodeFromString(post("/api/interventions", json.encodeToString(i)))
+    suspend fun saveMovements(m: List<Movement>) { post("/api/warehouse/movements", json.encodeToString(MovementsRequest(m))) }
     suspend fun deleteIntervention(id: String) { post("/api/interventions/" + java.net.URLEncoder.encode(id, "UTF-8") + "/delete") }
 
     /** Returns null when the archive did not change (HTTP 304). */

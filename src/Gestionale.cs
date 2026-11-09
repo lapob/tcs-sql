@@ -11,8 +11,9 @@ public sealed record Machine(string Id,string ClientCode,string Model,string Typ
  string Verification,bool Active,bool Subscribed,string ContractStart,string ContractEnd,string Amount,string Branch,string Notes);
 /// Technical intervention / ticket. Source "mastro" = history imported from Mastro, "app" = created in Top Cash Studio.
 public sealed record Intervention(string Id,string ClientCode,string ClientName,string Date,string Machine,string Title,string Work,string Status,
- string Technician,string Priority,string Total,string Source,string Created,string CreatedBy,string Updated,string UpdatedBy);
-public sealed record MastroBatch(List<MastroClient> Clients,List<Machine> Machines,List<Intervention> Interventions,string CapturedAt,string Source);
+ string Technician,string Priority,string Total,string Source,string Created,string CreatedBy,string Updated,string UpdatedBy,List<PartUse>? Parts=null);
+public sealed record MastroBatch(List<MastroClient> Clients,List<Machine> Machines,List<Intervention> Interventions,string CapturedAt,string Source,
+ List<Article>? Articles=null,List<MastroStock>? Stock=null,bool AlignStock=false);
 
 public sealed partial class Store
 {
@@ -47,7 +48,8 @@ public sealed partial class Store
   foreach(var m in b.Clients){using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="INSERT INTO mastro_clients VALUES($c,$d)";q.Parameters.AddWithValue("$c",m.Code);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(m));q.ExecuteNonQuery();}
   foreach(var m in (b.Machines??[]).DistinctBy(x=>x.Id)){using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="INSERT INTO machines VALUES($i,$c,$d)";q.Parameters.AddWithValue("$i",m.Id);q.Parameters.AddWithValue("$c",m.ClientCode);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(m));q.ExecuteNonQuery();}
   foreach(var i in (b.Interventions??[]).DistinctBy(x=>x.Id)){using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="INSERT OR REPLACE INTO interventions VALUES($i,$c,'mastro',$d)";q.Parameters.AddWithValue("$i",i.Id);q.Parameters.AddWithValue("$c",i.ClientCode);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(i with{Source="mastro"}));q.ExecuteNonQuery();}
-  var msg=$"Importazione MastroSQL ({who}): {b.Clients.Count} clienti · {b.Machines?.Count??0} macchine · {b.Interventions?.Count??0} interventi storici.";
+  var adjusted=ImportMastroWarehouse(c,tx,b.Articles??[],b.Stock??[],b.AlignStock,who);
+  var msg=$"Importazione MastroSQL ({who}): {b.Clients.Count} clienti · {b.Machines?.Count??0} macchine · {b.Interventions?.Count??0} interventi storici · {b.Articles?.Count??0} articoli"+(b.AlignStock?$" · {adjusted} giacenze allineate":"")+".";
   using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="INSERT INTO events(time,kind,message) VALUES($t,'import',$m)";q.Parameters.AddWithValue("$t",DateTimeOffset.Now.ToString("O"));q.Parameters.AddWithValue("$m",msg);q.ExecuteNonQuery();}
   tx.Commit();return msg;
  }
@@ -77,13 +79,24 @@ public sealed partial class Store
   if(old?.Source=="mastro")throw new InvalidDataException("Gli interventi storici importati da Mastro non si modificano qui.");
   var rec=i with{Id=old?.Id??("app-"+Guid.NewGuid().ToString("N")[..12]),Source="app",Created=old?.Created??now,CreatedBy=old?.CreatedBy??who,Updated=now,UpdatedBy=who,
    Work=i.Work??"",Technician=(i.Technician??"").Trim(),Machine=i.Machine??"",Total=i.Total??"",ClientName=i.ClientName??""};
-  using var q=c.CreateCommand();q.CommandText="INSERT INTO interventions VALUES($i,$c,'app',$d) ON CONFLICT(id) DO UPDATE SET client=$c,data=$d";
-  q.Parameters.AddWithValue("$i",rec.Id);q.Parameters.AddWithValue("$c",rec.ClientCode);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(rec));q.ExecuteNonQuery();
+  rec=rec with{Parts=(i.Parts??[]).Where(p=>p!=null&&!string.IsNullOrWhiteSpace(p.Article)&&p.Qty>0).Select(p=>p with{Article=p.Article.Trim(),Warehouse=p.Warehouse??"",Serial=p.Serial??""}).ToList()};
+  if(rec.Parts!.Count>100)throw new InvalidDataException("Troppi ricambi in un intervento.");
+  if(rec.Parts.Any(p=>p.Warehouse.Length==0))throw new InvalidDataException("Indica da quale magazzino (furgone) arriva ogni ricambio.");
+  // intervention + its spare-part unloads in one transaction
+  using var tx=c.BeginTransaction();
+  using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="INSERT INTO interventions VALUES($i,$c,'app',$d) ON CONFLICT(id) DO UPDATE SET client=$c,data=$d";
+   q.Parameters.AddWithValue("$i",rec.Id);q.Parameters.AddWithValue("$c",rec.ClientCode);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(rec));q.ExecuteNonQuery();}
+  SyncInterventionParts(c,tx,rec,who);
+  tx.Commit();
   return rec;
  }
  public void DeleteIntervention(string id)
  {
-  using var c=Open();using var q=c.CreateCommand();q.CommandText="DELETE FROM interventions WHERE id=$i AND source='app'";q.Parameters.AddWithValue("$i",id);
-  if(q.ExecuteNonQuery()==0)throw new InvalidDataException("Intervento non trovato o non eliminabile.");
+  using var c=Open();using var tx=c.BeginTransaction();
+  using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="DELETE FROM interventions WHERE id=$i AND source='app'";q.Parameters.AddWithValue("$i",id);
+   if(q.ExecuteNonQuery()==0)throw new InvalidDataException("Intervento non trovato o non eliminabile.");}
+  // spare parts go back to their location
+  using(var m=c.CreateCommand()){m.Transaction=tx;m.CommandText="DELETE FROM movements WHERE intervention=$i AND type='intervento'";m.Parameters.AddWithValue("$i",id);m.ExecuteNonQuery();}
+  tx.Commit();
  }
 }

@@ -140,6 +140,7 @@ private val itabs = listOf("Da fare", "Chiusi", "Storico Mastro", "Tutti")
     var tech by remember { mutableStateOf(existing?.i?.technician ?: me?.name.orEmpty()) }
     var date by remember { mutableStateOf(existing?.i?.date?.takeIf { it.isNotBlank() } ?: LocalDate.now().toString()) }
     var machine by remember { mutableStateOf(existing?.i?.machine.orEmpty()) }
+    var parts by remember { mutableStateOf(existing?.i?.parts.orEmpty()) }
     var pickDate by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
@@ -185,6 +186,8 @@ private val itabs = listOf("Da fare", "Chiusi", "Storico Mastro", "Tutti")
                 }
             }
             Gap(10.dp)
+            PartsEditor(a, parts, tech, ro) { parts = it }
+            Gap(10.dp)
             OutlinedTextField(work, { work = it.take(20000) }, Modifier.fillMaxWidth(), enabled = !ro, label = { Text("Lavoro svolto / note") }, minLines = 4, shape = MaterialTheme.shapes.medium)
             existing?.i?.let { e -> Text(if (ro) "Importato da MastroSQL${if (e.total.isNotBlank() && e.total != "0") " · totale " + e.total + " €" else ""}" else "Creato da ${e.createdBy.ifBlank { "—" }}${if (e.updatedBy.isNotBlank() && e.updated != e.created) " · modificato da " + e.updatedBy else ""}",
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp)) }
@@ -197,7 +200,7 @@ private val itabs = listOf("Da fare", "Chiusi", "Storico Mastro", "Tutti")
                 else Button({
                     saving = true
                     vm.saveIntervention(Intervention(id = existing?.i?.id.orEmpty(), clientCode = clientCode, clientName = clientQuery, date = date, machine = machine, title = title.trim(), work = work,
-                        status = status, technician = tech.trim(), priority = priority, total = existing?.i?.total.orEmpty())) { saving = false; close() }
+                        status = status, technician = tech.trim(), priority = priority, total = existing?.i?.total.orEmpty(), parts = parts)) { saving = false; close() }
                 }, enabled = !saving && clientCode.isNotEmpty() && title.isNotBlank(), shape = MaterialTheme.shapes.medium) { Text(if (saving) "Salvataggio…" else "Salva") }
             }
         }

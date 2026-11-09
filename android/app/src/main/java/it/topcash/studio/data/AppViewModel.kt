@@ -140,6 +140,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         try { api.saveIntervention(i); _messages.tryEmit("Intervento salvato"); onDone(); refresh() } catch (e: ApiException) { _messages.tryEmit(e.message ?: "Salvataggio non riuscito") }
     }
     fun deleteIntervention(id: String) = act("Intervento eliminato") { api.deleteIntervention(id) }
+    fun saveMovements(m: List<Movement>, onDone: () -> Unit) = viewModelScope.launch {
+        try { api.saveMovements(m); _messages.tryEmit(if (m.size == 1) "Movimento registrato" else "${m.size} movimenti registrati"); onDone(); refresh() }
+        catch (e: ApiException) { _messages.tryEmit(e.message ?: "Movimento non registrato") }
+    }
 
     override fun onCleared() { stream?.cancel() }
 }

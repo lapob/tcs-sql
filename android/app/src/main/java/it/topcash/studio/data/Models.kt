@@ -32,13 +32,31 @@ import kotlinx.serialization.Serializable
     val id: String = "", val clientCode: String = "", val clientName: String = "", val date: String = "", val machine: String = "",
     val title: String = "", val work: String = "", val status: String = "Aperto", val technician: String = "", val priority: String = "Normale",
     val total: String = "", val source: String = "app", val created: String = "", val createdBy: String = "", val updated: String = "", val updatedBy: String = "",
+    val parts: List<PartUse> = emptyList(),
 )
+// ── warehouse
+@Serializable data class PartUse(val article: String = "", val qty: Double = 1.0, val warehouse: String = "", val serial: String = "")
+@Serializable data class Warehouse(val id: String = "", val name: String = "", val kind: String = "sede", val technician: String = "", val active: Boolean = true, val notes: String = "")
+@Serializable data class Article(
+    val code: String = "", val name: String = "", val barcode: String = "", val category: String = "", val unit: String = "PZ", val cost: Double = 0.0,
+    val price: Double = 0.0, val vat: Double = 22.0, val supplier: String = "", val supplierCode: String = "", val serialized: Boolean = false,
+    val active: Boolean = true, val notes: String = "", val source: String = "", val updated: String = "",
+)
+@Serializable data class StockLevel(val article: String = "", val warehouse: String = "", val min: Double = 0.0, val max: Double = 0.0)
+@Serializable data class StockRow(val article: String = "", val warehouse: String = "", val qty: Double = 0.0)
+@Serializable data class Movement(
+    val id: String = "", val date: String = "", val type: String = "", val article: String = "", val qty: Double = 0.0, val from: String = "", val to: String = "",
+    val unitCost: Double = 0.0, val serial: String = "", val clientCode: String = "", val interventionId: String = "", val notes: String = "", val user: String = "", val created: String = "",
+)
+@Serializable data class MovementsRequest(val movements: List<Movement>)
 @Serializable data class ClientMeta(val favorite: Boolean = false, val nextContact: String = "", val followupState: String = "")
 @Serializable data class SyncEvent(val time: String = "", val kind: String = "", val message: String = "")
 @Serializable data class ArchiveState(
     val records: List<LicenseRecord> = emptyList(), val clients: List<RegistryClient> = emptyList(), val orders: List<Order> = emptyList(),
     val mastroClients: List<MastroClient> = emptyList(), val machines: List<Machine> = emptyList(), val interventions: List<Intervention> = emptyList(),
     val events: List<SyncEvent> = emptyList(), val notes: Map<String, String> = emptyMap(), val metadata: Map<String, ClientMeta> = emptyMap(),
+    val warehouses: List<Warehouse> = emptyList(), val articles: List<Article> = emptyList(), val stockLevels: List<StockLevel> = emptyList(),
+    val stock: List<StockRow> = emptyList(), val movements: List<Movement> = emptyList(),
     val version: Long = 0,
 )
 @Serializable data class Me(val username: String = "", val name: String = "", val role: String = "", val roleLabel: String = "")
