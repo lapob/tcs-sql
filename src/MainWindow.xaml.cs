@@ -175,6 +175,12 @@ public partial class MainWindow : Window
      {var rid=root.GetProperty("id").GetString()??"";var rv=store.Interventions().FirstOrDefault(x=>x.Id==rid);if(rv==null)break;
       var rp=new SaveFileDialog{Filter="PDF|*.pdf",FileName=InterventionReport.FileName(rv)};
       if(rp.ShowDialog(this)==true){File.WriteAllBytes(rp.FileName,InterventionReport.Build(store,rid));Process.Start(new ProcessStartInfo(rp.FileName){UseShellExecute=true});}}break;
+    case "reportPrint":
+     {var rid=root.GetProperty("id").GetString()??"";var rv=store.Interventions().FirstOrDefault(x=>x.Id==rid);if(rv==null)break;
+      var dir=Path.Combine(Path.GetTempPath(),"TopCashStudio-stampa");Directory.CreateDirectory(dir);
+      foreach(var old in new DirectoryInfo(dir).GetFiles("*.pdf").Where(f=>f.LastWriteTime<DateTime.Now.AddDays(-1)))try{old.Delete();}catch{}
+      var tmp=Path.Combine(dir,InterventionReport.FileName(rv));File.WriteAllBytes(tmp,InterventionReport.Build(store,rid));
+      Process.Start(new ProcessStartInfo(tmp){UseShellExecute=true});await Notify("PDF aperto: stampalo con Ctrl+P.");}break;
     case "interventionDelete":
      try{store.DeleteIntervention(root.GetProperty("id").GetString()??"");await Push();await Notify("Intervento eliminato.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
     case "hostInfo":Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,serverExternal,activeServer=Active,portalOpen=portal!=null});break;

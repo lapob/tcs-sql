@@ -20,6 +20,7 @@
     <Company>Top Cash Service S.r.l.</Company>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="MailKit" Version="4.18.2" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
     <PackageReference Include="MySqlConnector" Version="2.6.2" />

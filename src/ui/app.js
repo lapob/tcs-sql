@@ -197,6 +197,7 @@ function overview(){
   ${kpi('Interventi aperti',D.openInterventions.length,D.verDue.length?`${fmt(D.verDue.length)} verificazioni entro 60 gg`:`${fmt(D.orders30.length)} ordini Zucchetti in 30 gg`,'tool','t-info','interventions',5,'Interventi tecnici non ancora chiusi')}
  </div>
  <div class="layout-2"><div class="stack">
+  ${WEB&&me?.role==='admin'&&state.features?.backupError?`<div class="banner reveal" style="--i:5"><span class="orb">${icon('alert')}</span><div class="grow"><h3>Copia esterna dei backup non riuscita</h3><p>${esc(state.features.backupError)} Collega il disco: il server riprova da solo ogni ora.</p></div><button class="btn" data-go="settings">Impostazioni ${icon('arrow')}</button></div>`:''}
   ${needSync?`<div class="banner reveal" style="--i:6"><span class="orb">${icon('sync')}</span><div class="grow"><h3>Completa le anagrafiche dei clienti</h3><p>Avvia una sincronizzazione: verranno letti indirizzi, telefoni, email, codici fiscali e ordini da MY Zucchetti.</p></div><button class="btn" data-go="sync">Come si fa ${icon('arrow')}</button></div>`:`<div class="banner reveal" style="--i:6"><span class="orb">${icon('shield')}</span><div class="grow"><h3>Archivio allineato con Zucchetti</h3><p>Ultima lettura dal portale: ${esc(lastCapture())}. ${WEB?'Tutto il team vede gli stessi dati, in tempo reale.':'I dati restano sul tuo computer.'}</p></div><button class="btn" data-go="sync">Dettagli ${icon('arrow')}</button></div>`}
   <div class="card reveal" style="--i:7"><div class="card-head"><div><h2>Prossime scadenze</h2><p>Licenze che scadono nei prossimi 60 giorni (e quelle appena scadute).</p></div><button class="btn ghost sm" data-go="expiry">Scadenziario ${icon('arrow')}</button></div>
    ${upcoming.map(r=>{const d=parseDate(r.expiry),n=dayDiff(d);return`<div class="list-row" data-client="${esc(r.clientCode)}"><span class="date-chip ${n<0?'bad':n<=30?'due':''}"><b>${d.getDate()}</b><span>${DF3.format(d)}</span></span><div class="grow"><strong>${esc(r.client)}</strong><small>${esc(famLabel(famOfScope(r.scope)))} · <span class="mono">${esc(r.serial)}</span></small></div><span class="in-days" style="color:var(--${n<0?'bad':n<=30?'due':'text-3'})">${rel(n)}</span></div>`;}).join('')||empty('calendar','Nessuna scadenza imminente','Nei prossimi 60 giorni non scade nessuna licenza.')}
@@ -326,7 +327,7 @@ function settingsPage(){const t=store.get('theme','auto');
    <div class="stat-line"><span>Clienti</span><strong>${fmt(D.clients.length)}</strong></div><div class="stat-line"><span>Schede anagrafiche</span><strong>${fmt((state.clients||[]).length)}</strong></div><div class="stat-line"><span>Licenze</span><strong>${fmt(state.records.length)}</strong></div><div class="stat-line"><span>Ordini</span><strong>${fmt((state.orders||[]).length)}</strong></div><div class="stat-line"><span>Ultima lettura</span><strong>${esc(lastCapture())}</strong></div>
    <div class="btn-row" style="margin-top:14px"><button class="btn sm" data-action="dataFolder">${icon('folder')}Apri cartella dati</button></div></div>
  </div><div class="stack">
-  ${accountCard(3)}${serverCard(3)}${mastroCard(3)}
+  ${accountCard(3)}${serverCard(3)}${mailCard(3)}${backupCard(3)}${mastroCard(3)}
   <div class="card reveal need-export" style="--i:3"><h2>Backup ed esportazioni</h2><p class="sub">Crea una copia completa prima di spostare o archiviare i dati. Il backup contiene dati dei clienti: conservalo in un posto sicuro.</p><div class="btn-row" style="margin-top:14px"><button class="btn accent sm" data-action="backup">${icon('shield')}Backup database</button><button class="btn sm" data-action="exportClients">${icon('users')}Anagrafica CSV</button><button class="btn sm" data-action="export">${icon('key')}Licenze CSV</button><button class="btn sm" data-action="calendar">${icon('calendar')}Scadenze .ics</button></div></div>
   <div class="card reveal" style="--i:4"><h2>Scorciatoie</h2><div style="margin-top:10px"><div class="stat-line"><span>Ricerca rapida ovunque</span><span><kbd>Ctrl</kbd> <kbd>K</kbd></span></div><div class="stat-line"><span>Vai alle sezioni</span><span><kbd>Alt</kbd> <kbd>1</kbd>…<kbd>8</kbd></span></div><div class="stat-line"><span>Chiudi scheda o ricerca</span><kbd>Esc</kbd></div></div></div>
   <div class="card reveal" style="--i:5"><div style="display:flex;gap:16px;align-items:center"><img src="assets/tcs-app@2x.png" alt="" style="width:64px;height:64px"><div><h2>Top Cash Studio</h2><p class="sub">Top Cash Service S.r.l. · Versione 1.0 · Windows · .NET 10 · WebView2 · SQLite</p></div></div></div>
@@ -388,6 +389,7 @@ function openIntervention(id,clientCode){remember('i',id);
  m.innerHTML=`<form class="modal-box wide" id="int-form" aria-label="Intervento">
   <h3>${it?.source==='mastro'?'Intervento dallo storico Mastro':signed?'Rapportino n. '+esc(it.reportNo):it?'Modifica intervento':'Nuovo intervento'}</h3>
   ${signed?`<div class="sign-banner">${icon('check')}<div><strong>Firmato da ${esc(it.signer)}</strong><small>${dTime(it.signedAt)} · rapportino n. ${esc(it.reportNo)} · non più modificabile</small></div></div>`:''}
+  ${signed&&it.sentAt?`<div class="sign-sent">${icon('mail')}<span>PDF inviato a <strong>${esc(it.sentTo)}</strong> il ${dTime(it.sentAt)}</span></div>`:''}
   <label class="field">Cliente<input class="input" id="int-client" list="int-clients" value="${esc(c?c.name:'')}" placeholder="Scrivi per cercare un cliente…" ${ro?'disabled':''} required autocomplete="off"></label>
   <datalist id="int-clients">${D.clients.slice(0,3000).map(x=>`<option value="${esc(x.name)}">${esc([x.city,x.code.replace(/^0+/,'')].filter(Boolean).join(' · '))}</option>`).join('')}</datalist>
   <div class="form-row"><label class="field">Data<input class="input" type="date" name="date" value="${esc(v.date||'')}" ${ro?'disabled':''}></label><label class="field">Tecnico<input class="input" name="technician" list="int-techs" value="${esc(v.technician||'')}" maxlength="80" ${ro?'disabled':''}></label></div>
@@ -398,7 +400,7 @@ function openIntervention(id,clientCode){remember('i',id);
   ${typeof partsSection==='function'?partsSection(it?.parts||[],ro,v.technician):''}
   <label class="field">Lavoro svolto / note<textarea class="textarea" name="work" maxlength="20000" ${ro?'disabled':''} placeholder="Descrizione del problema e del lavoro eseguito…">${esc(v.work||'')}</textarea></label>
   ${it?`<p class="muted" style="font-size:12px">${it.source==='mastro'?'Importato da MastroSQL'+(it.total&&it.total!=='0'?' · totale documento '+esc(it.total)+' €':''):`Creato ${it.created?dTime(it.created):''} ${it.createdBy?'da '+esc(it.createdBy):''}${it.updated&&it.updated!==it.created?` · modificato ${dTime(it.updated)} ${it.updatedBy?'da '+esc(it.updatedBy):''}`:''}`}</p>`:''}
-  <div class="btn-row">${it&&it.source==='app'?(signed?`<button type="button" class="btn accent" data-m="pdf">${icon('download')}PDF rapportino</button><button type="button" class="btn ghost need-export" data-m="unsign">Annulla firma</button>`:`<button type="button" class="btn" data-m="sign">${icon('check')}Firma e rapportino</button>`):''}${it&&!ro?`<button type="button" class="btn ghost need-export" data-m="del" style="margin-right:auto;color:var(--bad)">Elimina</button>`:''}${c?`<button type="button" class="btn ghost" data-m="client">Apri cliente</button>`:''}<button type="button" class="btn ghost" data-m="0">${ro?'Chiudi':'Annulla'}</button>${ro?'':`<button class="btn accent" type="submit">${icon('check')}Salva</button>`}</div></form>`;
+  <div class="btn-row">${it&&it.source==='app'?(signed?`<button type="button" class="btn ghost need-export" data-m="unsign">Annulla firma</button><button type="button" class="btn" data-m="pdf">${icon('download')}PDF</button><button type="button" class="btn" data-m="print">${icon('print')}Stampa</button>${mailOn()?`<button type="button" class="btn accent" data-m="mail">${icon('mail')}Invia al cliente</button>`:''}`:`<button type="button" class="btn" data-m="sign">${icon('check')}Firma e rapportino</button>`):''}${it&&!ro?`<button type="button" class="btn ghost need-export" data-m="del" style="margin-right:auto;color:var(--bad)">Elimina</button>`:''}${c?`<button type="button" class="btn ghost" data-m="client">Apri cliente</button>`:''}<button type="button" class="btn ghost" data-m="0">${ro?'Chiudi':'Annulla'}</button>${ro?'':`<button class="btn accent" type="submit">${icon('check')}Salva</button>`}</div></form>`;
  document.body.append(m);hideTip();
  const form=m.querySelector('form');const clientInput=m.querySelector('#int-client');
  const resolve=()=>{const n=clientInput.value.trim();return D.clients.find(x=>x.name===n)||D.clients.find(x=>norm(x.name)===norm(n))||null;};
@@ -409,6 +411,8 @@ function openIntervention(id,clientCode){remember('i',id);
   if(b.dataset.m==='0')close();
   if(b.dataset.m==='client'){close();openClient(c.code);}
   if(b.dataset.m==='pdf'){reportPdf(it.id);}
+  if(b.dataset.m==='print'){printReport(it.id);}
+  if(b.dataset.m==='mail'){close();sendReportDialog({...it,c});}
   if(b.dataset.m==='unsign'){close();unsignReport(it);}
   if(b.dataset.m==='sign'){close();openSignature({...it,c:it.c});}
   if(b.dataset.m==='del'){if(await ask({title:'Eliminare l’intervento?',text:'L’operazione non si può annullare.',ok:'Elimina',danger:true})){close();if(WEB)post('/api/interventions/'+encodeURIComponent(it.id)+'/delete').then(()=>toast('Intervento eliminato')).catch(x=>toast(x.message,'alert'));else send('interventionDelete',{id:it.id});}}});
@@ -483,6 +487,45 @@ function devicesCard(){const list=usersData.devices||[];const pend=list.filter(d
 function accountCard(i){if(!WEB||!me)return'';return`<form class="card reveal" style="--i:${i}" id="pwd-form"><h2>Il tuo account</h2><p class="sub">${esc(me.name)} · ${esc(me.username)} · ${esc(me.roleLabel)}</p>
  <div style="display:grid;gap:10px;margin-top:14px"><label class="field">Password attuale<input class="input" type="password" name="current" required autocomplete="current-password"></label><label class="field">Nuova password (min. 10 caratteri)<input class="input" type="password" name="password" required minlength="10" autocomplete="new-password"></label>
  <div class="btn-row"><button class="btn sm primary" type="submit">Cambia password</button><button class="btn sm ghost" type="button" data-action-local="logout">Esci</button></div></div></form>`;}
+// ── e-mail for signed reports (administrators, shared server). The password is write-only: the server never sends it back.
+let mailCfg=null,backupInfo=null;
+function mailCard(i){if(!WEB||me?.role!=='admin')return'';
+ if(!mailCfg){api('/api/settings/mail').then(d=>{mailCfg=d;if(page==='settings')render(false);}).catch(()=>{});return`<div class="card reveal" style="--i:${i}"><h2>Email rapportini</h2><p class="sub">Caricamento…</p></div>`;}
+ const m=mailCfg;const sec=[['starttls','STARTTLS (porta 587)'],['ssl','SSL/TLS (porta 465)'],['none','Nessuna (sconsigliato)']];
+ return`<form class="card reveal" style="--i:${i}" id="mail-form" autocomplete="off"><h2>Email rapportini ${m.ready?'<span class="badge ok">attivo</span>':'<span class="badge">non attivo</span>'}</h2>
+  <p class="sub">Dati della casella da cui partono i rapportini firmati (es. Aruba: <span class="mono">smtps.aruba.it</span>, porta 465, SSL). La password viene cifrata sul server e non è più visibile.</p>
+  <div class="form-row"><label class="field">Server SMTP<input class="input mono" name="host" value="${esc(m.host)}" placeholder="smtps.aruba.it" maxlength="120"></label><label class="field" style="max-width:110px">Porta<input class="input mono" name="port" type="number" min="1" max="65535" value="${m.port||587}"></label></div>
+  <label class="field">Sicurezza<select class="select" name="security">${sec.map(([k,l])=>`<option value="${k}"${m.security===k?' selected':''}>${l}</option>`).join('')}</select></label>
+  <div class="form-row"><label class="field">Utente<input class="input" name="user" value="${esc(m.user)}" placeholder="assistenza@topcash.it" maxlength="200"></label><label class="field">Password<input class="input" name="password" type="password" autocomplete="new-password" placeholder="${m.hasPassword?'•••••••• (salvata: lascia vuoto per non cambiarla)':'Password della casella'}" maxlength="300"></label></div>
+  <div class="form-row"><label class="field">Mittente<input class="input" name="from" value="${esc(m.from)}" placeholder="assistenza@topcash.it" maxlength="200"></label><label class="field">Nome mittente<input class="input" name="fromName" value="${esc(m.fromName)}" maxlength="80"></label></div>
+  <label class="field">Copia per l’ufficio (Ccn, facoltativa)<input class="input" name="bcc" value="${esc(m.bcc)}" placeholder="ufficio@topcash.it" maxlength="400"></label>
+  <label class="check"><input type="checkbox" name="enabled" ${m.enabled?'checked':''}> Attiva l’invio dei rapportini ai clienti</label>
+  ${m.hasPassword?`<label class="check"><input type="checkbox" name="clearPassword"> Cancella la password salvata</label>`:''}
+  <div class="btn-row" style="margin-top:12px"><button type="button" class="btn sm ghost" data-mail-test>${icon('mail')}Email di prova</button><button class="btn sm accent" type="submit">${icon('check')}Salva</button></div></form>`;}
+function backupCard(i){if(!WEB||me?.role!=='admin')return'';
+ if(!backupInfo){api('/api/settings/backup').then(d=>{backupInfo=d;if(page==='settings')render(false);}).catch(()=>{});return`<div class="card reveal" style="--i:${i}"><h2>Backup automatici</h2><p class="sub">Caricamento…</p></div>`;}
+ const b=backupInfo,st=b.status||{};
+ return`<form class="card reveal" style="--i:${i}" id="backup-form"><h2>Backup automatici ${st.error?'<span class="badge due">copia esterna non riuscita</span>':b.config.external?'<span class="badge ok">attivi</span>':''}</h2>
+  <p class="sub">Ogni giorno il server salva una copia verificata del database in <span class="mono">${esc(b.local)}</span> (ultime ${b.config.keepLocal}) e la copia anche nella cartella esterna (ultime ${b.config.keepExternal}). Se il disco non è collegato riprova ogni ora.</p>
+  <label class="field">Cartella esterna (disco USB o NAS)<input class="input mono" name="external" value="${esc(b.config.external)}" placeholder="H:\\TcsSqlOfflineBackups" maxlength="240"></label>
+  <div class="stat-line"><span>Ultimo backup</span><strong>${st.lastLocal?dTime(st.lastLocal):'—'}</strong></div>
+  <div class="stat-line"><span>Ultima copia esterna</span><strong>${st.lastExternal?dTime(st.lastExternal):'—'}</strong></div>
+  ${st.error?`<p class="sub" style="color:var(--bad)">${esc(st.error)}</p>`:''}
+  <div class="btn-row" style="margin-top:12px"><button type="button" class="btn sm ghost" data-backup-now>${icon('shield')}Backup adesso</button><button class="btn sm accent" type="submit">${icon('check')}Salva cartella</button></div></form>`;}
+document.addEventListener('submit',async e=>{
+ if(e.target.id==='mail-form'){e.preventDefault();const f=new FormData(e.target),b=e.target.querySelector('[type=submit]');b.disabled=true;
+  try{mailCfg=await post('/api/settings/mail',{host:f.get('host'),port:+f.get('port')||587,security:f.get('security'),user:f.get('user'),password:f.get('password')||'',clearPassword:f.get('clearPassword')==='on',from:f.get('from'),fromName:f.get('fromName'),bcc:f.get('bcc'),enabled:f.get('enabled')==='on'});
+   toast(mailCfg.ready?'Email rapportini attiva':'Impostazioni email salvate');render(false);}catch(x){toast(x.message,'alert');b.disabled=false;}}
+ if(e.target.id==='backup-form'){e.preventDefault();const b=e.target.querySelector('[type=submit]');b.disabled=true;b.classList.add('busy');
+  try{backupInfo=await post('/api/settings/backup',{external:new FormData(e.target).get('external')});toast(backupInfo.status.error?'Cartella salvata, ma la copia non è riuscita':'Cartella salvata e backup copiato',backupInfo.status.error?'alert':'shield');render(false);}catch(x){toast(x.message,'alert');b.disabled=false;b.classList.remove('busy');}}
+});
+document.addEventListener('click',async e=>{
+ const t=e.target.closest('[data-mail-test]');
+ if(t){const to=(me?.email||mailCfg?.from||'');const v=prompt('Indirizzo a cui inviare l’email di prova (salva prima le impostazioni):',to);if(!v)return;t.disabled=true;t.classList.add('busy');
+  try{await post('/api/settings/mail/test',{to:v.trim()});toast('Email di prova inviata a '+v.trim(),'mail');}catch(x){toast(x.message,'alert');}t.disabled=false;t.classList.remove('busy');return;}
+ const bn=e.target.closest('[data-backup-now]');
+ if(bn){bn.disabled=true;bn.classList.add('busy');try{backupInfo=await post('/api/backup/now');toast(backupInfo.status.error?'Backup creato sul server, copia esterna non riuscita':'Backup creato e copiato',backupInfo.status.error?'alert':'shield');render(false);}catch(x){toast(x.message,'alert');bn.disabled=false;bn.classList.remove('busy');}}
+});
 function serverCard(i){
  if(!WEB&&host)return`<div class="card reveal" style="--i:${i}"><h2>Archivio condiviso</h2><p class="sub">Collega questo PC al server Top Cash per lavorare tutti sugli stessi dati, da PC, tablet e telefono. L’archivio locale resta sul PC e puoi tornarci quando vuoi.</p>
   <div style="display:flex;gap:8px;margin-top:14px"><input class="input" id="server-url" placeholder="es. 192.168.1.20:8470 oppure topcash.azienda.it" value="${esc(hostInfo?.serverUrl||'')}"><button class="btn accent" data-action-local="connect">${icon('external')}Collega</button></div></div>`;

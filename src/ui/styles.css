@@ -651,3 +651,14 @@ tbody tr[data-client]:active,tbody tr[data-int]:active,.card[data-go]:active{tra
 .t-acc td.mono{font-variant-numeric:tabular-nums;white-space:nowrap}
 .acc-note{display:block;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .kpi[data-acc-tab]{cursor:pointer}
+
+/* button waiting for the server (e.g. sending an e-mail) */
+.btn.busy{position:relative;color:transparent!important;pointer-events:none}
+.btn.busy::before{content:"";position:absolute;inset:0;margin:auto;width:16px;height:16px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .8s linear infinite}
+.btn.busy svg{opacity:0}
+.sign-sent{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--text-2);margin:-4px 0 4px}
+.sign-sent svg{width:15px;height:15px;color:var(--ok,#1a7f4b);flex:none}
+.print-box{width:min(920px,calc(100vw - 32px));max-width:none;height:min(88vh,1100px);display:flex;flex-direction:column;gap:12px;padding:16px}
+.print-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.print-head h3{margin:0}
+.print-view{flex:1;min-height:0;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:var(--bg-2);display:grid;place-items:center}
+.print-view iframe{width:100%;height:100%;border:0;background:#fff}

@@ -81,7 +81,7 @@ private fun exportPng(strokes: List<List<Offset>>, size: IntSize, strokePx: Floa
 }
 
 /** Customer signs the intervention report with a finger; the signed report gets its yearly number on the server. */
-@Composable fun SignatureSheet(vm: AppViewModel, iv: Intervention, clientName: String, onDismiss: () -> Unit, onSigned: (Intervention) -> Unit) {
+@Composable fun SignatureSheet(vm: AppViewModel, iv: Intervention, clientName: String, emails: List<String> = emptyList(), mailOn: Boolean = false, onDismiss: () -> Unit, onSigned: (Intervention) -> Unit) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val strokes = remember { mutableStateListOf<List<Offset>>() }
@@ -91,6 +91,8 @@ private fun exportPng(strokes: List<List<Offset>>, size: IntSize, strokePx: Floa
     var hours by remember { mutableStateOf(iv.hours.replace('.', ',')) }
     var closeIt by remember { mutableStateOf(true) }
     var sending by remember { mutableStateOf(false) }
+    var sendMail by remember { mutableStateOf(mailOn && emails.isNotEmpty()) }
+    var mailTo by remember { mutableStateOf(emails.firstOrNull().orEmpty()) }
     val close: () -> Unit = { scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss() } }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, sheetGesturesEnabled = false, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
@@ -135,7 +137,14 @@ private fun exportPng(strokes: List<List<Offset>>, size: IntSize, strokePx: Floa
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(closeIt, { v -> closeIt = v }); Text("Segna l'intervento come chiuso", style = MaterialTheme.typography.bodyMedium)
             }
-            Text("Dopo la firma il rapportino non è più modificabile (l'ufficio può annullare la firma). Potrai inviare subito il PDF al cliente.",
+            if (mailOn) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(sendMail, { v -> sendMail = v }); Text("Invia il PDF firmato al cliente via email", style = MaterialTheme.typography.bodyMedium)
+                }
+                if (sendMail) OutlinedTextField(mailTo, { v -> mailTo = v.take(400) }, Modifier.fillMaxWidth().padding(bottom = 6.dp), label = { Text("Email del cliente") }, singleLine = true,
+                    shape = MaterialTheme.shapes.medium, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
+            }
+            Text("Dopo la firma il rapportino non è più modificabile (l'ufficio può annullare la firma). Subito dopo puoi stamparlo o condividerlo.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Gap(16.dp)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -145,8 +154,8 @@ private fun exportPng(strokes: List<List<Offset>>, size: IntSize, strokePx: Floa
                 Button({
                     sending = true
                     val png = exportPng(strokes.toList(), padSize, px)
-                    vm.signIntervention(iv.id, signer.trim(), hours, png, closeIt) { r -> onSigned(r); close() }.invokeOnCompletion { sending = false }
-                }, enabled = !sending && strokes.isNotEmpty() && signer.trim().length >= 2 && padSize.width > 0, shape = MaterialTheme.shapes.medium) {
+                    vm.signIntervention(iv.id, signer.trim(), hours, png, closeIt) { r -> if (sendMail) vm.sendReport(r.id, mailTo.trim()); onSigned(r); close() }.invokeOnCompletion { sending = false }
+                }, enabled = !sending && strokes.isNotEmpty() && signer.trim().length >= 2 && padSize.width > 0 && (!sendMail || mailTo.contains('@')), shape = MaterialTheme.shapes.medium) {
                     Text(if (sending) "Invio…" else "Conferma firma")
                 }
             }

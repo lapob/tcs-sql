@@ -115,6 +115,7 @@ class Api(context: Context) {
     private fun enc(id: String) = java.net.URLEncoder.encode(id, "UTF-8").replace("+", "%20")
     suspend fun signIntervention(id: String, r: SignRequest): Intervention = json.decodeFromString(post("/api/interventions/" + enc(id) + "/sign", json.encodeToString(r)))
     suspend fun unsignIntervention(id: String) { post("/api/interventions/" + enc(id) + "/unsign") }
+    suspend fun sendReport(id: String, to: String): Intervention = json.decodeFromString(post("/api/interventions/" + enc(id) + "/send-report", json.encodeToString(SendReportRequest(to))))
     /** Downloads the numbered PDF report into [dir]; returns the file. */
     suspend fun reportPdf(id: String, dir: java.io.File, name: String): java.io.File = withContext(Dispatchers.IO) {
         try {

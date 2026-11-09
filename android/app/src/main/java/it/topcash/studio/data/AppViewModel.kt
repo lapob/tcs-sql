@@ -182,6 +182,33 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: ApiException) { _messages.tryEmit(e.message ?: "Firma non registrata") }
     }
     fun unsignIntervention(id: String) = act("Firma annullata") { api.unsignIntervention(id) }
+    /** E-mails the signed PDF from the company mailbox (server side). */
+    fun sendReport(id: String, to: String, onDone: (Boolean) -> Unit = {}) = viewModelScope.launch {
+        try { val r = api.sendReport(id, to); _messages.tryEmit("Rapportino inviato a ${r.sentTo}"); onDone(true); refresh() }
+        catch (e: ApiException) { _messages.tryEmit(e.message ?: "Email non inviata"); onDone(false) }
+    }
+    /** Prints the PDF report through the Android print service (Wi-Fi printers, Save as PDF…). */
+    fun printReport(i: Intervention, context: android.content.Context) = viewModelScope.launch {
+        try {
+            val name = "Rapportino-" + (i.reportNo.ifBlank { i.id.take(8) }).replace('/', '-') + ".pdf"
+            val f = api.reportPdf(i.id, File(getApplication<Application>().cacheDir, "print"), name)
+            val pm = context.getSystemService(android.content.Context.PRINT_SERVICE) as android.print.PrintManager
+            pm.print("Rapportino " + i.reportNo, object : android.print.PrintDocumentAdapter() {
+                override fun onLayout(oldAttributes: android.print.PrintAttributes?, newAttributes: android.print.PrintAttributes?, cancellationSignal: android.os.CancellationSignal?,
+                                      callback: LayoutResultCallback, extras: android.os.Bundle?) {
+                    if (cancellationSignal?.isCanceled == true) { callback.onLayoutCancelled(); return }
+                    callback.onLayoutFinished(android.print.PrintDocumentInfo.Builder(name).setContentType(android.print.PrintDocumentInfo.CONTENT_TYPE_DOCUMENT).build(), true)
+                }
+                override fun onWrite(pages: Array<out android.print.PageRange>?, destination: android.os.ParcelFileDescriptor, cancellationSignal: android.os.CancellationSignal?, callback: WriteResultCallback) {
+                    try {
+                        f.inputStream().use { inp -> java.io.FileOutputStream(destination.fileDescriptor).use { out -> inp.copyTo(out) } }
+                        if (cancellationSignal?.isCanceled == true) callback.onWriteCancelled() else callback.onWriteFinished(arrayOf(android.print.PageRange.ALL_PAGES))
+                    } catch (e: Exception) { callback.onWriteFailed(e.message) }
+                }
+            }, null)
+        } catch (e: ApiException) { _messages.tryEmit(e.message ?: "PDF non disponibile") }
+        catch (e: Exception) { _messages.tryEmit("Stampa non disponibile su questo telefono") }
+    }
     /** Downloads the PDF report and opens the Android share sheet (WhatsApp, e-mail, Drive…). */
     fun shareReport(i: Intervention, context: android.content.Context) = viewModelScope.launch {
         try {

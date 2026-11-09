@@ -107,8 +107,22 @@ A fine lavoro, nell'intervento premi **Firma e rapportino** (PC/browser) o *Fai 
 2. il cliente firma nel riquadro con il dito, la penna o il mouse;
 3. conferma: il rapportino riceve un **numero progressivo annuale** (es. `2026/0001`), l'intervento può essere chiuso in automatico e i ricambi vengono scaricati.
 
-Subito dopo puoi **scaricare il PDF** (PC) o **inviarlo** al cliente con WhatsApp, email o Drive (Android, *Invia PDF*). Il PDF contiene logo, dati Top Cash, cliente, macchina, lavoro svolto, ricambi, ore e firma.
+Subito dopo puoi:
+- **Stampare**: su PC/browser si apre l'anteprima del PDF con il pulsante *Stampa* (scegli la stampante, il numero di copie, ecc.); su Android usa il servizio di stampa del telefono (stampanti Wi-Fi o *Salva come PDF*). Il bollettino stampato è identico al PDF.
+- **Inviarlo per email al cliente** direttamente dall'indirizzo dell'azienda, con il PDF allegato: nella firma lascia la spunta *Invia il PDF firmato al cliente via email* (l'indirizzo è preso dalla scheda cliente e si può cambiare), oppure in seguito con **Invia al cliente** / *Email cliente*. Nell'intervento resta scritto a chi e quando è stato inviato.
+- **Scaricare il PDF** o **condividerlo** con WhatsApp, Drive, ecc. (Android, *Condividi*).
+
+Il PDF contiene logo, dati Top Cash, cliente, macchina, lavoro svolto, ricambi, ore e firma.
 Un rapportino firmato **non è più modificabile**; solo ufficio e amministratore possono *Annullare la firma* (il numero resta lo stesso e l'operazione è registrata nella cronologia).
+
+### Email rapportini (amministratore, una volta)
+
+**Impostazioni → Email rapportini** (dal browser o dall'app collegata al server):
+1. inserisci server SMTP, porta, sicurezza, utente e password della casella da cui partono i rapportini (es. Aruba: `smtps.aruba.it`, porta **465**, **SSL/TLS**; Gmail/Google Workspace: `smtp.gmail.com`, porta 587, STARTTLS con una *password per le app*);
+2. mittente (es. `assistenza@topcash.it`) e, se vuoi, una **copia per l'ufficio** (Ccn) di ogni invio;
+3. spunta *Attiva l'invio* → **Salva**, poi **Email di prova** per verificare.
+
+La password è salvata **cifrata** sul server (Windows DPAPI): non è più visibile, non viaggia verso i dispositivi e non si può leggere da una copia del database. Finché l'invio non è attivo, i pulsanti email non compaiono.
 
 ## 8. App Android
 
@@ -151,9 +165,10 @@ Il repository è privato: per scaricare, ogni collega deve avere un account GitH
 ## Dopo questo aggiornamento
 
 - L'app Windows ora tiene la sua cache dentro `D:\TopCashSQL\.runtime`: al primo avvio **accedi di nuovo** (server e, sulla postazione, MY Zucchetti). Le vecchie cache in `C:\Users\lapob\AppData\Local\TopCashStudio` non servono più e si possono eliminare.
-- Esegui `aggiorna-server.ps1` per portare il server alla nuova versione (contabilità, magazzino riservato all'amministratore, connessione da fuori ufficio, rapportino con firma e PDF).
+- Esegui `aggiorna-server.ps1` per portare il server alla nuova versione (contabilità, magazzino riservato all'amministratore, connessione da fuori ufficio, rapportino con firma, stampa ed email, backup su disco esterno).
 - Poi, dal PC con MastroSQL, ripeti **Impostazioni → Importa da MastroSQL**: questa volta vengono lette anche fatture, scadenze e saldi.
-- Installa sui telefoni la nuova `TopCash-Studio.apk` (versione 2.3).
+- Installa sui telefoni la nuova `TopCash-Studio.apk` (versione 2.4: stampa ed email dei rapportini).
+- Configura **Impostazioni → Email rapportini** (sopra, sezione 7) e controlla in **Impostazioni → Backup automatici** che la copia su `H:\TcsSqlOfflineBackups` risulti riuscita.
 
 ## Aggiornare il server
 
@@ -167,7 +182,11 @@ Il servizio si ferma per pochi secondi; dati, utenti e sessioni restano invariat
 
 - Password salvate solo in forma cifrata (PBKDF2-SHA256, 210.000 iterazioni); accessi limitati contro i tentativi ripetuti.
 - Protezione CSRF, sessioni che scadono dopo 14 giorni di inattività, intestazioni di sicurezza.
-- **Backup automatico ogni giorno** in `D:\TopCashSQL\data\backups` (ultimi 30). Copia periodicamente la cartella su un disco esterno o su Google Drive.
+- **Backup automatico ogni giorno**, verificato con il controllo di integrità di SQLite:
+  - in `D:\TopCashSQL\data\backups` (ultimi 30);
+  - **copia esterna** in `H:\TcsSqlOfflineBackups` (ultimi 120). La cartella si cambia in **Impostazioni → Backup automatici** (anche un NAS, es. `\\NAS\backup`); lì c'è anche **Backup adesso**.
+  - Se la chiavetta H: non è collegata, il backup sul PC viene fatto comunque, la copia esterna viene ritentata **ogni ora** e la Panoramica dell'amministratore mostra un avviso finché non riesce.
+  - I backup contengono i dati dei clienti: tieni la chiavetta in un posto sicuro (non lasciarla in auto o in giro).
 - Cronologia: ogni sincronizzazione, importazione e modifica alle note riporta il nome dell'utente.
 
 ## Accesso da fuori ufficio (connessione privata)

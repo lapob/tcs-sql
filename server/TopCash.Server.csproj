@@ -25,14 +25,18 @@
     <Compile Include="..\src\Magazzino.cs" Link="Shared\Magazzino.cs" />
     <Compile Include="..\src\Rapportino.cs" Link="Shared\Rapportino.cs" />
     <Compile Include="..\src\Contabilita.cs" Link="Shared\Contabilita.cs" />
+    <Compile Include="..\src\Email.cs" Link="Shared\Email.cs" />
+    <Compile Include="..\src\Backup.cs" Link="Shared\Backup.cs" />
     <Content Include="..\src\ui\**\*" LinkBase="ui" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="MailKit" Version="4.18.2" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
     <!-- 6.2.x is MIT-licensed; 6.5+ moved to AGPL: keep the version pinned -->
     <PackageReference Include="PDFsharp" Version="[6.2.4]" />
     <!-- PDFsharp 6.2.4 pulls Pkcs 8.0.1 (known CVEs): force the patched release -->
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.14" />
   </ItemGroup>
 </Project>

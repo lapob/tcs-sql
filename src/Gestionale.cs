@@ -12,7 +12,7 @@ public sealed record Machine(string Id,string ClientCode,string Model,string Typ
 /// Technical intervention / ticket. Source "mastro" = history imported from Mastro, "app" = created in Top Cash Studio.
 public sealed record Intervention(string Id,string ClientCode,string ClientName,string Date,string Machine,string Title,string Work,string Status,
  string Technician,string Priority,string Total,string Source,string Created,string CreatedBy,string Updated,string UpdatedBy,List<PartUse>? Parts=null,
- string Hours="",string Signer="",string SignedAt="",string ReportNo="");
+ string Hours="",string Signer="",string SignedAt="",string ReportNo="",string SentTo="",string SentAt="");
 public sealed record MastroBatch(List<MastroClient> Clients,List<Machine> Machines,List<Intervention> Interventions,string CapturedAt,string Source,
  List<Article>? Articles=null,List<MastroStock>? Stock=null,bool AlignStock=false,
  List<Invoice>? Invoices=null,List<Due>? Dues=null,List<Balance>? Balances=null);
@@ -84,7 +84,7 @@ public sealed partial class Store
   if(i.Hours is {Length:>0} h&&(!decimal.TryParse(h.Replace(',','.'),System.Globalization.NumberStyles.Number,System.Globalization.CultureInfo.InvariantCulture,out var hv)||hv<0||hv>200))throw new InvalidDataException("Ore lavorate non valide.");
   var rec=i with{Id=old?.Id??("app-"+Guid.NewGuid().ToString("N")[..12]),Source="app",Created=old?.Created??now,CreatedBy=old?.CreatedBy??who,Updated=now,UpdatedBy=who,
    Work=i.Work??"",Technician=(i.Technician??"").Trim(),Machine=i.Machine??"",Total=i.Total??"",ClientName=i.ClientName??"",
-   Hours=(i.Hours??"").Replace(',','.'),Signer=old?.Signer??"",SignedAt=old?.SignedAt??"",ReportNo=old?.ReportNo??""}; // signature fields only change via SignIntervention
+   Hours=(i.Hours??"").Replace(',','.'),Signer=old?.Signer??"",SignedAt=old?.SignedAt??"",ReportNo=old?.ReportNo??"",SentTo=old?.SentTo??"",SentAt=old?.SentAt??""}; // signature fields only change via SignIntervention
   rec=rec with{Parts=(i.Parts??[]).Where(p=>p!=null&&!string.IsNullOrWhiteSpace(p.Article)&&p.Qty>0).Select(p=>p with{Article=p.Article.Trim(),Warehouse=p.Warehouse??"",Serial=p.Serial??""}).ToList()};
   if(rec.Parts!.Count>100)throw new InvalidDataException("Troppi ricambi in un intervento.");
   if(rec.Parts.Any(p=>p.Warehouse.Length==0))throw new InvalidDataException("Indica da quale magazzino (furgone) arriva ogni ricambio.");

@@ -64,6 +64,7 @@ builder.Services.AddRateLimiter(o=>
 {
  o.RejectionStatusCode=429;
  o.AddPolicy("login",ctx=>RateLimitPartition.GetFixedWindowLimiter(ctx.Connection.RemoteIpAddress?.ToString()??"?",_=>new FixedWindowRateLimiterOptions{PermitLimit=8,Window=TimeSpan.FromMinutes(1)}));
+ o.AddPolicy("mail",ctx=>RateLimitPartition.GetFixedWindowLimiter(ctx.User.Identity?.Name??"?",_=>new FixedWindowRateLimiterOptions{PermitLimit=20,Window=TimeSpan.FromMinutes(10)}));
  o.AddPolicy("sync",ctx=>RateLimitPartition.GetFixedWindowLimiter(ctx.Connection.RemoteIpAddress?.ToString()??"?",_=>new FixedWindowRateLimiterOptions{PermitLimit=600,Window=TimeSpan.FromMinutes(1)}));
 });
 builder.Services.ConfigureHttpJsonOptions(o=>o.SerializerOptions.PropertyNameCaseInsensitive=true);
@@ -287,6 +288,20 @@ app.MapGet("/api/interventions/{id}/report.pdf",(string id)=>
  try{return Results.File(InterventionReport.Build(store,id),"application/pdf",InterventionReport.FileName(i));}catch(InvalidDataException ex){return Bad(ex.Message);}
 }).RequireAuthorization("read");
 
+app.MapPost("/api/interventions/{id}/send-report",async(HttpContext ctx,string id,SendReportRequest r)=>
+{
+ try{var i=await Mailer.SendReport(store,id,r?.To??"",Who(ctx));hub.Changed();return Results.Ok(i);}catch(InvalidDataException ex){return Bad(ex.Message);}
+}).RequireAuthorization("read").RequireRateLimiting("mail");
+
+// ───────────────────────── settings: e-mail for reports, external backups (administrators)
+app.MapGet("/api/settings/mail",()=>Results.Ok(store.MailView())).RequireAuthorization("admin");
+app.MapPost("/api/settings/mail",(HttpContext ctx,MailConfigInput i)=>{try{var v=store.SaveMail(i,Who(ctx));hub.Changed();return Results.Ok(v);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin");
+app.MapPost("/api/settings/mail/test",async(HttpContext ctx,SendReportRequest r)=>{try{await Mailer.SendTest(store,r?.To??"",Who(ctx));return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin").RequireRateLimiting("mail");
+object BackupInfo(BackupStatus? st=null)=>new{config=Backups.Config(store),status=st??Backups.Status(store),local=Path.GetFullPath(Path.Combine(dataDir,"backups"))};
+app.MapGet("/api/settings/backup",()=>Results.Ok(BackupInfo())).RequireAuthorization("admin");
+app.MapPost("/api/settings/backup",(HttpContext ctx,BackupRequest r)=>{try{Backups.Save(store,r?.External,Who(ctx));var st=Backups.Run(store,dataDir);hub.Changed();return Results.Ok(BackupInfo(st));}catch(Exception ex) when(ex is IOException or InvalidDataException){return Bad(ex.Message);}}).RequireAuthorization("admin");
+app.MapPost("/api/backup/now",(HttpContext ctx)=>{try{var st=Backups.Run(store,dataDir,true,Who(ctx));hub.Changed();return Results.Ok(BackupInfo(st));}catch(Exception ex) when(ex is IOException or InvalidDataException){return Bad("Backup non riuscito: "+ex.Message);}}).RequireAuthorization("admin");
+
 // ───────────────────────── accounting (mirror of MastroSQL + reminder notes kept by the app)
 app.MapPost("/api/accounting/due-note",(HttpContext ctx,DueNoteRequest r)=>
 {
@@ -330,20 +345,10 @@ app.MapPost("/api/sync/log",(HttpContext ctx,LogRequest r)=>{if(!Station(ctx))re
 app.MapPost("/api/sync/progress",(HttpContext ctx,ProgressRequest r)=>{if(!Station(ctx))return Results.Unauthorized();hub.SetProgress(r.Running,r.Connected,r.Text.Length>300?r.Text[..300]:r.Text);return Results.Ok();}).RequireRateLimiting("sync");
 app.MapGet("/api/health",()=>Results.Ok(new{ok=true,version=hub.Version}));
 
-// Automatic daily backup (data\backups, last 30 kept): consistent SQLite online backup, no downtime.
-var backupDir=Path.Combine(dataDir,"backups");
-void DailyBackup()
-{
- try
- {
-  Directory.CreateDirectory(backupDir);var target=Path.Combine(backupDir,$"TopCash-{DateTime.Now:yyyyMMdd}.sqlite");
-  if(File.Exists(target))return;store.Backup(target);Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-  foreach(var old in new DirectoryInfo(backupDir).GetFiles("TopCash-*.sqlite").OrderByDescending(f=>f.Name).Skip(30))old.Delete();
-  store.Log("backup","Backup automatico giornaliero creato.");hub.Changed();
- }
- catch(Exception ex){store.Log("error","Backup automatico: "+ex.Message);}
-}
-var backupTimer=new Timer(_=>DailyBackup(),null,TimeSpan.FromMinutes(1),TimeSpan.FromHours(1)); // hourly check, one file per day
+// Automatic daily backup: data\backups (verified) + copy on the external folder set by the administrator (default H:\TcsSqlOfflineBackups).
+// Hourly check: one file per day; the external copy is retried every hour while the drive is missing.
+void DailyBackup(){try{Backups.Run(store,dataDir);hub.Changed();}catch(Exception ex){store.Log("error","Backup automatico: "+ex.Message);}}
+var backupTimer=new Timer(_=>DailyBackup(),null,TimeSpan.FromMinutes(1),TimeSpan.FromHours(1));
 app.Lifetime.ApplicationStopping.Register(()=>backupTimer.Dispose());
 
 store.Log("server","Server Top Cash avviato.");
@@ -372,4 +377,6 @@ record ProgressRequest(bool Running,bool Connected,string Text);
 record MovementsRequest(List<Movement> Movements);
 record DueNoteRequest(string? Id,string? Status,string? Note);
 record SignRequest(string? Signer,string? Hours,string? Signature,bool Close);
+record SendReportRequest(string? To);
+record BackupRequest(string? External);
 record InventoryRequest(string Warehouse,Dictionary<string,decimal> Counted);

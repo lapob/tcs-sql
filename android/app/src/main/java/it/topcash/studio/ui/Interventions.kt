@@ -25,6 +25,8 @@ import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Draw
+import androidx.compose.material.icons.rounded.Email
+import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material.icons.rounded.Search
@@ -136,6 +138,10 @@ private val itabs = listOf("Da fare", "Chiusi", "Storico Mastro", "Tutti")
     val ro = existing?.i?.source == "mastro" || signed
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var signing by remember { mutableStateOf<Intervention?>(null) }
+    var afterSign by remember { mutableStateOf<Intervention?>(null) }
+    var mailDialog by remember { mutableStateOf(false) }
+    val mailOn = a.state.features.mail
+    val clientEmails = (a.byCode[existing?.client?.code ?: req.clientCode.orEmpty()]?.emails.orEmpty())
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     var clientCode by remember { mutableStateOf(existing?.client?.code ?: req.clientCode.orEmpty()) }
@@ -213,12 +219,22 @@ private val itabs = listOf("Da fare", "Chiusi", "Storico Mastro", "Tutti")
                 if (existing != null && !ro && me?.role != "tecnico") TextButton({ confirmDelete = true }) { Icon(Icons.Rounded.Delete, null, tint = MaterialTheme.colorScheme.error); Text(" Elimina", color = MaterialTheme.colorScheme.error) }
                 if (clientCode.isNotEmpty()) TextButton({ onOpenClient(clientCode) }) { Text("Apri cliente") }
                 Box(Modifier.weight(1f))
-                if (signed) Button({ vm.shareReport(existing!!.i, ctx) }, shape = MaterialTheme.shapes.medium) { Icon(Icons.Rounded.Share, null); Text("  Invia PDF") }
+                if (signed) OutlinedButton({ vm.shareReport(existing!!.i, ctx) }, shape = MaterialTheme.shapes.medium) { Icon(Icons.Rounded.Share, null); Text("  Condividi") }
                 else if (ro) Button(close) { Text("Chiudi") }
                 else Button({
                     saving = true
                     vm.saveIntervention(current()) { saving = false; close() }.invokeOnCompletion { saving = false }
                 }, enabled = !saving && clientCode.isNotEmpty() && title.isNotBlank(), shape = MaterialTheme.shapes.medium) { Text(if (saving) "Salvataggio…" else "Salva") }
+            }
+            if (signed) existing!!.i.let { e ->
+                if (e.sentAt.isNotBlank()) Text("PDF inviato a ${e.sentTo} il ${Dates.short(Dates.parse(e.sentAt.take(10)))}", style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
+                Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    androidx.compose.material3.FilledTonalButton({ vm.printReport(e, ctx) }, Modifier.weight(1f).height(52.dp), shape = MaterialTheme.shapes.medium) {
+                        Icon(Icons.Rounded.Print, null); Text("  Stampa") }
+                    if (mailOn) Button({ mailDialog = true }, Modifier.weight(1f).height(52.dp), shape = MaterialTheme.shapes.medium) {
+                        Icon(Icons.Rounded.Email, null); Text("  Email cliente") }
+                }
             }
             // the customer signs on the spot: the current edits are saved first, then the pad opens
             if (!ro) OutlinedButton({
@@ -229,7 +245,29 @@ private val itabs = listOf("Da fare", "Chiusi", "Storico Mastro", "Tutti")
             }
         }
     }
-    signing?.let { r -> SignatureSheet(vm, r, a.byCode[r.clientCode]?.name ?: r.clientName, onDismiss = { signing = null }) { s -> signing = null; close(); vm.shareReport(s, ctx) } }
+    signing?.let { r -> SignatureSheet(vm, r, a.byCode[r.clientCode]?.name ?: r.clientName, a.byCode[r.clientCode]?.emails.orEmpty(), mailOn, onDismiss = { signing = null }) { s -> signing = null; afterSign = s } }
+    afterSign?.let { s ->
+        AlertDialog(onDismissRequest = { afterSign = null; close() }, icon = { Icon(Icons.Rounded.Verified, null) }, title = { Text("Rapportino n. ${s.reportNo} firmato") },
+            text = { Text("Puoi stamparlo subito o condividerlo (WhatsApp, email, Drive…).") },
+            confirmButton = { Button({ vm.printReport(s, ctx); afterSign = null; close() }) { Icon(Icons.Rounded.Print, null); Text("  Stampa") } },
+            dismissButton = { Row {
+                TextButton({ afterSign = null; close() }) { Text("Chiudi") }
+                TextButton({ vm.shareReport(s, ctx); afterSign = null; close() }) { Text("Condividi") } } })
+    }
+    if (mailDialog && existing != null) {
+        var to by remember { mutableStateOf(existing.i.sentTo.ifBlank { clientEmails.firstOrNull().orEmpty() }) }
+        var busy by remember { mutableStateOf(false) }
+        AlertDialog(onDismissRequest = { if (!busy) mailDialog = false }, title = { Text("Invia il rapportino n. ${existing.i.reportNo}") },
+            text = { Column {
+                Text("Il PDF firmato parte come allegato dall'indirizzo dell'azienda.", style = MaterialTheme.typography.bodyMedium)
+                Gap(10.dp)
+                OutlinedTextField(to, { v -> to = v.take(400) }, Modifier.fillMaxWidth(), label = { Text("Email del cliente") }, singleLine = true, shape = MaterialTheme.shapes.medium,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Email))
+                if (clientEmails.size > 1) Text("Altri indirizzi: " + clientEmails.drop(1).joinToString(", "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+            } },
+            confirmButton = { Button({ busy = true; vm.sendReport(existing.i.id, to.trim()) { ok -> busy = false; if (ok) mailDialog = false } }, enabled = !busy && to.contains('@')) { Text(if (busy) "Invio…" else "Invia") } },
+            dismissButton = { TextButton({ mailDialog = false }, enabled = !busy) { Text("Annulla") } })
+    }
     if (pickDate) {
         val st = rememberDatePickerState(initialSelectedDateMillis = (Dates.parse(date) ?: LocalDate.now()).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli())
         DatePickerDialog(onDismissRequest = { pickDate = false }, confirmButton = { TextButton({ st.selectedDateMillis?.let { date = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString() }; pickDate = false }) { Text("OK") } }) { DatePicker(st) }

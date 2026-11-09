@@ -33,6 +33,7 @@ import kotlinx.serialization.Serializable
     val title: String = "", val work: String = "", val status: String = "Aperto", val technician: String = "", val priority: String = "Normale",
     val total: String = "", val source: String = "app", val created: String = "", val createdBy: String = "", val updated: String = "", val updatedBy: String = "",
     val parts: List<PartUse> = emptyList(), val hours: String = "", val signer: String = "", val signedAt: String = "", val reportNo: String = "",
+    val sentTo: String = "", val sentAt: String = "",
 )
 // ── warehouse
 @Serializable data class PartUse(val article: String = "", val qty: Double = 1.0, val warehouse: String = "", val serial: String = "")
@@ -65,8 +66,12 @@ import kotlinx.serialization.Serializable
     val warehouses: List<Warehouse> = emptyList(), val articles: List<Article> = emptyList(), val stockLevels: List<StockLevel> = emptyList(),
     val stock: List<StockRow> = emptyList(), val movements: List<Movement> = emptyList(),
     val invoices: List<Invoice> = emptyList(), val dues: List<Due> = emptyList(), val balances: List<Balance> = emptyList(), val dueNotes: Map<String, DueNote> = emptyMap(),
+    val features: Features = Features(),
     val version: Long = 0,
 )
+/** Server capabilities: [mail] = signed reports can be e-mailed to the customer from the server. */
+@Serializable data class Features(val mail: Boolean = false, val backupError: String = "")
+@Serializable data class SendReportRequest(val to: String)
 @Serializable data class Me(val username: String = "", val name: String = "", val role: String = "", val roleLabel: String = "")
 @Serializable data class Session(val setupNeeded: Boolean = false, val user: Me? = null, val version: Long = 0)
 @Serializable data class ServerError(val error: String = "", val device: String = "", val code: String = "")
