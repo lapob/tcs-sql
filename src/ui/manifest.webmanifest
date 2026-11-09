@@ -11,7 +11,8 @@
   "theme_color": "#0a6bda",
   "icons": [
     { "src": "assets/tcs-app.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
-    { "src": "assets/tcs-app@2x.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+    { "src": "assets/tcs-app@2x.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/tcs-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
     { "name": "Clienti", "url": "./#clients" },
