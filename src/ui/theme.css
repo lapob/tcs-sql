@@ -59,7 +59,7 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
 /* ── headings */
 .hero h1{font-weight:680;letter-spacing:-.04em}
 .hero h1 .grad{background:linear-gradient(100deg,var(--brand-red) 0%,var(--accent) 38%,var(--accent-2) 70%,var(--brand-red) 100%);background-size:220% 100%;
- -webkit-background-clip:text;background-clip:text;animation:gradflow 9s ease-in-out infinite alternate}
+ -webkit-background-clip:text;background-clip:text;animation:gradflow 4.5s ease-in-out 2 alternate}
 @keyframes gradflow{to{background-position:100% 0}}
 .card h2{font-weight:650}
 
@@ -70,7 +70,7 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
 .kpi:hover{transform:translateY(-3px)}
 
 /* ── sidebar: glass, accent rail on the active item */
-.sidebar{backdrop-filter:blur(28px) saturate(1.7)}
+.sidebar{backdrop-filter:blur(24px) saturate(1.6)}
 .nav-indicator{box-shadow:var(--hl),var(--shadow-sm)}
 .nav-indicator::before{content:"";position:absolute;left:-1px;top:9px;bottom:9px;width:3px;border-radius:3px;background:linear-gradient(var(--accent),var(--accent-2))}
 .nav-item svg{transition:transform .45s var(--spring)}
@@ -109,9 +109,9 @@ th{letter-spacing:.02em;text-transform:uppercase;font-size:10.5px}
 .bar i{transition:filter .2s}
 
 /* ── overlays: blur + spring, entering from where they belong */
-.modal{background:oklch(18% .03 265 / .32);backdrop-filter:blur(8px) saturate(1.2)}
+.modal{background:oklch(18% .03 265 / .36);backdrop-filter:blur(5px)}
 .modal-box{animation:popin .55s var(--spring) both}
-@keyframes popin{from{opacity:0;transform:translateY(12px) scale(.94);filter:blur(4px)}}
+@keyframes popin{from{opacity:0;transform:translateY(12px) scale(.94)}}
 .drawer{animation:drawin .6s var(--spring-soft) both}
 @keyframes drawin{from{transform:translateX(104%)}}
 .toast{backdrop-filter:blur(10px);box-shadow:var(--shadow-lg)}
@@ -119,12 +119,12 @@ th{letter-spacing:.02em;text-transform:uppercase;font-size:10.5px}
 /* ── page change: a soft blur-through cross-fade (view transitions) */
 ::view-transition-old(main-content){animation:vtout .16s var(--out) both}
 ::view-transition-new(main-content){animation:vtin .5s var(--spring-soft) both}
-@keyframes vtout{to{opacity:0;filter:blur(3px);transform:scale(.995)}}
-@keyframes vtin{from{opacity:0;filter:blur(4px);transform:translateY(10px)}}
+@keyframes vtout{to{opacity:0;transform:scale(.99)}}
+@keyframes vtin{from{opacity:0;transform:translateY(10px)}}
 /* going back: the page slides away to the right, the previous one returns from the left (same direction as the gesture) */
 html[data-nav="back"]::view-transition-old(main-content){animation:vtbackout .28s var(--out) both}
 html[data-nav="back"]::view-transition-new(main-content){animation:vtbackin .5s var(--spring-soft) both}
-@keyframes vtbackout{to{opacity:0;transform:translateX(56px) scale(.985);filter:blur(2px)}}
+@keyframes vtbackout{to{opacity:0;transform:translateX(56px) scale(.985)}}
 @keyframes vtbackin{from{opacity:0;transform:translateX(-40px)}}
 html[data-nav="back"] .anim .reveal{animation-name:fadein;animation-delay:0s}
 @keyframes fadein{from{opacity:0}}
