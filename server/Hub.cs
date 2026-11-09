@@ -14,6 +14,8 @@ public sealed class Hub(Store store)
  readonly Lock gate=new();
  long version=1;byte[]? snapshot;long snapshotVersion;
  public long Version=>Interlocked.Read(ref version);
+ /// Changes at every start: a client that cached "v1" before a restart (or an update with new data) must not get a 304.
+ public readonly string Boot=DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString("x");
  public sealed record ProgressMessage(string Type,bool Running,bool Connected,string Text);
  public ProgressMessage Progress {get;private set;}=new("progress",false,false,"");
  public DateTimeOffset LastStationContact {get;private set;}
@@ -30,7 +32,7 @@ public sealed class Hub(Store store)
    if(snapshot!=null&&snapshotVersion==Version)return snapshot;
    var v=Version;
    snapshot=JsonSerializer.SerializeToUtf8Bytes(new{records=store.All(),clients=store.Clients(),orders=store.Orders(),mastroClients=store.MastroClients(),machines=store.Machines(),interventions=store.Interventions(),
-    warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),version=v},Json);
+    warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),version=v},Json);
    snapshotVersion=v;return snapshot;
   }
  }

@@ -14,7 +14,8 @@ public sealed record Intervention(string Id,string ClientCode,string ClientName,
  string Technician,string Priority,string Total,string Source,string Created,string CreatedBy,string Updated,string UpdatedBy,List<PartUse>? Parts=null,
  string Hours="",string Signer="",string SignedAt="",string ReportNo="");
 public sealed record MastroBatch(List<MastroClient> Clients,List<Machine> Machines,List<Intervention> Interventions,string CapturedAt,string Source,
- List<Article>? Articles=null,List<MastroStock>? Stock=null,bool AlignStock=false);
+ List<Article>? Articles=null,List<MastroStock>? Stock=null,bool AlignStock=false,
+ List<Invoice>? Invoices=null,List<Due>? Dues=null,List<Balance>? Balances=null);
 
 public sealed partial class Store
 {
@@ -50,7 +51,8 @@ public sealed partial class Store
   foreach(var m in (b.Machines??[]).DistinctBy(x=>x.Id)){using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="INSERT INTO machines VALUES($i,$c,$d)";q.Parameters.AddWithValue("$i",m.Id);q.Parameters.AddWithValue("$c",m.ClientCode);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(m));q.ExecuteNonQuery();}
   foreach(var i in (b.Interventions??[]).DistinctBy(x=>x.Id)){using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="INSERT OR REPLACE INTO interventions VALUES($i,$c,'mastro',$d)";q.Parameters.AddWithValue("$i",i.Id);q.Parameters.AddWithValue("$c",i.ClientCode);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(i with{Source="mastro"}));q.ExecuteNonQuery();}
   var adjusted=ImportMastroWarehouse(c,tx,b.Articles??[],b.Stock??[],b.AlignStock,who);
-  var msg=$"Importazione MastroSQL ({who}): {b.Clients.Count} clienti · {b.Machines?.Count??0} macchine · {b.Interventions?.Count??0} interventi storici · {b.Articles?.Count??0} articoli"+(b.AlignStock?$" · {adjusted} giacenze allineate":"")+".";
+  var acc=ImportMastroAccounting(c,tx,b.Invoices,b.Dues,b.Balances);
+  var msg=$"Importazione MastroSQL ({who}): {b.Clients.Count} clienti · {b.Machines?.Count??0} macchine · {b.Interventions?.Count??0} interventi storici · {b.Articles?.Count??0} articoli"+(b.AlignStock?$" · {adjusted} giacenze allineate":"")+(b.Invoices!=null?$" · {acc[0]} fatture":"")+(b.Dues!=null?$" · {acc[1]} scadenze":"")+".";
   using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="INSERT INTO events(time,kind,message) VALUES($t,'import',$m)";q.Parameters.AddWithValue("$t",DateTimeOffset.Now.ToString("O"));q.Parameters.AddWithValue("$m",msg);q.ExecuteNonQuery();}
   tx.Commit();return msg;
  }

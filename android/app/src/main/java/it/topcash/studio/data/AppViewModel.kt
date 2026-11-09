@@ -157,6 +157,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     private fun signedOut() { _me.value = null; prefs.edit().remove("me").apply(); _screen.value = Screen.Login }
 
+    fun notify(text: String) { _messages.tryEmit(text) }
     fun setTheme(t: String) { _theme.value = t; prefs.edit().putString("theme", t).apply() }
 
     private fun act(success: String, block: suspend () -> Unit) = viewModelScope.launch {
@@ -167,6 +168,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun saveIntervention(i: Intervention, quiet: Boolean = false, onDone: (Intervention) -> Unit) = viewModelScope.launch {
         try { val r = api.saveIntervention(i); if (!quiet) _messages.tryEmit("Intervento salvato"); onDone(r); refresh() } catch (e: ApiException) { _messages.tryEmit(e.message ?: "Salvataggio non riuscito") }
     }
+    fun saveDueNote(id: String, status: String, note: String) = act(if (status.isBlank()) "Nota salvata" else "Scadenza segnata come “$status”") { api.saveDueNote(id, status, note) }
     fun deleteIntervention(id: String) = act("Intervento eliminato") { api.deleteIntervention(id) }
     fun saveMovements(m: List<Movement>, onDone: () -> Unit) = viewModelScope.launch {
         try { api.saveMovements(m); _messages.tryEmit(if (m.size == 1) "Movimento registrato" else "${m.size} movimenti registrati"); onDone(); refresh() }

@@ -24,6 +24,7 @@
     <Compile Include="..\src\Paths.cs" Link="Shared\Paths.cs" />
     <Compile Include="..\src\Magazzino.cs" Link="Shared\Magazzino.cs" />
     <Compile Include="..\src\Rapportino.cs" Link="Shared\Rapportino.cs" />
+    <Compile Include="..\src\Contabilita.cs" Link="Shared\Contabilita.cs" />
     <Content Include="..\src\ui\**\*" LinkBase="ui" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>

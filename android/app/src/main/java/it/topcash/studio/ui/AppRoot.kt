@@ -102,7 +102,7 @@ object Actions {
 data class EditorRequest(val interventionId: String? = null, val clientCode: String? = null)
 
 private data class Tab(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
-private val tabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("clients", "Clienti", Icons.Rounded.Groups),
+private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("clients", "Clienti", Icons.Rounded.Groups),
     Tab("interventions", "Interventi", Icons.Rounded.Build), Tab("warehouse", "Magazzino", Icons.Rounded.Inventory2), Tab("more", "Altro", Icons.Rounded.MoreHoriz))
 
 @Composable fun MainScreen(vm: AppViewModel) {
@@ -112,13 +112,17 @@ private val tabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("cli
     var editor by remember { mutableStateOf<EditorRequest?>(null) }
     var movement by remember { mutableStateOf<Pair<String, String?>?>(null) } // (type, article)
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
+    val me by vm.me.collectAsStateWithLifecycle()
+    // warehouse management is reserved to administrators
+    val admin = me?.role == "admin"
     // launcher shortcuts (long-press on the app icon)
     val sc by vm.shortcut.collectAsStateWithLifecycle()
-    LaunchedEffect(sc, archive != null) {
+    LaunchedEffect(sc, archive != null, admin) {
         if (archive == null) return@LaunchedEffect
-        when (sc) { "new" -> editor = EditorRequest(); "load" -> movement = "carico" to null; "search" -> { nav.switchTab("clients"); vm.focusSearch.value = true }; else -> return@LaunchedEffect }
+        when (sc) { "new" -> editor = EditorRequest(); "load" -> if (admin) movement = "carico" to null else vm.notify("Il magazzino è riservato all'amministratore"); "search" -> { nav.switchTab("clients"); vm.focusSearch.value = true }; else -> return@LaunchedEffect }
         vm.shortcut.value = null
     }
+    val tabs = remember(admin) { if (admin) allTabs else allTabs.filter { it.route != "warehouse" } }
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route ?: "home"
     val topLevel = tabs.any { it.route == route }
@@ -159,9 +163,10 @@ private val tabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("cli
                     screen("clients") { ClientsScreen(vm, it, nav) }
                     screen("interventions") { InterventionsScreen(vm, it, onOpen = { id -> editor = EditorRequest(interventionId = id) }, onNew = { editor = EditorRequest() }) }
                     screen("machines") { MachinesScreen(it, nav) }
-                    screen("warehouse") { WarehouseScreen(vm, it, nav) { t, art -> movement = t to art } }
+                    screen("warehouse") { if (admin) WarehouseScreen(vm, it, nav) { t, art -> movement = t to art } else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("more") { MoreScreen(vm, it, nav) }
                     screen("deadlines") { DeadlinesScreen(it, nav) }
+                    screen("accounting") { AccountingScreen(vm, it, nav) }
                     screen("licenses") { LicensesScreen(it, nav) }
                     screen("orders") { OrdersScreen(it, nav) }
                     screen("account") { AccountScreen(vm, nav) }

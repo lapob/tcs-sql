@@ -11,7 +11,7 @@ public static class MastroReader
 {
  public sealed record Config(string Host,int Port,string Database,string User,string Password,string IniPath);
  public sealed record Preview(int Clients,int Machines,int Interventions,int WithPhone,int WithEmail,List<string> ClientColumns,List<string> MachineColumns,string InterventionTable,List<MastroClient> Sample,List<string> Warnings,
-  int Articles=0,int StockRows=0,int Warehouses=0);
+  int Articles=0,int StockRows=0,int Warehouses=0,int Invoices=0,int Dues=0,int Balances=0);
 
  public static readonly string[] IniCandidates=[@"C:\MastroSQL\RETE.ini",@"C:\mastro20\RETE.ini",@"C:\MastroSQL\utility\RETE.ini"];
  public static Config? FromIni(string? path=null)
@@ -157,9 +157,63 @@ public static class MastroReader
   }
   else warnings.Add("Tabella articoli (arti) non trovata: magazzino non importato.");
 
-  var batch=new MastroBatch(clients,machines,interventions,DateTimeOffset.Now.ToString("O"),$"MastroSQL {cfg.Host}/{cfg.Database}",articles,stock,false);
+  // ── accounting: invoices (lis_fat), instalments (mov_sca), ledger balances (mov_con). Read only; Mastro stays the system of record.
+  List<Invoice>? invoices=null;List<Due>? dues=null;List<Balance>? balances=null;
+  var cliNames=clients.GroupBy(x=>x.Code,StringComparer.OrdinalIgnoreCase).ToDictionary(g=>g.Key,g=>g.First().Name,StringComparer.OrdinalIgnoreCase);
+  var supNames=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+  if(Tab("fornito") is string tf2)foreach(var r in await All(tf2,50_000)){var k=F(r,"CODI","CODICE");if(k.Length>0)supNames[k]=F(r,"DESCRI");}
+  var pays=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+  if(Tab("pagamenti") is string tp)foreach(var r in await All(tp,5_000)){var k=F(r,"CODI","CODICE","NUME");if(k.Length>0)pays[k]=F(r,"DESCRI");}
+  static string Num(string s)=>decimal.TryParse(s,NumberStyles.Any,CultureInfo.InvariantCulture,out var v)&&v==Math.Floor(v)?v.ToString("0",CultureInfo.InvariantCulture):s;
+  if(Tab("lis_fat") is string tl)
+  {
+   invoices=[];
+   foreach(var d in await All(tl,400_000))
+   {
+    var num=Num(F(d,"NUME","DOC_NUME","NUME_DOC","NUMERO","N_FAT"));var date=F(d,"DATAI","DATA_DOC","DOC_DATA","DATA");if(num.Length==0||date.Length==0)continue;
+    var barra=F(d,"BARRA");var cli=F(d,"CODI","CLIENTE","CODICE","NUMCLIFOR","CLI");
+    var total=D(F(d,"TOT_DOC","TOTALE"));var vat=D(F(d,"TOTA_IVA","IVA"));var taxable=D(F(d,"TOTA_IMP","IMPONIBILE","TOT_IMP"));if(taxable==0&&total!=0)taxable=total-vat;
+    var credit=F(d,"FATT_NOTA").StartsWith("N",StringComparison.OrdinalIgnoreCase);
+    var pay=F(d,"PAGA","COD_PAG","PAGAMENTO","PAGAM");
+    var number=barra.Length>0?$"{num}/{barra}":num;
+    invoices.Add(new($"{date[..Math.Min(4,date.Length)]}-{number}-{(credit?"N":"F")}",number,date,cli,cliNames.GetValueOrDefault(cli,F(d,"DESCRI","RAGSOC")),credit?"Nota di credito":"Fattura",taxable,vat,total,pays.GetValueOrDefault(pay,pay)));
+   }
+  }
+  else warnings.Add("Tabella fatture (lis_fat) non trovata: fatture non importate.");
+  if(Tab("mov_sca") is string ts)
+  {
+   dues=[];int n=0;
+   foreach(var d in await All(ts,400_000))
+   {
+    var party=F(d,"CLIFOR").StartsWith("F",StringComparison.OrdinalIgnoreCase)?"F":"C";var code=F(d,"NUMCLIFOR","CODI");var due=F(d,"SCADENZA","DATA_SCA");if(code.Length==0||due.Length==0)continue;
+    var amount=D(F(d,"IMPORTO"));if(amount==0)amount=D(F(d,"TOTALE"));
+    var pagatoRaw=F(d,"PAGATO");var paid=True(pagatoRaw)?amount:D(pagatoRaw);
+    var pay=F(d,"PAGA","COD_PAG","PAGAMENTO");
+    var id=F(d,"ID","NUME","PROGR");if(id.Length==0)id=(++n).ToString(CultureInfo.InvariantCulture);
+    dues.Add(new($"{party}{code}-{Num(F(d,"NUMDOC"))}-{due}-{id}",party,code,party=="F"?supNames.GetValueOrDefault(code,code):cliNames.GetValueOrDefault(code,code),
+     Num(F(d,"NUMDOC")),F(d,"DATADOC"),due,Math.Abs(amount),Math.Abs(paid),pays.GetValueOrDefault(pay,pay)));
+   }
+  }
+  else warnings.Add("Tabella scadenze (mov_sca) non trovata: scadenzario non importato.");
+  if(Tab("mov_con") is string tcon)
+  {
+   try
+   {
+    balances=[];
+    await using var q=new MySqlCommand($"SELECT CLI_O_FOR,NUMCLIFOR,SUM(DARE),SUM(AVERE) FROM `{tcon.Replace("`","")}` WHERE NUMCLIFOR IS NOT NULL AND NUMCLIFOR<>'' GROUP BY CLI_O_FOR,NUMCLIFOR",c);
+    await using var r=await q.ExecuteReaderAsync(ct);
+    while(await r.ReadAsync(ct))
+    {
+     var code=S(r.GetValue(1));if(code.Length==0)continue;
+     balances.Add(new(S(r.GetValue(0)).StartsWith("F",StringComparison.OrdinalIgnoreCase)?"F":"C",Num(code),D(S(r.GetValue(2))),D(S(r.GetValue(3)))));
+    }
+   }
+   catch(MySqlException){balances=null;warnings.Add("Saldi contabili (mov_con) non leggibili: verranno mostrate solo fatture e scadenze.");}
+  }
+
+  var batch=new MastroBatch(clients,machines,interventions,DateTimeOffset.Now.ToString("O"),$"MastroSQL {cfg.Host}/{cfg.Database}",articles,stock,false,invoices,dues,balances);
   var preview=new Preview(clients.Count,machines.Count,interventions.Count,clients.Count(x=>x.Phones.Count>0),clients.Count(x=>x.Emails.Count>0),cols,machineCols,interTable,clients.Take(6).ToList(),warnings,
-   articles.Count,stock.Count,stock.Select(s=>s.Warehouse).Distinct().Count());
+   articles.Count,stock.Count,stock.Select(s=>s.Warehouse).Distinct().Count(),invoices?.Count??0,dues?.Count??0,balances?.Count??0);
   return(batch,preview);
  }
 }

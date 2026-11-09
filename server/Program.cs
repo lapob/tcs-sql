@@ -217,7 +217,7 @@ app.MapPost("/api/sync/token/revoke",(HttpContext ctx)=>{users.RevokeSyncToken()
 // ───────────────────────── archive
 app.MapGet("/api/state",(HttpContext ctx)=>
 {
- var etag=$"\"v{hub.Version}\"";ctx.Response.Headers.ETag=etag;ctx.Response.Headers.CacheControl="no-cache";
+ var etag=$"\"v{hub.Version}-{hub.Boot}\"";ctx.Response.Headers.ETag=etag;ctx.Response.Headers.CacheControl="no-cache";
  if(ctx.Request.Headers.IfNoneMatch.ToString()==etag)return Results.StatusCode(304);
  return Results.Bytes(hub.Snapshot(),"application/json");
 }).RequireAuthorization("read");
@@ -287,25 +287,34 @@ app.MapGet("/api/interventions/{id}/report.pdf",(string id)=>
  try{return Results.File(InterventionReport.Build(store,id),"application/pdf",InterventionReport.FileName(i));}catch(InvalidDataException ex){return Bad(ex.Message);}
 }).RequireAuthorization("read");
 
+// ───────────────────────── accounting (mirror of MastroSQL + reminder notes kept by the app)
+app.MapPost("/api/accounting/due-note",(HttpContext ctx,DueNoteRequest r)=>
+{
+ try{var n=store.SaveDueNote(r?.Id??"",r?.Status??"",r?.Note??"",Who(ctx));hub.Changed();return Results.Ok(n);}catch(InvalidDataException ex){return Bad(ex.Message);}
+}).RequireAuthorization("read");
+app.MapGet("/api/export/invoices.csv",()=>Results.File(Utf8Bom(AccountingReports.InvoicesCsv(store)),"text/csv; charset=utf-8",$"TopCash-fatture-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("export");
+app.MapGet("/api/export/dues.csv",()=>Results.File(Utf8Bom(AccountingReports.DuesCsv(store)),"text/csv; charset=utf-8",$"TopCash-scadenze-aperte-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("export");
+
 // ───────────────────────── warehouse
-bool CanManage(HttpContext ctx)=>ctx.User.IsInRole(Roles.Admin)||ctx.User.IsInRole(Roles.Office);
+// warehouse management is reserved to administrators (spare parts used in interventions still unload the van automatically)
+bool CanManage(HttpContext ctx)=>ctx.User.IsInRole(Roles.Admin);
 app.MapPost("/api/warehouse/movements",(HttpContext ctx,MovementsRequest r)=>
 {
  if(r?.Movements==null||r.Movements.Count==0)return Bad("Nessun movimento.");
  // technicians move stock (load, unload, transfer); corrections and stock counts are for office / admin
  if(!CanManage(ctx)&&r.Movements.Any(m=>m?.Type is "rettifica" or "inventario"))return Results.StatusCode(403);
  try{var saved=store.AddMovements(r.Movements,Who(ctx));hub.Changed();return Results.Ok(new{count=saved.Count});}catch(InvalidDataException ex){return Bad(ex.Message);}
-}).RequireAuthorization("read");
+}).RequireAuthorization("admin");
 app.MapPost("/api/warehouse/inventory",(HttpContext ctx,InventoryRequest r)=>
 {
  if(r==null||string.IsNullOrWhiteSpace(r.Warehouse)||r.Counted==null)return Bad("Inventario incompleto.");
  try{var n=store.RecordInventory(r.Warehouse,r.Counted,Who(ctx));hub.Changed();return Results.Ok(new{differences=n});}catch(InvalidDataException ex){return Bad(ex.Message);}
-}).RequireAuthorization("export");
-app.MapPost("/api/warehouse/articles",(HttpContext ctx,Article a)=>{try{var r=store.SaveArticle(a,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("export");
-app.MapPost("/api/warehouse/warehouses",(HttpContext ctx,Warehouse w)=>{try{var r=store.SaveWarehouse(w,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("export");
-app.MapPost("/api/warehouse/levels",(HttpContext ctx,StockLevel l)=>{try{store.SaveStockLevel(l);hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("export");
-app.MapGet("/api/export/stock.csv",()=>Results.File(Utf8Bom(WarehouseReports.StockCsv(store)),"text/csv; charset=utf-8",$"TopCash-giacenze-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("export");
-app.MapGet("/api/export/reorder.csv",()=>Results.File(Utf8Bom(WarehouseReports.ReorderCsv(store)),"text/csv; charset=utf-8",$"TopCash-proposta-ordine-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("export");
+}).RequireAuthorization("admin");
+app.MapPost("/api/warehouse/articles",(HttpContext ctx,Article a)=>{try{var r=store.SaveArticle(a,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin");
+app.MapPost("/api/warehouse/warehouses",(HttpContext ctx,Warehouse w)=>{try{var r=store.SaveWarehouse(w,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin");
+app.MapPost("/api/warehouse/levels",(HttpContext ctx,StockLevel l)=>{try{store.SaveStockLevel(l);hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin");
+app.MapGet("/api/export/stock.csv",()=>Results.File(Utf8Bom(WarehouseReports.StockCsv(store)),"text/csv; charset=utf-8",$"TopCash-giacenze-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("admin");
+app.MapGet("/api/export/reorder.csv",()=>Results.File(Utf8Bom(WarehouseReports.ReorderCsv(store)),"text/csv; charset=utf-8",$"TopCash-proposta-ordine-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("admin");
 
 // ───────────────────────── sync station (token, no user session)
 bool Station(HttpContext ctx){var ok=users.CheckSyncToken(ctx.Request.Headers["X-Sync-Token"]);if(ok)hub.StationSeen();return ok;}
@@ -361,5 +370,6 @@ record BatchRequest(string Kind,string Product,string Scope,List<string> Headers
 record LogRequest(string Kind,string Message);
 record ProgressRequest(bool Running,bool Connected,string Text);
 record MovementsRequest(List<Movement> Movements);
+record DueNoteRequest(string? Id,string? Status,string? Note);
 record SignRequest(string? Signer,string? Hours,string? Signature,bool Close);
 record InventoryRequest(string Warehouse,Dictionary<string,decimal> Counted);

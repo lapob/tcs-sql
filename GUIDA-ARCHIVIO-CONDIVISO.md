@@ -69,14 +69,14 @@ Da fare su un PC dove **MastroSQL è installato** (legge le impostazioni di Mast
 2. Controlla l'**anteprima**: numero di clienti, quanti hanno telefono ed email, macchine, interventi storici, esempio dei primi clienti.
 3. Conferma con **Importa**.
 
-Cosa viene importato: anagrafica completa (indirizzo, CAP, provincia, telefoni, email, PEC, zona, note e tutti gli altri campi compilati), **parco macchine** (modello, matricola, matricola fiscale, installazione, verificazione, abbonamento e importo) e **storico interventi**.
-I clienti Mastro vengono collegati a quelli Zucchetti tramite partita IVA o codice fiscale, altrimenti tramite ragione sociale.
+Cosa viene importato: anagrafica completa (indirizzo, CAP, provincia, telefoni, email, PEC, zona, note e tutti gli altri campi compilati), **parco macchine** (modello, matricola, matricola fiscale, installazione, verificazione, abbonamento e importo) e **storico interventi**, oltre alla **contabilità** (fatture e note di credito, scadenze di incassi e pagamenti, saldi contabili: vedi sezione 6-bis).
+I clienti Mastro vengono collegati a quelli Zucchetti tramite partita IVA o codice fiscale, altrimenti tramite ragione sociale: così ogni cliente compare **una sola volta**, con le sue **licenze Zucchetti** collegate. Se in Mastro lo stesso cliente è registrato due volte (stessa partita IVA), l'app li unisce in un'unica scheda.
 
 > **Sola lettura:** l'app esegue solo letture sul database di Mastro e non modifica nulla. Puoi ripetere l'importazione quando vuoi: i dati Mastro vengono sostituiti con l'ultima lettura, mentre interventi creati nell'app, note e promemoria restano invariati.
 
 ## 6. Magazzino
 
-Ricambi e consumabili in **sede** e su ogni **furgone** (un magazzino per tecnico). Menu **Magazzino** su PC, browser e Android.
+Ricambi e consumabili in **sede** e su ogni **furgone** (un magazzino per tecnico). Menu **Magazzino** su PC, browser e Android, **visibile solo all'amministratore**: gli altri utenti non lo vedono e il server rifiuta ogni operazione di magazzino fatta da loro. I ricambi usati negli interventi continuano a scaricarsi in automatico.
 
 1. **Magazzini e furgoni** → *Nuovo furgone*: nome e tecnico assegnato (scrivilo come negli interventi).
 2. **Nuovo articolo** (o importa il catalogo da MastroSQL): codice, codice a barre, categoria, costo, prezzo, fornitore, *gestito a matricola* per i registratori.
@@ -86,7 +86,7 @@ Ricambi e consumabili in **sede** e su ogni **furgone** (un magazzino per tecnic
 6. **Inventario**: conta la merce, scrivi le quantità reali e registra; vengono salvate solo le differenze.
 
 Codici a barre: su PC funzionano i lettori USB/Bluetooth (scansiona nel campo di ricerca); su Android tocca l'icona di scansione per usare la fotocamera.
-I tecnici registrano carichi, scarichi e trasferimenti; rettifiche, inventario e anagrafica articoli spettano a ufficio e amministratore. Ogni movimento resta nel registro con utente, data e note.
+Ogni movimento resta nel registro con utente, data e note.
 
 **Da MastroSQL** (Impostazioni → *Importa da MastroSQL*): vengono importati articoli, categorie e fornitori; spuntando *Allinea anche le giacenze* le quantità di Mastro diventano quelle di partenza (registrate come rettifiche, quindi tracciate). Da quel momento il magazzino operativo è Top Cash Studio.
 
@@ -128,10 +128,22 @@ powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\versioni.ps1 -Salva "cosa
 ```
 Lo storico contiene solo codice, script e guide: **database, backup, chiavi e password non vengono mai salvati**. Lo storico resta su questo PC (nessun invio online).
 
+## 6-bis. Contabilità
+
+Menu **Contabilità** (PC, browser; su Android in *Altro*), per **tutti** gli utenti. I dati vengono da MastroSQL con *Importa da MastroSQL* (sola lettura: Mastro resta il programma di contabilità e le fatture si emettono sempre da Mastro).
+
+- **Riepilogo**: fatturato dell'anno (imponibile, note di credito dedotte) con il confronto con lo stesso periodo dell'anno prima, importo da incassare, **scaduto**, pagamenti ai fornitori nei prossimi 30 giorni e grafico degli ultimi 12 mesi.
+- **Da incassare**: scadenzario clienti. Apri una rata per segnarla come **Sollecitato**, **Promesso**, **Incassato** o **Contestato** con una nota, oppure per preparare l'**email di sollecito** già compilata. Stato e note sono condivisi con il team e **restano anche dopo ogni nuova importazione**.
+- **Fatture**, **Da pagare** (fornitori) e **Clienti** (chi ha importi scaduti in cima).
+- Nella **scheda cliente** c'è la sezione *Contabilità*: fatturato, da incassare, scaduto, saldo contabile di Mastro e rate aperte.
+- Ufficio e amministratore possono esportare **fatture** e **scadenze aperte** in CSV.
+
 ## Dopo questo aggiornamento
 
 - L'app Windows ora tiene la sua cache dentro `D:\TopCashSQL\.runtime`: al primo avvio **accedi di nuovo** (server e, sulla postazione, MY Zucchetti). Le vecchie cache in `C:\Users\lapob\AppData\Local\TopCashStudio` non servono più e si possono eliminare.
-- Esegui `aggiorna-server.ps1` per portare il server alla nuova versione (magazzino, rapportino con firma e PDF, librerie con le correzioni di sicurezza).
+- Esegui `aggiorna-server.ps1` per portare il server alla nuova versione (contabilità, magazzino riservato all'amministratore, connessione da fuori ufficio, rapportino con firma e PDF).
+- Poi, dal PC con MastroSQL, ripeti **Impostazioni → Importa da MastroSQL**: questa volta vengono lette anche fatture, scadenze e saldi.
+- Installa sui telefoni la nuova `TopCash-Studio.apk` (versione 2.3).
 
 ## Aggiornare il server
 

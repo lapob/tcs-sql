@@ -158,6 +158,11 @@ public partial class MainWindow : Window
      try{store.SaveWarehouse(JsonSerializer.Deserialize<Warehouse>(root.GetProperty("item").GetRawText(),jsonIn)!,Environment.UserName);await Push();await Notify("Magazzino salvato.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
     case "levelSave":
      try{store.SaveStockLevel(JsonSerializer.Deserialize<StockLevel>(root.GetProperty("item").GetRawText(),jsonIn)!);await Push();}catch(InvalidDataException ex){await Notify(ex.Message);}break;
+    case "dueNote":
+     try{store.SaveDueNote(root.GetProperty("id").GetString()??"",root.GetProperty("status").GetString()??"",root.GetProperty("note").GetString()??"",Environment.UserName);await Push();}catch(InvalidDataException ex){await Notify(ex.Message);}break;
+    case "exportInvoices":case "exportDues":
+     var ap=new SaveFileDialog{Filter="CSV italiano|*.csv",FileName=(action=="exportInvoices"?"TopCash-fatture-":"TopCash-scadenze-aperte-")+DateTime.Today.ToString("yyyyMMdd")+".csv"};
+     if(ap.ShowDialog(this)==true){File.WriteAllText(ap.FileName,action=="exportInvoices"?AccountingReports.InvoicesCsv(store):AccountingReports.DuesCsv(store),new UTF8Encoding(true));await Notify("File salvato.");}break;
     case "exportStock":case "exportReorder":
      var sp=new SaveFileDialog{Filter="CSV italiano|*.csv",FileName=(action=="exportStock"?"TopCash-giacenze-":"TopCash-proposta-ordine-")+DateTime.Today.ToString("yyyyMMdd")+".csv"};
      if(sp.ShowDialog(this)==true){File.WriteAllText(sp.FileName,action=="exportStock"?WarehouseReports.StockCsv(store):WarehouseReports.ReorderCsv(store),new UTF8Encoding(true));await Notify("File salvato.");}break;
@@ -256,7 +261,7 @@ public partial class MainWindow : Window
   await PushNow();
  }
  Task PushNow(){lastPush=DateTime.UtcNow;if(ServerMode)return Task.CompletedTask; // the shared server feeds the UI itself
-  if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="state",records=store.All(),clients=store.Clients(),orders=store.Orders(),mastroClients=store.MastroClients(),machines=store.Machines(),interventions=store.Interventions(),warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),syncRunning=portal?.Running??false,syncProgress=portal?.Progress??"",sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),sourceFolder,dataFolder=store.Folder,autoImport=true,portalConnected=portal?.Authenticated??false},json));return Task.CompletedTask;}
+  if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="state",records=store.All(),clients=store.Clients(),orders=store.Orders(),mastroClients=store.MastroClients(),machines=store.Machines(),interventions=store.Interventions(),warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),syncRunning=portal?.Running??false,syncProgress=portal?.Progress??"",sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),sourceFolder,dataFolder=store.Folder,autoImport=true,portalConnected=portal?.Authenticated??false},json));return Task.CompletedTask;}
  // In server mode the progress also reaches every browser through the server; locally it goes straight to the page.
  Task Notify(string message){Dashboard.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="toast",message},json));return Task.CompletedTask;}
 }

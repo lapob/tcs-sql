@@ -58,6 +58,8 @@ import java.time.ZoneOffset
 
 @Composable fun ClientDetailScreen(vm: AppViewModel, a: Archive, c: UClient, nav: NavHostController, onNewIntervention: () -> Unit, onOpenIntervention: (String) -> Unit) {
     val ctx = LocalContext.current
+    var dueOpen by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    dueOpen?.let { id -> a.acc.due(id)?.let { d -> DueSheet(vm, d, null) { dueOpen = null } } }
     Page(vm, c.name, null, onBack = { nav.popBackStack() }, compactTitle = true,
         actions = {
             val fav = c.meta.favorite
@@ -118,6 +120,7 @@ import java.time.ZoneOffset
             item(key = "m-title") { SectionTitle("Macchine installate (${c.machines.size})") }
             c.machines.forEach { m -> item(key = "m" + m.m.id) { MachineCard(m, Modifier.padding(bottom = 8.dp)) } }
         }
+        clientAccounting(a, c) { dueOpen = it }
         if (c.licenses.isNotEmpty()) {
             item(key = "l-title") { SectionTitle("Licenze Zucchetti (${c.licenses.size})") }
             c.licenses.forEach { l ->

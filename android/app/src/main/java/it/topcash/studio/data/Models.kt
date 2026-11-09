@@ -48,6 +48,13 @@ import kotlinx.serialization.Serializable
     val id: String = "", val date: String = "", val type: String = "", val article: String = "", val qty: Double = 0.0, val from: String = "", val to: String = "",
     val unitCost: Double = 0.0, val serial: String = "", val clientCode: String = "", val interventionId: String = "", val notes: String = "", val user: String = "", val created: String = "",
 )
+@Serializable data class Invoice(val id: String = "", val number: String = "", val date: String = "", val clientCode: String = "", val clientName: String = "", val kind: String = "Fattura",
+    val taxable: Double = 0.0, val vat: Double = 0.0, val total: Double = 0.0, val payment: String = "", val source: String = "")
+@Serializable data class Due(val id: String = "", val party: String = "C", val partyCode: String = "", val partyName: String = "", val docNumber: String = "", val docDate: String = "",
+    val dueDate: String = "", val amount: Double = 0.0, val paid: Double = 0.0, val payment: String = "", val source: String = "")
+@Serializable data class Balance(val party: String = "C", val code: String = "", val debit: Double = 0.0, val credit: Double = 0.0)
+@Serializable data class DueNote(val id: String = "", val status: String = "", val note: String = "", val date: String = "", val by: String = "")
+@Serializable data class DueNoteRequest(val id: String, val status: String, val note: String)
 @Serializable data class MovementsRequest(val movements: List<Movement>)
 @Serializable data class ClientMeta(val favorite: Boolean = false, val nextContact: String = "", val followupState: String = "")
 @Serializable data class SyncEvent(val time: String = "", val kind: String = "", val message: String = "")
@@ -57,6 +64,7 @@ import kotlinx.serialization.Serializable
     val events: List<SyncEvent> = emptyList(), val notes: Map<String, String> = emptyMap(), val metadata: Map<String, ClientMeta> = emptyMap(),
     val warehouses: List<Warehouse> = emptyList(), val articles: List<Article> = emptyList(), val stockLevels: List<StockLevel> = emptyList(),
     val stock: List<StockRow> = emptyList(), val movements: List<Movement> = emptyList(),
+    val invoices: List<Invoice> = emptyList(), val dues: List<Due> = emptyList(), val balances: List<Balance> = emptyList(), val dueNotes: Map<String, DueNote> = emptyMap(),
     val version: Long = 0,
 )
 @Serializable data class Me(val username: String = "", val name: String = "", val role: String = "", val roleLabel: String = "")

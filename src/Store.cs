@@ -26,6 +26,7 @@ public sealed partial class Store
   InitGestionale(c);
   InitMagazzino(c);
   InitRapportini(c);
+  InitContabilita(c);
  }
  public List<ClientRecord> Clients(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM clients";using var r=q.ExecuteReader();var list=new List<ClientRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<ClientRecord>(r.GetString(0))!);return list;}
  public List<OrderRecord> Orders(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM orders";using var r=q.ExecuteReader();var list=new List<OrderRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<OrderRecord>(r.GetString(0))!);return list;}
@@ -187,6 +188,18 @@ public sealed partial class Store
   var pdf=InterventionReport.Build(store,rv.Id);if(pdf.Length<2000||pdf[0]!=(byte)'%'||pdf[1]!=(byte)'P')throw new Exception("PDF rapportino");
   File.WriteAllBytes(Path.Combine(folder,"rapportino-esempio.pdf"),pdf);
 #endif
-  store.Backup(Path.Combine(folder,"backup.sqlite"));Console.WriteLine("PASS: upsert, deduplicazione, validazione atomica, note, backup.");
+  // accounting: Mastro mirror replaced atomically, office notes survive re-imports, null lists keep existing data, CSV guards
+  var dues=new List<Due>{new("C15-1-2026-01-31-1","C","15","Cliente Mastro","1","2026-01-01","2026-01-31",122,0,"Bonifico"),new("C15-2-2026-12-31-2","C","15","Cliente Mastro","2","2026-12-01","2026-12-31",50,50,""),new("F9-7-2026-11-30-3","F","9","=Fornitore","7","2026-11-01","2026-11-30",80,200,"")};
+  store.ImportMastro(new([mc],[],[],"t","test",null,null,false,[new("2026-1-F","1","2026-01-01","15","Cliente Mastro","Fattura",100,22,122,"Bonifico"),new("2026-2-N","2","2026-02-01","15","Cliente Mastro","Nota di credito",10,2.2m,12.2m,"")],dues,[new("C","15",122,0)]),"test");
+  if(store.Invoices().Count!=2||store.Dues().Count!=3||store.Balances().Single().Debit!=122)throw new Exception("Import contabilità");
+  if(store.Dues().Single(d=>d.Party=="F").Paid!=80)throw new Exception("Pagato oltre l'importo accettato");
+  store.SaveDueNote("C15-1-2026-01-31-1","Sollecitato","Telefonato il 9/11","test");
+  try{store.SaveDueNote("C15-1-2026-01-31-1","Boh","","test");throw new Exception("Stato scadenza non validato");}catch(InvalidDataException){}
+  try{store.SaveDueNote("NON-ESISTE","Promesso","","test");throw new Exception("Nota su scadenza inesistente");}catch(InvalidDataException){}
+  store.ImportMastro(new([mc],[],[],"t","test",null,null,false,null,dues.Take(1).ToList(),null),"test");
+  if(store.Invoices().Count!=2||store.Balances().Count!=1||store.Dues().Count!=1||store.DueNotes()["C15-1-2026-01-31-1"].Status!="Sollecitato")throw new Exception("Note o dati contabili persi al re-import");
+  if(!AccountingReports.DuesCsv(store).Contains("Sollecitato")||AccountingReports.InvoicesCsv(store).Split('\n').Length<3)throw new Exception("Export contabilità");
+  store.SaveDueNote("C15-1-2026-01-31-1","","","test");if(store.DueNotes().Count!=0)throw new Exception("Cancellazione nota scadenza");
+  store.Backup(Path.Combine(folder,"backup.sqlite"));Console.WriteLine("PASS: upsert, deduplicazione, validazione atomica, note, magazzino, rapportini, contabilità, backup.");
  }
 }

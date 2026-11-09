@@ -51,6 +51,7 @@ class UClient(
 ) {
     var mastro: MastroClient? = null
     var mastroOnly = false
+    val mastroCodes = mutableListOf<String>()
     val machines = mutableListOf<UMachine>()
     val interventions = mutableListOf<UIntervention>()
     val orders = mutableListOf<UOrder>()
@@ -111,7 +112,9 @@ class Archive(val state: ArchiveState) {
                 c = UClient(code, m.name, m.vat, m.taxCode, "", "", mutableListOf(), mutableListOf(), mutableSetOf(), emptyList(), state.metadata[code] ?: ClientMeta(), state.notes[code].orEmpty(), false)
                 c.mastroOnly = true; map[code] = c
             }
-            c.mastro = m; mastroTo[m.code] = c
+            // the same customer registered twice in Mastro stays one customer (first record is the main one)
+            if (c.mastro == null) c.mastro = m; mastroTo[m.code] = c; c.mastroCodes += m.code
+            listOf(m.vat, m.taxCode).map(::idKey).filter { it.length >= 11 }.forEach { byVat.putIfAbsent(it, c) }; nameTo.putIfAbsent(nameKey(m.name), c)
             if (c.vat.isBlank()) c.vat = m.vat; if (c.taxCode.isBlank()) c.taxCode = m.taxCode
             if (c.city.isBlank()) c.city = m.city; if (c.address.isBlank()) c.address = m.address
             m.phones.filter { it !in c.phones }.forEach(c.phones::add); m.emails.filter { it !in c.emails }.forEach(c.emails::add)
@@ -140,6 +143,8 @@ class Archive(val state: ArchiveState) {
 
     /** Warehouse: stock per location, average costs, reorder state. */
     val wh: WarehouseView by lazy { WarehouseView(state) }
+    /** Accounting mirror of MastroSQL (invoices, instalments, balances) linked to the app's clients. */
+    val acc: AccountingView by lazy { AccountingView(state, clients) }
     val currentLicenses by lazy { licenses.filter { it.current } }
     val due30 by lazy { currentLicenses.filter { (it.days ?: -1) in 0..30 } }
     val overdue by lazy { currentLicenses.filter { (it.days ?: 0) < 0 } }
