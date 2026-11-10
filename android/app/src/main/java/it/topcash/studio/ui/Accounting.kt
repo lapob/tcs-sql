@@ -191,7 +191,7 @@ fun LazyListScope.clientAccounting(a: Archive, c: UClient, onDue: (String) -> Un
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 listOf("Fatturato ${java.time.LocalDate.now().year}" to p.revenueYear, "Da incassare" to p.open, "Scaduto" to p.overdue).forEach { (t, v) ->
                     Column(Modifier.weight(1f)) {
-                        Text(t, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        Text(t, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(money0(v), style = MaterialTheme.typography.titleSmall.tabular, color = if (t == "Scaduto" && v > 0) LocalStatus.current.bad else MaterialTheme.colorScheme.onSurface, maxLines = 1)
                     }
                 }

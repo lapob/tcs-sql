@@ -92,7 +92,7 @@ private fun current(c: UClient, k: String) = when (k) { "name" -> c.name; "vat" 
             clientFields.forEach { (k, label) ->
                 val v = values.getValue(k)
                 OutlinedTextField(v.value, { if (it.length <= 200) v.value = it }, Modifier.fillMaxWidth().padding(top = 6.dp), label = { Text(label) }, singleLine = true,
-                    placeholder = { if (!manual && c != null) Text(current(c, k), maxLines = 1) },
+                    placeholder = { if (!manual && c != null) Text(current(c, k), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     keyboardOptions = KeyboardOptions(keyboardType = when (k) { "phone" -> KeyboardType.Phone; "email", "pec" -> KeyboardType.Email; else -> KeyboardType.Text }))
             }
             Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {

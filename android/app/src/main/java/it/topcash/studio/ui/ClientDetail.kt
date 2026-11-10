@@ -168,7 +168,7 @@ import java.time.ZoneOffset
 @Composable private fun QuickAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val src = remember { MutableInteractionSource() }
     FilledTonalButton(onClick, modifier.height(72.dp).pressScale(src), enabled = enabled, interactionSource = src, shape = MaterialTheme.shapes.medium, contentPadding = PaddingValues(4.dp)) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, null); Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1) }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, null); Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis) }
     }
 }
 

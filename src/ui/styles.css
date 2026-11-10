@@ -644,7 +644,7 @@ tbody tr[data-client]:active,tbody tr[data-int]:active,.card[data-go]:active{tra
 }
 /* long lists: rows outside the screen are not laid out or painted until they scroll into view */
 .month{content-visibility:auto;contain-intrinsic-size:auto 420px}
-.list-row{content-visibility:auto;contain-intrinsic-size:auto 58px}
+.list-row{content-visibility:auto;contain-intrinsic-size:auto 72px}
 
 /* ── contabilità */
 .kpi .acc-v{font-size:clamp(22px,2.3vw,30px);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
@@ -785,3 +785,12 @@ tbody tr[data-client]:active,tbody tr[data-int]:active,.card[data-go]:active{tra
 .chk-group:last-of-type{border-bottom:0}
 .chk-group>small{display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;font-size:11px}
 @media (max-width:760px){.route-grid{grid-template-columns:1fr}.row-badges{max-width:100%;justify-content:flex-start}.list-row:has(.row-badges){flex-wrap:wrap}}
+/* 2.7.0 QA: buttons in status bars never shrink, icons in empty states stay centred */
+.dtr-status>.btn,.dtr-status>.btn-row{flex:none}
+.empty .orb{display:grid;place-items:center}.empty .orb svg{margin:0}
+.card-head>.btn,.card-head>a.btn{flex:none}.card-head>div:first-child{min-width:0}
+.route-grid{grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr))}
+/* touch targets: at least 32px (WCAG 2.2 AA asks 24px, phones get more room) */
+.explain .x{min-width:32px;min-height:32px;display:grid;place-items:center;flex:none}
+.link-btn{padding:4px 2px;margin:-4px -2px;min-height:26px}
+@media (pointer:coarse){.copy{min-width:34px;min-height:34px;display:inline-grid;place-items:center}.seg button{height:36px}.dtr-tag{height:36px}.ci{width:36px;height:36px}.btn.sm{height:38px}}

@@ -299,7 +299,7 @@ private class Stop(val c: UClient?, val kind: String, val tone: Tone, val text: 
             item(key = "g$city") {
                 CardBox(Modifier.padding(bottom = 10.dp).appear(gi)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("$city · ${ss.size}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                        Text("$city · ${ss.size}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         val places = ss.mapNotNull { it.c?.fullAddress?.takeIf { s -> s.isNotBlank() } }.distinct().take(10)
                         if (places.isNotEmpty()) FilledTonalButton({
                             val dest = places.last(); val way = places.dropLast(1)
