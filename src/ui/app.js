@@ -536,17 +536,22 @@ function teamPage(){
    `<div class="btn-row" style="margin-top:12px"><button class="btn sm accent" data-action-local="genToken">${icon('key')}${usersData.syncTokenCreated?'Genera nuova chiave':'Crea chiave'}</button>${usersData.syncTokenCreated?`<button class="btn sm ghost" data-action-local="revokeToken">Revoca</button>`:''}</div>`}
    ${host&&hostInfo?.syncStation?'<p class="sub" style="margin-top:10px"><span class="badge ok">Questo PC è la postazione di sincronizzazione</span></p>':''}
   </div></div></div>
- <div style="margin-top:16px">${devicesCard()}</div>`;
+ <div style="margin-top:16px">${devicesCard()}</div><div style="margin-top:16px">${securityCard()}</div>`;
+}
+function securityCard(){const list=(usersData.security||[]).slice(0,25);
+ const ic=m=>/sospeso|bloccat/i.test(m)?'alert':/fuori ufficio/i.test(m)?'external':'shield';
+ return`<div class="card reveal" style="--i:4"><div class="card-head"><div><h2>Accessi e sicurezza</h2><p>Accessi da fuori ufficio, tentativi sospesi e modifiche a utenti e dispositivi. Visibile solo agli amministratori.</p></div></div>
+  ${list.map(e=>`<div class="event"><span class="dot ${ic(e.message)==='alert'?'err':''}">${icon(ic(e.message))}</span><div><div>${esc(e.message)}</div><small>${esc(dTime(e.time))}</small></div></div>`).join('')||'<p class="sub">Nessun evento registrato.</p>'}</div>`;
 }
 function devicesCard(){const list=usersData.devices||[];const pend=list.filter(d=>d.status==='pending').length;
- const badge=d=>d.status==='approved'?'<span class="badge ok">Autorizzato</span>':d.status==='pending'?'<span class="badge due">In attesa</span>':'<span class="badge bad">Bloccato</span>';
- return`<div class="card reveal devices-card" style="--i:3"><div class="card-head"><div><h2>Dispositivi${pend?`<span class="count due">${pend} da approvare</span>`:`<span class="count">${list.length}</span>`}</h2>
-  <p>Da fuori ufficio entrano solo i dispositivi autorizzati, e serve comunque nome utente e password. In ufficio non cambia nulla. I dispositivi degli amministratori che accedono in ufficio sono autorizzati in automatico.</p></div></div>
+ const badge=d=>d.status==='approved'?'<span class="badge ok">Attivo</span>':d.status==='pending'?'<span class="badge due">In attesa</span>':'<span class="badge bad">Bloccato</span>';
+ return`<div class="card reveal devices-card" style="--i:3"><div class="card-head"><div><h2>Dispositivi${pend?`<span class="count due">${pend} in attesa</span>`:`<span class="count">${list.length}</span>`}</h2>
+  <p>Ogni PC, telefono o browser che accede compare qui, con l’ultimo utente e l’ultimo accesso. Da fuori ufficio basta nome utente e password; <strong>Blocca</strong> chiude subito l’accesso a un dispositivo perso o di un ex collaboratore.</p></div></div>
   ${list.length?`<div class="table-wrap"><table><thead><tr><th>Codice</th><th>Dispositivo</th><th>Ultimo utente</th><th>Ultimo accesso</th><th>Stato</th><th></th></tr></thead><tbody>
   ${list.map(d=>`<tr><td><span class="mono" style="font-weight:650">${esc(d.id)}</span>${d.id===usersData.thisDevice?' <span class="badge acc">questo</span>':''}</td><td><strong>${esc(d.name)}</strong><small class="muted" style="display:block">${esc(d.platform||'')}${d.remote?' · da fuori ufficio':''}</small></td>
    <td>${esc(d.user||'—')}</td><td>${d.lastSeen?dTime(d.lastSeen):'—'}<small class="muted" style="display:block">${esc(d.lastIp||'')}</small></td><td>${badge(d)}</td>
-   <td><div class="btn-row">${d.status!=='approved'?`<button class="btn sm accent" data-dev="${esc(d.id)}" data-dev-act="approve">${icon('check')}Autorizza</button>`:''}${d.status!=='revoked'?`<button class="btn sm ghost" data-dev="${esc(d.id)}" data-dev-act="revoke">Blocca</button>`:''}<button class="btn sm ghost" data-dev="${esc(d.id)}" data-dev-act="delete" data-tip="Elimina dall’elenco" aria-label="Elimina">${icon('close')}</button></div></td></tr>`).join('')}
-  </tbody></table></div>`:empty('shield','Nessun dispositivo','Compariranno qui quando qualcuno accede o chiede l’accesso da fuori ufficio.')}</div>`;}
+   <td><div class="btn-row">${d.status!=='approved'?`<button class="btn sm accent" data-dev="${esc(d.id)}" data-dev-act="approve">${icon('check')}Sblocca</button>`:''}${d.status!=='revoked'?`<button class="btn sm ghost" data-dev="${esc(d.id)}" data-dev-act="revoke">Blocca</button>`:''}<button class="btn sm ghost" data-dev="${esc(d.id)}" data-dev-act="delete" data-tip="Elimina dall’elenco" aria-label="Elimina">${icon('close')}</button></div></td></tr>`).join('')}
+  </tbody></table></div>`:empty('shield','Nessun dispositivo','Compariranno qui al primo accesso di ogni PC, telefono o browser.')}</div>`;}
 function accountCard(i){if(!WEB||!me)return'';return`<form class="card reveal" style="--i:${i}" id="pwd-form"><h2>Il tuo account</h2><p class="sub">${esc(me.name)} · ${esc(me.username)} · ${esc(me.roleLabel)}</p>
  <div style="display:grid;gap:10px;margin-top:14px"><label class="field">Password attuale<input class="input" type="password" name="current" required autocomplete="current-password"></label><label class="field">Nuova password (min. 10 caratteri)<input class="input" type="password" name="password" required minlength="10" autocomplete="new-password"></label>
  <div class="btn-row"><button class="btn sm primary" type="submit">Cambia password</button><button class="btn sm ghost" type="button" data-action-local="logout">Esci</button></div></div></form>`;}
@@ -597,10 +602,13 @@ function offerPublic(){if(host&&PUBLIC&&hostInfo&&!hostInfo.serverExternal&&!off
 function lanCard(i){
  if(!WEB)return'';
  if(LAN===null){LAN=false;fetch('api/lan',{headers:{'X-Requested-With':'topcash'},credentials:'same-origin'}).then(r=>r.ok?r.json():null).then(j=>{LAN=j||false;if(page==='settings')render(false);}).catch(()=>{});}
- const urls=(LAN&&LAN.urls)||[location.origin];const pub=LAN&&LAN.publicUrl;
+ const pub=LAN&&LAN.publicUrl;
+ if(!isAdmin())return pub?`<div class="card reveal" style="--i:${i}"><h2>Accesso da fuori ufficio</h2><p class="sub">Apri questo indirizzo da qualsiasi PC o telefono e accedi con il tuo utente. Sul telefono puoi scegliere «Aggiungi a schermata Home».</p>
+  <div class="lan-list"><div class="lan-row"><code>${esc(pub)}</code><span class="badge acc">pubblico</span><button class="btn sm ghost" data-copy="${esc(pub)}">${icon('copy')}Copia</button></div></div></div>`:'';
+ const urls=(LAN&&LAN.urls&&LAN.urls.length?LAN.urls:[location.origin]);
  return`<div class="card reveal" style="--i:${i}"><h2>Accesso dalla rete</h2><p class="sub">Dagli altri PC, tablet e telefoni dell’ufficio apri uno di questi indirizzi nel browser e accedi con il tuo utente. Sul telefono puoi poi scegliere «Aggiungi a schermata Home».</p>
   <div class="lan-list">${urls.map((u,k)=>`<div class="lan-row"><code>${esc(u)}</code>${k===0?'<span class="badge ok">consigliato</span>':''}<button class="btn sm ghost" data-copy="${esc(u)}">${icon('copy')}Copia</button></div>`).join('')}</div>
-  ${pub?`<p class="sub" style="margin-top:14px">Da fuori ufficio (connessione cifrata, solo dispositivi autorizzati):</p><div class="lan-list"><div class="lan-row"><code>${esc(pub)}</code><span class="badge acc">pubblico</span><button class="btn sm ghost" data-copy="${esc(pub)}">${icon('copy')}Copia</button></div></div>`:''}
+  ${pub?`<p class="sub" style="margin-top:14px">Da fuori ufficio (connessione cifrata, con nome utente e password):</p><div class="lan-list"><div class="lan-row"><code>${esc(pub)}</code><span class="badge acc">pubblico</span><button class="btn sm ghost" data-copy="${esc(pub)}">${icon('copy')}Copia</button></div></div>`:''}
   <p class="muted" style="font-size:12px;margin-top:8px">Perché l’indirizzo non cambi, nel router riserva l’IP a questo PC (prenotazione DHCP).${pub?'':' Fuori ufficio usa l’indirizzo esterno o la VPN.'}</p></div>`;
 }
 function serverCard(i){
@@ -807,8 +815,8 @@ document.addEventListener('click',e=>{
  if(ds.itab){ui.itab=ds.itab;ui.p=1;return render(false);}
  if(ds.mtab){ui.mtab=ds.mtab;ui.p=1;return render(false);}
  if(ds.devAct){(async()=>{const d=(usersData.devices||[]).find(x=>x.id===ds.dev);
-  if(ds.devAct!=='approve'&&!await ask({title:ds.devAct==='revoke'?'Bloccare il dispositivo?':'Eliminare il dispositivo?',text:`${esc(d?.name||ds.dev)} (${esc(ds.dev)}) non potrà più accedere da fuori ufficio${ds.devAct==='delete'?'; se ci riprova comparirà di nuovo come richiesta da approvare':''}.`,ok:ds.devAct==='revoke'?'Blocca':'Elimina',danger:true}))return;
-  try{await post('/api/devices/'+encodeURIComponent(ds.dev)+'/'+ds.devAct);toast(ds.devAct==='approve'?'Dispositivo autorizzato':ds.devAct==='revoke'?'Dispositivo bloccato':'Dispositivo eliminato','shield');usersData=await api('/api/users');render(false);}catch(x){toast(x.message,'alert');}})();return;}
+  if(ds.devAct!=='approve'&&!await ask({title:ds.devAct==='revoke'?'Bloccare il dispositivo?':'Eliminare il dispositivo?',text:`${esc(d?.name||ds.dev)} (${esc(ds.dev)}) ${ds.devAct==='delete'?'sparisce dall’elenco; se accede di nuovo con utente e password ricomparirà da solo':'non potrà più accedere da fuori ufficio finché non lo sblocchi'}.`,ok:ds.devAct==='revoke'?'Blocca':'Elimina',danger:true}))return;
+  try{await post('/api/devices/'+encodeURIComponent(ds.dev)+'/'+ds.devAct);toast(ds.devAct==='approve'?'Dispositivo sbloccato':ds.devAct==='revoke'?'Dispositivo bloccato':'Dispositivo eliminato','shield');usersData=await api('/api/users');render(false);}catch(x){toast(x.message,'alert');}})();return;}
  if(ds.int)return openIntervention(ds.int);
  if(ds.newint)return openIntervention(null,ds.newint);
  if(ds.cview){ui.clientView=ds.cview;ui.p=1;return render(false);}
@@ -937,7 +945,7 @@ function showAuth(kind,err=''){
   btn.disabled=true;try{me=await post(setup?'/api/setup':'/api/login',setup?{name:f.name,username:f.username,password:f.password}:{username:f.username,password:f.password,remember:!!f.remember,deviceName:deviceName(),platform:devicePlatform()});startWeb();}
   catch(x){e.target.querySelector('.auth-err').textContent=x.message;btn.disabled=false;e.target.querySelector('[name=password]').select();}});
 }
-// ───────────────────────── trusted devices (access from outside the office)
+// ───────────────────────── devices (outside the office: credentials are enough, a blocked device stays out)
 function deviceName(){const u=navigator.userAgent;const os=/iPhone/.test(u)?'iPhone':/iPad/.test(u)?'iPad':/Android/.test(u)?'Android':/Mac OS/.test(u)?'Mac':/Windows/.test(u)?'Windows':'Dispositivo';
  const br=host?'App Top Cash':/Edg\//.test(u)?'Edge':/Chrome\//.test(u)?'Chrome':/Firefox\//.test(u)?'Firefox':/Safari\//.test(u)?'Safari':'Browser';return os+' · '+br;}
 const devicePlatform=()=>host?'Windows (app)':'Browser';
@@ -946,12 +954,12 @@ function showDevice(status,code){
  $('#splash').classList.add('gone');es?.close();clearTimeout(devTimer);const a=$('#auth');a.hidden=false;const blocked=status==='revoked';
  a.innerHTML=`<div class="auth-card device-card">
   <img src="assets/tcs-app@2x.png" alt="Top Cash Service" class="auth-logo">
-  <h1>${blocked?'Dispositivo bloccato':'Autorizza questo dispositivo'}</h1>
-  <p>${blocked?'L’amministratore ha bloccato l’accesso da fuori ufficio per questo dispositivo.':'Per sicurezza, da fuori ufficio Top Cash Studio si apre solo sui dispositivi approvati. Comunica questo codice all’amministratore: lo trova in <strong>Utenti → Dispositivi</strong>.'}</p>
+  <h1>${blocked?'Dispositivo bloccato':'Verifica del dispositivo'}</h1>
+  <p>${blocked?'L’amministratore ha bloccato l’accesso da fuori ufficio per questo dispositivo. Se è un errore, comunicagli questo codice: può sbloccarlo da <strong>Utenti → Dispositivi</strong>.':'Sto verificando questo dispositivo con il server dell’ufficio.'}</p>
   ${code?`<div class="device-code" aria-label="Codice dispositivo">${esc(code)}</div>`:''}
-  ${blocked?'':`<p class="device-wait"><span class="spinner"></span>In attesa dell’approvazione: la pagina si sblocca da sola.</p>`}
+  ${blocked?'':`<p class="device-wait"><span class="spinner"></span>Un attimo: la pagina si apre da sola.</p>`}
   <button class="btn ghost" type="button" id="dev-retry">${icon('sync')}Controlla ora</button></div>`;
- const check=async()=>{try{const h=await post('/api/device/hello',{name:deviceName(),platform:devicePlatform()});if(h.status==='approved'||h.status==='office')return location.reload();if(h.status!==status||h.code!==code)return showDevice(h.status,h.code);}catch{}if(!blocked)devTimer=setTimeout(check,8000);};
+ const check=async()=>{try{const h=await post('/api/device/hello',{name:deviceName(),platform:devicePlatform()});if(h.status!=='revoked')return location.reload();if(h.status!==status||h.code!==code)return showDevice(h.status,h.code);}catch{}if(!blocked)devTimer=setTimeout(check,8000);};
  $('#dev-retry').addEventListener('click',()=>{clearTimeout(devTimer);check();});
  if(!blocked)devTimer=setTimeout(check,8000);
 }
@@ -959,7 +967,7 @@ function startWeb(){$('#auth').hidden=true;applyRole();etag='';loadState();openS
 async function logout(){try{await post('/api/logout');}catch{}try{await caches.delete('tcs-api');}catch{}me=null;location.reload();}
 async function bootWeb(){
  if('serviceWorker' in navigator&&isSecureContext)navigator.serviceWorker.register('sw.js').catch(()=>{});
- try{try{const h=await post('/api/device/hello',{name:deviceName(),platform:devicePlatform()});if(h.remote&&h.status!=='approved')return showDevice(h.status,h.code);}catch{} // server down or no network: go on with the saved copy, the offline bar says so
+ try{try{const h=await post('/api/device/hello',{name:deviceName(),platform:devicePlatform()});if(h.remote&&h.status==='revoked')return showDevice(h.status,h.code);}catch{} // server down or no network: go on with the saved copy, the offline bar says so
   const s=await api('/api/session');if(s.setupNeeded)return showAuth('setup');if(!s.user)return showAuth('login');me=s.user;startWeb();}
  catch{$('#splash').classList.add('gone');$('#main').innerHTML=`<div class="error-box"><img src="assets/tcs-app@2x.png" alt="Top Cash Service" class="tile"><h2>Server non raggiungibile</h2><p>Il server dell’ufficio non risponde: può essere spento o senza connessione. Controlla anche la tua rete.</p><p class="muted" style="font-size:13px;margin-top:6px">Riprovo da solo ogni 20 secondi.</p><p style="margin-top:16px"><button class="btn accent" data-action-local="reload">Riprova ora</button></p></div>`;setTimeout(()=>location.reload(),20000);}
 }

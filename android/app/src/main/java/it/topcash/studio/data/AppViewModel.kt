@@ -40,7 +40,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _theme = MutableStateFlow(prefs.getString("theme", "system") ?: "system"); val theme = _theme.asStateFlow()
     val server: String get() = prefs.getString("server", "").orEmpty()
     val serverExternal: String get() = prefs.getString("server_ext", "").orEmpty()
-    /** Code shown on the "authorize this device" screen, and its status (pending / revoked). */
+    /** Code shown on the "device blocked" screen, and its status. */
     private val _device = MutableStateFlow(DeviceStatus()); val device = _device.asStateFlow()
     val usingExternal: Boolean get() = api.isExternal
     private val deviceKey: String by lazy {
@@ -65,10 +65,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (_archive.value == null) loadCache()
         try {
             if (api.bases.size > 1) api.choose()
-            // outside the office the server only talks to approved devices
+            // outside the office the server refuses only devices the administrator blocked
             // an older server has no device check yet (404): behave as in the office
             val h = try { api.hello() } catch (e: ApiException) { if (e.status == 404) DeviceStatus("office") else throw e }
-            if (h.remote && h.status != "approved") { _device.value = h; _screen.value = Screen.Device; return@launch }
+            if (h.remote && h.status == "revoked") { _device.value = h; _screen.value = Screen.Device; return@launch }
             val s = api.session()
             if (s.user == null) { _screen.value = Screen.Login; return@launch }
             _me.value = s.user; prefs.edit().putString("me", json.encodeToString(Me.serializer(), s.user)).apply()
@@ -167,10 +167,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().putString("server", url).putString("server_ext", ext).apply()
         _screen.value = Screen.Loading; start(); return null
     }
-    /** "Controlla ora" on the authorization screen; also polled every few seconds. */
+    /** "Controlla ora" on the device screen; also polled every few seconds. */
     suspend fun checkDevice(): Boolean = try {
         val h = api.hello(); _device.value = h
-        if (!h.remote || h.status == "approved") { _screen.value = Screen.Loading; start(); true } else false
+        if (!h.remote || h.status != "revoked") { _screen.value = Screen.Loading; start(); true } else false
     } catch (e: ApiException) { false }
     fun changeServer() { stream?.cancel(); stream = null; _screen.value = Screen.Setup }
 

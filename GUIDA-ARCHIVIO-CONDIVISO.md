@@ -221,14 +221,14 @@ Il servizio si ferma per pochi secondi; dati, utenti e sessioni restano invariat
 
 Top Cash funziona anche fuori ufficio **senza installare altre app** su telefoni e PC: basta l'app Top Cash (o il browser).
 La connessione passa da un **tunnel Cloudflare** cifrato (`https://`): sul router **non si apre nessuna porta** e il PC server non è visibile su Internet.
-Da fuori entrano **solo i dispositivi che hai autorizzato** e, in più, serve sempre nome utente e password. In ufficio non cambia nulla.
+Da fuori si entra con **nome utente e password**, con protezione automatica contro i tentativi ripetuti; l'amministratore può **bloccare** in ogni momento un singolo dispositivo. In ufficio non cambia nulla.
 
 ### Due indirizzi
 
 | Dove | Indirizzo | Come |
 |---|---|---|
 | In ufficio | `http://192.168.1.220:8470` (IP del server + porta) | rete locale, il più veloce |
-| Fuori ufficio | `https://tcsql.it` | tunnel Cloudflare cifrato, solo dispositivi autorizzati |
+| Fuori ufficio | `https://tcsql.it` | tunnel Cloudflare cifrato, nome utente e password |
 
 Le app scelgono da sole: in ufficio usano l'IP, fuori passano a `https://tcsql.it`.
 
@@ -261,12 +261,12 @@ Per modificarla: Cloudflare → *Workers & Pages → topcash-offline → Edit co
 
 Altro dominio: `collega-esterno.ps1 -Dominio altro.it`. Se preferisci creare il tunnel a mano dal sito Cloudflare: `collega-esterno.ps1 -Manuale` e incolli il token del connettore.
 
-### Autorizzare i dispositivi
+### Sicurezza degli accessi e dispositivi
 
-- Da fuori ufficio, un telefono o PC nuovo mostra un **codice** (es. `K7Q-4M2`) e resta bloccato.
-- L'amministratore apre **Utenti → Dispositivi** e preme **Autorizza** sul codice giusto: il dispositivo si sblocca da solo in pochi secondi.
-- Lo stesso elenco mostra l'ultimo utente, l'ultimo accesso e l'indirizzo IP; **Blocca** chiude subito l'accesso da fuori a un telefono perso o di un ex collaboratore.
-- I dispositivi degli **amministratori** che accedono in ufficio sono autorizzati in automatico.
+- Da fuori ufficio basta **nome utente e password**: nessun codice da approvare.
+- **Protezione anti-tentativi** (solo da fuori ufficio): 5 password sbagliate in 15 minuti sospendono quell'utente da fuori per 15 minuti (il tempo raddoppia a ogni nuova sospensione, fino a 24 ore); 20 errori in un'ora dallo stesso indirizzo sospendono quell'indirizzo per un'ora. In ufficio si entra sempre, così nessuno può bloccare i colleghi dalla loro scrivania.
+- **Utenti → Dispositivi** elenca ogni PC, telefono e browser che ha fatto accesso, con ultimo utente, ultimo accesso e indirizzo IP; **Blocca** chiude subito l'accesso da fuori a un telefono perso o di un ex collaboratore (che vedrà il proprio codice, es. `K7Q-4M2`), **Sblocca** lo riapre.
+- **Utenti → Accessi e sicurezza** mostra gli accessi da fuori ufficio, le sospensioni per troppi tentativi e le modifiche a utenti e dispositivi; è visibile solo agli amministratori, come gli indirizzi IP dell'ufficio.
 
 ### Sui dispositivi
 

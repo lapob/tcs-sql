@@ -19,14 +19,15 @@ var users=new Users(store.DatabasePath);
 var hub=new Hub(store);
 var devices=new Devices(store.DatabasePath);
 var updates=new Updates(dataDir);
+var guard=new LoginGuard();
 var uiDir=Path.Combine(AppContext.BaseDirectory,"ui");
 
 var builder=WebApplication.CreateBuilder(new WebApplicationOptions{Args=args,ContentRootPath=AppContext.BaseDirectory});
 builder.Host.UseWindowsService(o=>o.ServiceName="TopCashStudio");
 // Two doors: the office network (LAN, default 8470) and the private tunnel (Cloudflare → 127.0.0.1 only, default LAN+2).
-// Everything that arrives on the tunnel door is "outside the office" and needs an approved device.
+// Everything that arrives on the tunnel door is "outside the office": open to anyone with valid credentials, with stricter
+// brute-force limits; a device the administrator has blocked stays out.
 var lanUrl=new Uri((args.FirstOrDefault(a=>a.StartsWith("--urls="))?[7..]??Environment.GetEnvironmentVariable("ASPNETCORE_URLS")??"http://0.0.0.0:8470").Split(';')[0].Replace("://*","://0.0.0.0").Replace("://+","://0.0.0.0"));
-// the short port is a convenience: if something else already owns it (IIS, another web server) skip it instead of failing the whole server
 // public address (Cloudflare tunnel, e.g. https://tcsql.it): written by collega-esterno.ps1 in the data folder and handed to the apps,
 // so every PC and phone learns it while in the office and switches to it by itself outside
 string PublicUrl(){try{var f=Path.Combine(dataDir,"indirizzo-pubblico.txt");if(!File.Exists(f))return "";var h=File.ReadAllText(f).Trim().ToLowerInvariant();h=System.Text.RegularExpressions.Regex.Replace(h,"^https?://","").TrimEnd('/');
@@ -91,12 +92,13 @@ app.Use(async(ctx,next)=>
  if(remote)
  {
   ctx.Response.Headers.StrictTransportSecurity="max-age=31536000";
-  // outside the office: only approved devices reach the API (the app shell itself is public and harmless)
+  if(ctx.Request.Path.StartsWithSegments("/api"))ctx.Response.Headers.CacheControl="no-store"; // private data never kept by Cloudflare or a shared proxy (/api/state sets its own revalidation)
+  // outside the office anyone may try with username and password; only a device the administrator blocked is refused
   var p=ctx.Request.Path;
-  if(p.StartsWithSegments("/api")&&!p.StartsWithSegments("/api/device/hello")&&!p.StartsWithSegments("/api/health")&&!(HttpMethods.IsGet(ctx.Request.Method)&&p.StartsWithSegments("/api/update"))&&dev?.Status!=Devices.Approved)
+  if(p.StartsWithSegments("/api")&&!p.StartsWithSegments("/api/device/hello")&&!p.StartsWithSegments("/api/health")&&dev?.Status==Devices.Revoked)
   {
    ctx.Response.StatusCode=403;
-   await ctx.Response.WriteAsJsonAsync(new{error=dev?.Status==Devices.Revoked?"Questo dispositivo è stato bloccato dall'amministratore.":"Dispositivo non ancora autorizzato per l'accesso da fuori ufficio.",device=dev?.Status??"unknown",code=dev?.Id??""});
+   await ctx.Response.WriteAsJsonAsync(new{error="Questo dispositivo è stato bloccato dall'amministratore.",device=dev.Status,code=dev.Id});
    return;
   }
  }
@@ -145,8 +147,16 @@ app.MapPost("/api/setup",async(HttpContext ctx,SetupRequest r)=>
 }).RequireRateLimiting("login");
 app.MapPost("/api/login",async(HttpContext ctx,LoginRequest r)=>
 {
- var v=users.Verify(r.Username??"",r.Password??"");
- if(v==null){await Task.Delay(Random.Shared.Next(200,500));return Results.Json(new{error="Nome utente o password non corretti."},statusCode:401);}
+ var remote=IsRemote(ctx);var uname=(r.Username??"").Trim();
+ if(remote&&guard.Locked(Ip(ctx),uname) is TimeSpan wait)
+ {ctx.Response.Headers.RetryAfter=((int)Math.Ceiling(wait.TotalSeconds)).ToString();return Results.Json(new{error=$"Troppi tentativi non riusciti. Riprova tra {Math.Max(1,(int)Math.Ceiling(wait.TotalMinutes))} minuti."},statusCode:429);}
+ var v=users.Verify(uname,r.Password??"");
+ if(v==null)
+ {
+  if(remote&&guard.Fail(Ip(ctx),uname) is string what)store.Log("users",$"Accesso da fuori ufficio sospeso per {what} dopo troppi tentativi non riusciti.");
+  await Task.Delay(Random.Shared.Next(300,700));return Results.Json(new{error="Nome utente o password non corretti."},statusCode:401);
+ }
+ if(remote){guard.Success(Ip(ctx),uname);store.Log("users",$"{v.Value.User.Name} ha effettuato l'accesso da fuori ufficio ({Ip(ctx)}).");}
  await SignIn(ctx,v.Value.User,v.Value.Stamp,r.Remember);
  if(DeviceKey(ctx) is string key)
  {
@@ -154,8 +164,8 @@ app.MapPost("/api/login",async(HttpContext ctx,LoginRequest r)=>
   {
    var d=devices.Find(key)??devices.Register(key,r.DeviceName??"",r.Platform??"",Ip(ctx),IsRemote(ctx),v.Value.User.Name);
    devices.Touch(key,Ip(ctx),IsRemote(ctx),v.Value.User.Name);
-   // an administrator signing in from the office network trusts their own device
-   if(d.Status==Devices.Pending&&!IsRemote(ctx)&&v.Value.User.Role==Roles.Admin){devices.SetStatus(d.Id,Devices.Approved,v.Value.User.Name);store.Log("users",$"Dispositivo {d.Id} di {v.Value.User.Name} autorizzato.");}
+   // signing in with valid credentials is enough: the device is recorded (and can be blocked from Utenti → Dispositivi)
+   if(d.Status==Devices.Pending)devices.SetStatus(d.Id,Devices.Approved,v.Value.User.Name);
   }catch(InvalidDataException){}
  }
  return Results.Ok(Me(v.Value.User));
@@ -182,10 +192,11 @@ app.MapPost("/api/device/hello",(HttpContext ctx,DeviceHello r)=>
  var who=ctx.User.Identity?.IsAuthenticated==true?Who(ctx):"";
  if(dev==null&&(remote||who!=""))
  {
-  try{dev=devices.Register(key,r?.Name??"",r?.Platform??"",Ip(ctx),remote,who);if(remote)store.Log("users",$"Nuova richiesta di accesso da fuori ufficio: dispositivo {dev.Id} ({dev.Name}).");}
+  try{dev=devices.Register(key,r?.Name??"",r?.Platform??"",Ip(ctx),remote,who);}
   catch(InvalidDataException ex){return Bad(ex.Message);}
  }
- if(dev!=null&&dev.Status==Devices.Pending&&!remote&&ctx.User.IsInRole(Roles.Admin)){devices.SetStatus(dev.Id,Devices.Approved,Who(ctx));dev=devices.Find(key);}
+ // no approval step any more: credentials are the gate, a blocked device stays blocked
+ if(dev!=null&&dev.Status==Devices.Pending){devices.SetStatus(dev.Id,Devices.Approved,who==""?"automatico":who);dev=devices.Find(key);}
  return Results.Ok(new{status=dev?.Status??(remote?"unknown":"office"),code=dev?.Id??"",remote,name=dev?.Name??""});
 }).RequireRateLimiting("login");
 app.MapPost("/api/devices/{id}/{action}",(HttpContext ctx,string id,string action,DeviceRename? r)=>
@@ -203,7 +214,7 @@ app.MapPost("/api/devices/{id}/{action}",(HttpContext ctx,string id,string actio
  }catch(InvalidDataException ex){return Bad(ex.Message);}
  return Results.Ok();
 }).RequireAuthorization("admin");
-app.MapGet("/api/users",(HttpContext ctx)=>Results.Ok(new{devices=devices.List(),thisDevice=(ctx.Items["device"] as DeviceInfo)?.Id??"",tunnelPort,users=users.List().Select(u=>new{u.Username,u.Name,u.Role,roleLabel=Roles.Label(u.Role),u.Disabled,u.Created,u.LastLogin}),syncTokenCreated=users.SyncTokenCreated(),stationLastContact=hub.LastStationContact==default?"":hub.LastStationContact.ToString("O"),connected=hub.Connected})).RequireAuthorization("admin");
+app.MapGet("/api/users",(HttpContext ctx)=>Results.Ok(new{security=store.SecurityEvents(),devices=devices.List(),thisDevice=(ctx.Items["device"] as DeviceInfo)?.Id??"",tunnelPort,users=users.List().Select(u=>new{u.Username,u.Name,u.Role,roleLabel=Roles.Label(u.Role),u.Disabled,u.Created,u.LastLogin}),syncTokenCreated=users.SyncTokenCreated(),stationLastContact=hub.LastStationContact==default?"":hub.LastStationContact.ToString("O"),connected=hub.Connected})).RequireAuthorization("admin");
 app.MapPost("/api/users",(HttpContext ctx,UserRequest r)=>
 {
  try{users.Create(r.Username??"",r.Name??"",r.Role??"",r.Password??"");}catch(InvalidDataException ex){return Bad(ex.Message);}
@@ -388,7 +399,9 @@ app.MapPost("/api/sync/batch",(HttpContext ctx,BatchRequest b)=>
 app.MapPost("/api/sync/log",(HttpContext ctx,LogRequest r)=>{if(!Station(ctx))return Results.Unauthorized();store.Log(r.Kind is "error" or "portal" or "check"?r.Kind:"portal",r.Message.Length>2000?r.Message[..2000]:r.Message);hub.Changed();return Results.Ok();}).RequireRateLimiting("sync");
 app.MapPost("/api/sync/progress",(HttpContext ctx,ProgressRequest r)=>{if(!Station(ctx))return Results.Unauthorized();hub.SetProgress(r.Running,r.Connected,r.Text.Length>300?r.Text[..300]:r.Text);return Results.Ok();}).RequireRateLimiting("sync");
 // addresses other devices of the office use to open Studio in the browser (physical adapters only: no VirtualBox, WSL, VPN)
-app.MapGet("/api/lan",()=>{
+// office addresses (private IPs, PC name) only for administrators: everyone else just gets the public address
+app.MapGet("/api/lan",(HttpContext ctx)=>{
+ if(!ctx.User.IsInRole(Roles.Admin))return Results.Ok(new{host="",port=0,urls=Array.Empty<string>(),publicUrl=PublicUrl()});
  var host=Environment.MachineName;var port=lanUrl.Port;
  var ips=System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
   .Where(n=>n.OperationalStatus==System.Net.NetworkInformation.OperationalStatus.Up&&n.NetworkInterfaceType is System.Net.NetworkInformation.NetworkInterfaceType.Ethernet or System.Net.NetworkInformation.NetworkInterfaceType.Wireless80211 or System.Net.NetworkInformation.NetworkInterfaceType.GigabitEthernet

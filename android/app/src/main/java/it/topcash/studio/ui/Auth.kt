@@ -139,7 +139,7 @@ import kotlinx.coroutines.launch
     }
 }
 
-/** Outside the office: this phone must be approved by an administrator (Utenti → Dispositivi). Polls on its own. */
+/** Outside the office: shown when an administrator blocked this phone (Utenti → Dispositivi), or briefly while it is checked. */
 @Composable fun DeviceScreen(vm: AppViewModel) {
     val d by vm.device.collectAsStateWithLifecycle()
     val blocked = d.status == "revoked"
@@ -148,10 +148,10 @@ import kotlinx.coroutines.launch
     LaunchedEffect(blocked) { if (!blocked) while (true) { kotlinx.coroutines.delay(8000); if (vm.checkDevice()) break } }
     AuthFrame {
         Logo()
-        Text(if (blocked) "Dispositivo bloccato" else "Autorizza questo telefono", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground,
+        Text(if (blocked) "Dispositivo bloccato" else "Verifica del telefono", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center, modifier = Modifier.padding(top = 22.dp).appear(1))
-        Text(if (blocked) "L'amministratore ha bloccato l'accesso da fuori ufficio per questo telefono."
-             else "Da fuori ufficio Top Cash si apre solo sui dispositivi approvati. Comunica questo codice all'amministratore: lo trova in Utenti → Dispositivi.",
+        Text(if (blocked) "L'amministratore ha bloccato l'accesso da fuori ufficio per questo telefono. Se è un errore, comunicagli questo codice: può sbloccarlo da Utenti → Dispositivi."
+             else "Sto verificando questo telefono con il server dell'ufficio.",
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
             modifier = Modifier.widthIn(max = 460.dp).padding(top = 8.dp, bottom = 22.dp).appear(2))
         if (d.code.isNotEmpty()) androidx.compose.foundation.layout.Row(
@@ -163,7 +163,7 @@ import kotlinx.coroutines.launch
         }
         if (!blocked) androidx.compose.foundation.layout.Row(Modifier.padding(top = 22.dp).appear(4), verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-            Text("  In attesa di approvazione: si sblocca da solo", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("  Un attimo: si apre da solo", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         TextButton({ checking = true; scope.launch { vm.checkDevice(); checking = false } }, Modifier.padding(top = 12.dp), enabled = !checking) { Text(if (checking) "Controllo…" else "Controlla ora") }
         TextButton({ vm.changeServer() }) { Text("Cambia server") }
