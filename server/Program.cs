@@ -16,6 +16,7 @@ var dataDir=args.FirstOrDefault(a=>a.StartsWith("--data="))?[7..]??Environment.G
 Directory.CreateDirectory(dataDir);
 var store=new Store(dataDir);
 var users=new Users(store.DatabasePath);
+if(users.PromotedOwner)store.Log("users","Il primo amministratore del server è diventato Proprietario (nuovo ruolo con poteri illimitati).");
 var hub=new Hub(store);
 var devices=new Devices(store.DatabasePath);
 var updates=new Updates(dataDir);
@@ -58,6 +59,8 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
  {
   var name=c.Principal?.Identity?.Name;var stamp=c.Principal?.FindFirstValue("stamp");var u=name==null?null:users.Get(name);
   if(u==null||u.Value.User.Disabled||u.Value.Stamp!=stamp){c.RejectPrincipal();return c.HttpContext.SignOutAsync();}
+  // role changed without a new stamp (e.g. promoted to owner by the upgrade): refresh the claims in place, no new sign-in
+  if(!c.Principal!.FindAll(ClaimTypes.Role).Select(x=>x.Value).Contains(u.Value.User.Role)){c.ReplacePrincipal(new ClaimsPrincipal(Identity(u.Value.User,stamp!)));c.ShouldRenew=true;}
   return Task.CompletedTask;
  };
 });
@@ -65,6 +68,8 @@ builder.Services.AddAuthorization(o=>
 {
  o.AddPolicy("read",p=>p.RequireAuthenticatedUser());
  o.AddPolicy("export",p=>p.RequireRole(Roles.Admin,Roles.Office));
+ o.AddPolicy("accounting",p=>p.RequireRole(Roles.Admin,Roles.Office));
+ o.AddPolicy("owner",p=>p.RequireRole(Roles.Owner));
  o.AddPolicy("admin",p=>p.RequireRole(Roles.Admin));
 });
 builder.Services.AddRateLimiter(o=>
@@ -124,10 +129,18 @@ app.UseStaticFiles(new StaticFileOptions
 app.UseAuthentication();app.UseRateLimiter();app.UseAuthorization();
 
 string Who(HttpContext c)=>c.User.FindFirstValue("display")??c.User.Identity?.Name??"?";
-object Me(UserInfo u)=>new{u.Username,u.Name,u.Role,roleLabel=Roles.Label(u.Role)};
+object Me(UserInfo u)=>new{u.Username,u.Name,u.Role,roleLabel=Roles.Label(u.Role),admin=Roles.IsAdmin(u.Role),accounting=Roles.SeesAccounting(u.Role),owner=u.Role==Roles.Owner};
+// an owner carries the admin role too, so every administrator permission applies to them
+ClaimsIdentity Identity(UserInfo u,string stamp)
+{
+ var claims=new List<Claim>{new(ClaimTypes.Name,u.Username),new(ClaimTypes.Role,u.Role),new("display",u.Name),new("stamp",stamp)};
+ if(u.Role==Roles.Owner)claims.Add(new(ClaimTypes.Role,Roles.Admin));
+ return new ClaimsIdentity(claims,CookieAuthenticationDefaults.AuthenticationScheme);
+}
+bool SeesAccounting(HttpContext ctx)=>!ctx.User.IsInRole(Roles.Tech);
 async Task SignIn(HttpContext ctx,UserInfo u,string stamp,bool remember)
 {
- var id=new ClaimsIdentity([new(ClaimTypes.Name,u.Username),new(ClaimTypes.Role,u.Role),new("display",u.Name),new("stamp",stamp)],CookieAuthenticationDefaults.AuthenticationScheme);
+ var id=Identity(u,stamp);
  await ctx.SignInAsync(new ClaimsPrincipal(id),new AuthenticationProperties{IsPersistent=remember});
 }
 IResult Bad(string m)=>Results.BadRequest(new{error=m});
@@ -141,7 +154,7 @@ app.MapGet("/api/session",(HttpContext ctx)=>
 app.MapPost("/api/setup",async(HttpContext ctx,SetupRequest r)=>
 {
  if(users.Any())return Results.Conflict(new{error="Configurazione già completata."});
- try{users.Create(r.Username,r.Name,Roles.Admin,r.Password);}catch(InvalidDataException ex){return Bad(ex.Message);}
+ try{users.Create(r.Username,r.Name,Roles.Owner,r.Password);}catch(InvalidDataException ex){return Bad(ex.Message);}
  var u=users.Get(r.Username)!.Value;await SignIn(ctx,u.User,u.Stamp,true);store.Log("users",$"Primo amministratore creato: {u.User.Name}.");hub.Changed();
  return Results.Ok(Me(u.User));
 }).RequireRateLimiting("login");
@@ -215,13 +228,23 @@ app.MapPost("/api/devices/{id}/{action}",(HttpContext ctx,string id,string actio
  return Results.Ok();
 }).RequireAuthorization("admin");
 app.MapGet("/api/users",(HttpContext ctx)=>Results.Ok(new{security=store.SecurityEvents(),devices=devices.List(),thisDevice=(ctx.Items["device"] as DeviceInfo)?.Id??"",tunnelPort,users=users.List().Select(u=>new{u.Username,u.Name,u.Role,roleLabel=Roles.Label(u.Role),u.Disabled,u.Created,u.LastLogin}),syncTokenCreated=users.SyncTokenCreated(),stationLastContact=hub.LastStationContact==default?"":hub.LastStationContact.ToString("O"),connected=hub.Connected})).RequireAuthorization("admin");
+// only an owner can create, change or remove an owner (and nobody else can lock the owner out)
+IResult? OwnerOnly(HttpContext ctx,string? targetUser,string? newRole)
+{
+ if(ctx.User.IsInRole(Roles.Owner))return null;
+ if(newRole==Roles.Owner)return Results.Json(new{error="Solo il proprietario può assegnare il ruolo di proprietario."},statusCode:403);
+ if(targetUser!=null&&users.Get(targetUser)?.User.Role==Roles.Owner)return Results.Json(new{error="Solo il proprietario può modificare un altro proprietario."},statusCode:403);
+ return null;
+}
 app.MapPost("/api/users",(HttpContext ctx,UserRequest r)=>
 {
+ if(OwnerOnly(ctx,null,r.Role) is IResult deny)return deny;
  try{users.Create(r.Username??"",r.Name??"",r.Role??"",r.Password??"");}catch(InvalidDataException ex){return Bad(ex.Message);}
  store.Log("users",$"{Who(ctx)} ha creato l'utente {r.Name} ({Roles.Label(r.Role!)}).");hub.Changed();return Results.Ok();
 }).RequireAuthorization("admin");
 app.MapPost("/api/users/{username}",(HttpContext ctx,string username,UserUpdate r)=>
 {
+ if(OwnerOnly(ctx,username,r.Role) is IResult deny)return deny;
  try
  {
   if(r.Role!=null||r.Disabled!=null||r.Name!=null)users.Update(username,r.Role,r.Disabled,r.Name);
@@ -232,6 +255,7 @@ app.MapPost("/api/users/{username}",(HttpContext ctx,string username,UserUpdate 
 app.MapPost("/api/users/{username}/delete",(HttpContext ctx,string username)=>
 {
  if(username==ctx.User.Identity!.Name)return Bad("Non puoi eliminare il tuo stesso utente: chiedi a un altro amministratore.");
+ if(OwnerOnly(ctx,username,null) is IResult deny)return deny;
  try{users.Delete(username);}catch(InvalidDataException ex){return Bad(ex.Message);}
  store.Log("users",$"{Who(ctx)} ha eliminato l'utente {username}.");hub.Changed();return Results.Ok();
 }).RequireAuthorization("admin");
@@ -249,7 +273,7 @@ app.MapGet("/api/state",(HttpContext ctx)=>
 {
  var etag=$"\"v{hub.Version}-{hub.Boot}\"";ctx.Response.Headers.ETag=etag;ctx.Response.Headers.CacheControl="no-cache";
  if(ctx.Request.Headers.IfNoneMatch.ToString()==etag)return Results.StatusCode(304);
- var(body,enc)=hub.SnapshotFor(ctx.Request.Headers.AcceptEncoding.ToString());
+ var(body,enc)=hub.SnapshotFor(ctx.Request.Headers.AcceptEncoding.ToString(),SeesAccounting(ctx));
  if(enc!=null){ctx.Response.Headers.ContentEncoding=enc;ctx.Response.Headers.Vary="Accept-Encoding";}
  return Results.Bytes(body,"application/json");
 }).RequireAuthorization("read");
@@ -259,7 +283,7 @@ app.MapGet("/api/state/delta",(HttpContext ctx)=>
  var etag=$"\"v{hub.Version}-{hub.Boot}\"";ctx.Response.Headers.ETag=etag;ctx.Response.Headers.CacheControl="no-store";
  if(ctx.Request.Headers.IfNoneMatch.ToString()==etag)return Results.StatusCode(304);
  var have=ctx.Request.Headers["X-Have"].ToString();
- return Results.Bytes(have.Length is >0 and <8000?hub.Delta(have):hub.Snapshot(),"application/json");
+ return Results.Bytes(have.Length is >0 and <8000?hub.Delta(have,SeesAccounting(ctx)):hub.Snapshot(SeesAccounting(ctx)),"application/json");
 }).RequireAuthorization("read");
 app.MapGet("/api/stream",(HttpContext ctx)=>hub.Stream(ctx)).RequireAuthorization("read");
 app.MapPost("/api/note",(HttpContext ctx,NoteRequest r)=>
@@ -278,7 +302,7 @@ app.MapPost("/api/meta",(HttpContext ctx,MetaRequest r)=>
 app.MapPost("/api/clients/save",(HttpContext ctx,ClientSaveRequest r)=>
 {
  try{var code=store.SaveClient(r.Code,r.Edit??new ClientEdit(),Who(ctx));hub.Changed();return Results.Ok(new{code});}catch(InvalidDataException ex){return Bad(ex.Message);}
-}).RequireAuthorization("admin");
+}).RequireAuthorization("read"); // every role edits customers (office and technicians too); delete, restore and merge stay with administrators
 app.MapPost("/api/clients/delete",(HttpContext ctx,ClientDeleteRequest r)=>
 {
  if(string.IsNullOrWhiteSpace(r.Code)||r.Code.Length>40)return Bad("Codice cliente mancante.");
@@ -369,7 +393,7 @@ app.MapPost("/api/backup/now",(HttpContext ctx)=>{try{var st=Backups.Run(store,d
 app.MapPost("/api/accounting/due-note",(HttpContext ctx,DueNoteRequest r)=>
 {
  try{var n=store.SaveDueNote(r?.Id??"",r?.Status??"",r?.Note??"",Who(ctx));hub.Changed();return Results.Ok(n);}catch(InvalidDataException ex){return Bad(ex.Message);}
-}).RequireAuthorization("read");
+}).RequireAuthorization("accounting");
 app.MapGet("/api/export/invoices.csv",()=>Results.File(Utf8Bom(AccountingReports.InvoicesCsv(store)),"text/csv; charset=utf-8",$"TopCash-fatture-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("export");
 app.MapGet("/api/export/dues.csv",()=>Results.File(Utf8Bom(AccountingReports.DuesCsv(store)),"text/csv; charset=utf-8",$"TopCash-scadenze-aperte-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("export");
 

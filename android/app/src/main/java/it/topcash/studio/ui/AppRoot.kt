@@ -111,7 +111,7 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
     val me by vm.me.collectAsStateWithLifecycle()
     // warehouse management is reserved to administrators
-    val admin = me?.role == "admin"
+    val admin = me?.isAdmin == true
     // launcher shortcuts (long-press on the app icon)
     val sc by vm.shortcut.collectAsStateWithLifecycle()
     LaunchedEffect(sc, archive != null, admin) {
@@ -173,7 +173,7 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
                     screen("warehouse") { if (admin) WarehouseScreen(vm, it, nav) { t, art -> movement = t to art } else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("more") { MoreScreen(vm, it, nav) }
                     screen("deadlines") { DeadlinesScreen(it, nav) }
-                    screen("accounting") { AccountingScreen(vm, it, nav) }
+                    screen("accounting") { if (me?.seesAccounting != false) AccountingScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("licenses") { LicensesScreen(vm, it, nav) }
                     screen("orders") { OrdersScreen(it, nav) }
                     screen("account") { AccountScreen(vm, nav) }

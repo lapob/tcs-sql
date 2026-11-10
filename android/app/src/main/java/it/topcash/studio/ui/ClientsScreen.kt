@@ -60,7 +60,7 @@ private val filters = listOf("Tutti", "Preferiti", "In scadenza", "Con macchine"
     var creating by rememberSaveable { mutableStateOf(false) }
     if (creating) ClientEditSheet(vm, null, { creating = false }) { code -> nav.openClient(code) }
     Page(vm, "Clienti", "${list.size} di ${a.clients.size}", actions = {
-        if (me?.role == "admin") androidx.compose.material3.IconButton({ creating = true }) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.PersonAdd, "Nuovo cliente") }
+        if (me != null) androidx.compose.material3.IconButton({ creating = true }) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.PersonAdd, "Nuovo cliente") }
     }) {
         item(key = "search") {
             val fs by vm.focusSearch.collectAsStateWithLifecycle()

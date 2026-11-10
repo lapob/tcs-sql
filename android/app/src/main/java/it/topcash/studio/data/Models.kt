@@ -85,7 +85,13 @@ import kotlinx.serialization.Serializable
 @Serializable data class DtrLicense(val from: String = "", val to: String = "", val status: String = "", val name: String = "", val type: String = "")
 @Serializable data class DtrEvent(val at: String = "", val text: String = "")
 @Serializable data class DtrStatus(val connected: Boolean = false, val lastSync: String = "", val checkedAt: String = "", val error: String = "")
-@Serializable data class Me(val username: String = "", val name: String = "", val role: String = "", val roleLabel: String = "")
+@Serializable data class Me(val username: String = "", val name: String = "", val role: String = "", val roleLabel: String = "", val admin: Boolean = false, val accounting: Boolean = true, val owner: Boolean = false) {
+    /** Owner and administrator can do everything; the owner also manages other administrators. */
+    val isAdmin get() = admin || role == "admin" || role == "owner"
+    val isOwner get() = owner || role == "owner"
+    /** Technicians see everything except the accounting. */
+    val seesAccounting get() = accounting && role != "tecnico"
+}
 @Serializable data class Session(val setupNeeded: Boolean = false, val user: Me? = null, val version: Long = 0, val publicUrl: String = "")
 @Serializable data class ServerError(val error: String = "", val device: String = "", val code: String = "")
 @Serializable data class DeviceHello(val name: String, val platform: String)

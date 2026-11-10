@@ -236,7 +236,8 @@ public static class InterventionReport
    double iw = img.PixelWidth, ih = img.PixelHeight, sc = Math.Min((sw - 16) / iw, 70 / ih);
    g.DrawImage(img, M + (sw - iw * sc) / 2, y + 7 + (70 - ih * sc) / 2, iw * sc, ih * sc);
   }
-  else g.DrawString("Non firmato", body, new XSolidBrush(Muted), new XRect(M, y, sw, 84), XStringFormats.Center);
+  // printed before the visit: the box stays blank for a pen signature at the customer's
+  else g.DrawString("firma e timbro", small, new XSolidBrush(Muted), new XRect(M, y + 66, sw, 14), XStringFormats.Center);
   g.DrawString(i.Technician.Length > 0 ? i.Technician : "—", f(12, true), new XSolidBrush(Ink), new XRect(M + sw + 24, y, sw, 84), XStringFormats.Center);
   y += 90;
   var signedAt = DateTimeOffset.TryParse(i.SignedAt, CultureInfo.InvariantCulture, DateTimeStyles.None, out var sa) ? sa.ToLocalTime().ToString("d MMMM yyyy 'alle' HH:mm", It) : "";

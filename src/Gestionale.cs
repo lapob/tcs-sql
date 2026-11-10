@@ -15,7 +15,16 @@ public sealed record Intervention(string Id,string ClientCode,string ClientName,
  string Hours="",string Signer="",string SignedAt="",string ReportNo="",string SentTo="",string SentAt="");
 public sealed record MastroBatch(List<MastroClient> Clients,List<Machine> Machines,List<Intervention> Interventions,string CapturedAt,string Source,
  List<Article>? Articles=null,List<MastroStock>? Stock=null,bool AlignStock=false,
- List<Invoice>? Invoices=null,List<Due>? Dues=null,List<Balance>? Balances=null);
+ List<Invoice>? Invoices=null,List<Due>? Dues=null,List<Balance>? Balances=null,
+ List<RtInfo>? Rt=null,List<Site>? Sites=null,List<Riba>? Riba=null);
+/// Fiscal and technical details of a register from Mastro (firmware, electronic journal, RT activation, lottery, census,
+/// QR census of the meter) plus its periodic verification history. Fields hold only the values that are filled in.
+public sealed record RtInfo(string MachineId,string Serial,Dictionary<string,string> Fields,List<Verification> Verifications,int VerificationCount);
+public sealed record Verification(string Date,string Outcome,string Type,string Technician,string Seal,string Amount,string Report,string Where,string Notes);
+/// Shop / delivery address of a customer (Mastro "destina").
+public sealed record Site(string ClientCode,string Name,string Address,string Cap,string City,string Prov,string Phone,string Email,string Hours,string Notes,bool Closed);
+/// Bank receipt (RiBa / effetto) of a customer: open, paid or unpaid ("insoluto"). Accounting: never sent to technicians.
+public sealed record Riba(string Id,string ClientCode,string Due,decimal Amount,bool Paid,bool Unpaid,string Bank,string Doc,string DocDate,string Description);
 
 public sealed partial class Store
 {
@@ -32,6 +41,16 @@ public sealed partial class Store
    """;q.ExecuteNonQuery();
  }
  List<T> ReadAll<T>(string sql){using var c=Open();using var q=c.CreateCommand();q.CommandText=sql;using var r=q.ExecuteReader();var list=new List<T>();while(r.Read())list.Add(JsonSerializer.Deserialize<T>(r.GetString(0))!);return list;}
+ /// Optional Mastro datasets (registers detail, shops, RiBa): empty until an import from 2.7.7 on.
+ List<T> MastroExtra<T>(string kind)
+ {
+  using var c=Open();using(var t=c.CreateCommand()){t.CommandText="CREATE TABLE IF NOT EXISTS mastro_extra(kind TEXT PRIMARY KEY,data TEXT NOT NULL)";t.ExecuteNonQuery();}
+  using var q=c.CreateCommand();q.CommandText="SELECT data FROM mastro_extra WHERE kind=$k";q.Parameters.AddWithValue("$k",kind);
+  return q.ExecuteScalar() is string s?JsonSerializer.Deserialize<List<T>>(s)??[]:[];
+ }
+ public List<RtInfo> RtInfos()=>MastroExtra<RtInfo>("rt");
+ public List<Site> Sites()=>MastroExtra<Site>("sites");
+ public List<Riba> RibaList()=>MastroExtra<Riba>("riba");
  public List<MastroClient> MastroClients()=>ReadAll<MastroClient>("SELECT data FROM mastro_clients");
  public List<Machine> Machines()=>ReadAll<Machine>("SELECT data FROM machines");
  public List<Intervention> Interventions()=>ReadAll<Intervention>("SELECT data FROM interventions");
@@ -52,7 +71,11 @@ public sealed partial class Store
   foreach(var i in (b.Interventions??[]).DistinctBy(x=>x.Id)){using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="INSERT OR REPLACE INTO interventions VALUES($i,$c,'mastro',$d)";q.Parameters.AddWithValue("$i",i.Id);q.Parameters.AddWithValue("$c",i.ClientCode);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(i with{Source="mastro"}));q.ExecuteNonQuery();}
   var adjusted=ImportMastroWarehouse(c,tx,b.Articles??[],b.Stock??[],b.AlignStock,who);
   var acc=ImportMastroAccounting(c,tx,b.Invoices,b.Dues,b.Balances);
-  var msg=$"Importazione MastroSQL ({who}): {b.Clients.Count} clienti · {b.Machines?.Count??0} macchine · {b.Interventions?.Count??0} interventi storici · {b.Articles?.Count??0} articoli"+(b.AlignStock?$" · {adjusted} giacenze allineate":"")+(b.Invoices!=null?$" · {acc[0]} fatture":"")+(b.Dues!=null?$" · {acc[1]} scadenze":"")+".";
+  // optional datasets (older apps do not send them: what is already stored is kept)
+  using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="CREATE TABLE IF NOT EXISTS mastro_extra(kind TEXT PRIMARY KEY,data TEXT NOT NULL)";q.ExecuteNonQuery();}
+  void Extra(string kind,object? data){if(data==null)return;using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="INSERT INTO mastro_extra VALUES($k,$d) ON CONFLICT(kind) DO UPDATE SET data=$d";q.Parameters.AddWithValue("$k",kind);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(data));q.ExecuteNonQuery();}
+  Extra("rt",b.Rt);Extra("sites",b.Sites);Extra("riba",b.Riba);
+  var msg=$"Importazione MastroSQL ({who}): {b.Clients.Count} clienti · {b.Machines?.Count??0} macchine · {b.Interventions?.Count??0} interventi storici · {b.Articles?.Count??0} articoli"+(b.Rt!=null?$" · {b.Rt.Sum(r=>r.VerificationCount)} verifiche periodiche":"")+(b.Sites!=null?$" · {b.Sites.Count} sedi":"")+(b.AlignStock?$" · {adjusted} giacenze allineate":"")+(b.Invoices!=null?$" · {acc[0]} fatture":"")+(b.Dues!=null?$" · {acc[1]} scadenze":"")+".";
   using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="INSERT INTO events(time,kind,message) VALUES($t,'import',$m)";q.Parameters.AddWithValue("$t",DateTimeOffset.Now.ToString("O"));q.Parameters.AddWithValue("$m",msg);q.ExecuteNonQuery();}
   tx.Commit();return msg;
  }

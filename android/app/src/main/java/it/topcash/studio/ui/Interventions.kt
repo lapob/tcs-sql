@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -80,7 +82,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
-private val itabs = listOf("Da fare", "Chiusi", "Storico Mastro", "Tutti")
+private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "Storico Mastro", "Tutti")
 
 @Composable fun InterventionsScreen(vm: AppViewModel, a: Archive, onOpen: (String) -> Unit, onNew: () -> Unit) {
     var tab by rememberSaveable { mutableStateOf("Da fare") }
@@ -88,12 +90,15 @@ private val itabs = listOf("Da fare", "Chiusi", "Storico Mastro", "Tutti")
     var tech by rememberSaveable { mutableStateOf("") }
     val state = rememberLazyListState()
     val expanded by remember { derivedStateOf { state.firstVisibleItemIndex < 2 } }
-    val list = remember(a, tab, q, tech) {
+    val me by vm.me.collectAsStateWithLifecycle()
+    val list = remember(a, tab, q, tech, me) {
         val n = norm(q.trim())
         a.interventions.filter { x ->
-            when (tab) { "Da fare" -> x.i.status != "Chiuso"; "Chiusi" -> x.i.status == "Chiuso" && x.i.source == "app"; "Storico Mastro" -> x.i.source == "mastro"; else -> true } &&
+            when (tab) { "Da fare" -> x.i.status != "Chiuso"
+                "I miei" -> x.i.status != "Chiuso" && x.i.source == "app" && me != null && norm(x.i.technician) == norm(me!!.name)
+                "Oggi e in ritardo" -> x.i.status != "Chiuso" && x.date?.let { !it.isAfter(LocalDate.now()) } == true "Chiusi" -> x.i.status == "Chiuso" && x.i.source == "app"; "Storico Mastro" -> x.i.source == "mastro"; else -> true } &&
                 (n.isEmpty() || norm(x.clientName + " " + x.i.title + " " + x.i.work + " " + x.i.technician).contains(n)) && (tech.isEmpty() || x.i.technician == tech)
-        }.let { l -> if (tab == "Da fare") l.sortedWith(compareBy({ Catalog.priorities.indexOf(it.i.priority) * -1 }, { it.date ?: LocalDate.MAX })) else l }
+        }.let { l -> if (tab == "Da fare" || tab == "I miei" || tab == "Oggi e in ritardo") l.sortedWith(compareBy({ Catalog.priorities.indexOf(it.i.priority) * -1 }, { it.date ?: LocalDate.MAX })) else l }
     }
     Page(vm, "Interventi", "${a.openInterventions.size} da completare", state = state,
         fab = { ExtendedFloatingActionButton(onClick = onNew, expanded = expanded, icon = { Icon(Icons.Rounded.Add, null) }, text = { Text("Nuovo intervento") }) }) {
@@ -106,16 +111,16 @@ private val itabs = listOf("Da fare", "Chiusi", "Storico Mastro", "Tutti")
             }
         }
         if (list.isEmpty()) item(key = "empty") { Empty(Icons.Rounded.Build, "Nessun intervento", if (tab == "Da fare") "Non ci sono interventi da fare. Ottimo!" else "Modifica i filtri o crea un nuovo intervento.") }
-        items(list.size.coerceAtMost(800), key = { list[it].i.id }) { i -> InterventionRow(list[i], a, Modifier.padding(bottom = 8.dp).animateItem()) { onOpen(list[i].i.id) } }
+        items(list.size.coerceAtMost(800), key = { list[it].i.id }) { i -> InterventionRow(list[i], a, Modifier.padding(bottom = 8.dp).animateItem(), vm = vm) { onOpen(list[i].i.id) } }
     }
 }
 
-@Composable fun InterventionRow(x: UIntervention, a: Archive, modifier: Modifier = Modifier, showClient: Boolean = true, onClick: () -> Unit) {
+@Composable fun InterventionRow(x: UIntervention, a: Archive, modifier: Modifier = Modifier, showClient: Boolean = true, vm: AppViewModel? = null, onClick: () -> Unit) {
     val tone = when (x.i.priority) { "Urgente" -> Tone.Bad; "Alta" -> Tone.Due; else -> Archive.toneOf(x.i.status) }
     val stripe = LocalStatus.current.of(tone)
     CardBox(modifier, onClick = onClick, padding = PaddingValues(0.dp)) {
-        Row(Modifier.heightIn(min = 72.dp)) {
-            Box(Modifier.width(5.dp).height(88.dp).background(stripe.copy(alpha = if (x.i.status == "Chiuso") 0.25f else 0.9f)))
+        Row(Modifier.heightIn(min = 72.dp).height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
+            Box(Modifier.width(5.dp).fillMaxHeight().background(stripe.copy(alpha = if (x.i.status == "Chiuso") 0.25f else 0.9f)))
             Column(Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(x.i.title.ifBlank { "Intervento" }, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -125,6 +130,33 @@ private val itabs = listOf("Da fare", "Chiusi", "Storico Mastro", "Tutti")
                 Text(listOf(x.date?.let { Dates.short(it) + " · " + Dates.relative(Dates.daysFromToday(it)) }, x.i.technician.takeIf { it.isNotBlank() }, if (x.i.priority != "Normale") x.i.priority else null,
                     if (x.i.source == "mastro") "storico Mastro" else null, x.i.reportNo.takeIf { x.i.signedAt.isNotBlank() }?.let { "firmato n. $it" }).filterNotNull().joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+                if (vm != null && x.i.source == "app" && x.i.signedAt.isBlank() && x.i.status != "Chiuso") QuickActions(vm, x.i, onSign = onClick)
+            }
+        }
+    }
+}
+
+/** Everyday actions one tap away: sign (opens the intervention), print to take along, close, postpone. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable private fun QuickActions(vm: AppViewModel, i: Intervention, onSign: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var later by remember { mutableStateOf(false) }
+    FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        androidx.compose.material3.AssistChip(onSign, { Text("Firma") }, leadingIcon = { Icon(Icons.Rounded.Draw, null, Modifier.size(16.dp)) })
+        androidx.compose.material3.AssistChip({ vm.printReport(i, ctx) }, { Text("Stampa") }, leadingIcon = { Icon(Icons.Rounded.Print, null, Modifier.size(16.dp)) })
+        androidx.compose.material3.AssistChip({ vm.saveIntervention(i.copy(status = "Chiuso"), quiet = true) { vm.notify("Intervento chiuso") } }, { Text("Chiudi") },
+            leadingIcon = { Icon(Icons.Rounded.Verified, null, Modifier.size(16.dp)) })
+        Box {
+            androidx.compose.material3.AssistChip({ later = true }, { Text("Posticipa") }, leadingIcon = { Icon(Icons.Rounded.CalendarMonth, null, Modifier.size(16.dp)) })
+            androidx.compose.material3.DropdownMenu(later, { later = false }) {
+                val today = LocalDate.now()
+                listOf("Domani" to today.plusDays(1), "Dopodomani" to today.plusDays(2), "Lunedì prossimo" to today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.MONDAY)),
+                    "Tra una settimana" to today.plusWeeks(1), "Tra due settimane" to today.plusWeeks(2), "Tra un mese" to today.plusMonths(1)).forEach { (l, d) ->
+                    DropdownMenuItem({ Column { Text(l); Text(Dates.short(d), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }, {
+                        later = false
+                        vm.saveIntervention(i.copy(date = d.toString(), status = if (i.status == "Aperto") "Pianificato" else i.status), quiet = true) { vm.notify("Intervento spostato a ${Dates.short(d)}") }
+                    })
+                }
             }
         }
     }
@@ -235,6 +267,12 @@ private val itabs = listOf("Da fare", "Chiusi", "Storico Mastro", "Tutti")
                     if (mailOn) Button({ mailDialog = true }, Modifier.weight(1f).height(52.dp), shape = MaterialTheme.shapes.medium) {
                         Icon(Icons.Rounded.Email, null); Text("  Email cliente") }
                 }
+            }
+            if (!ro && existing != null) androidx.compose.material3.FilledTonalButton({
+                saving = true
+                vm.saveIntervention(current(), quiet = true) { r -> vm.printReport(r, ctx) }.invokeOnCompletion { saving = false }
+            }, Modifier.fillMaxWidth().padding(top = 10.dp).height(52.dp), enabled = !saving && clientCode.isNotEmpty() && title.isNotBlank(), shape = MaterialTheme.shapes.medium) {
+                Icon(Icons.Rounded.Print, null); Text("  Stampa da portare dal cliente")
             }
             // the customer signs on the spot: the current edits are saved first, then the pad opens
             if (!ro) OutlinedButton({

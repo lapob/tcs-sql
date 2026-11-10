@@ -242,7 +242,7 @@ function overview(){
   ${todayCard()}
   ${state.italStatus?.error?`<div class="banner reveal" style="--i:5"><span class="orb">${icon('alert')}</span><div class="grow"><h3>Ital Retail: serve un nuovo accesso</h3><p>${esc(state.italStatus.error)}</p></div><button class="btn" data-go="ital">Casse Ital Retail ${icon('arrow')}</button></div>`:''}
   ${state.dtrStatus?.error?`<div class="banner reveal" style="--i:5"><span class="orb">${icon('alert')}</span><div class="grow"><h3>DTR-Service: serve un nuovo accesso</h3><p>${esc(state.dtrStatus.error)}</p></div><button class="btn" data-go="dtr">Registratori ${icon('arrow')}</button></div>`:''}
-  ${WEB&&me?.role==='admin'&&state.features?.backupError?`<div class="banner reveal" style="--i:5"><span class="orb">${icon('alert')}</span><div class="grow"><h3>Copia esterna dei backup non riuscita</h3><p>${esc(state.features.backupError)} Collega il disco: il server riprova da solo ogni ora.</p></div><button class="btn" data-go="settings">Impostazioni ${icon('arrow')}</button></div>`:''}
+  ${WEB&&(me?.role==='admin'||me?.role==='owner')&&state.features?.backupError?`<div class="banner reveal" style="--i:5"><span class="orb">${icon('alert')}</span><div class="grow"><h3>Copia esterna dei backup non riuscita</h3><p>${esc(state.features.backupError)} Collega il disco: il server riprova da solo ogni ora.</p></div><button class="btn" data-go="settings">Impostazioni ${icon('arrow')}</button></div>`:''}
   ${needSync?`<div class="banner reveal" style="--i:6"><span class="orb">${icon('sync')}</span><div class="grow"><h3>Completa le anagrafiche dei clienti</h3><p>Avvia una sincronizzazione: verranno letti indirizzi, telefoni, email, codici fiscali e ordini da MY Zucchetti.</p></div><button class="btn" data-go="sync">Come si fa ${icon('arrow')}</button></div>`:`<div class="banner reveal" style="--i:6"><span class="orb">${icon('shield')}</span><div class="grow"><h3>Archivio allineato con Zucchetti</h3><p>Ultima lettura dal portale: ${esc(lastCapture())}. ${WEB?'Tutto il team vede gli stessi dati, in tempo reale.':'I dati restano sul tuo computer.'}</p></div><button class="btn" data-go="sync">Dettagli ${icon('arrow')}</button></div>`}
   <div class="card reveal" style="--i:7"><div class="card-head"><div><h2>Prossime scadenze</h2><p>Licenze che scadono nei prossimi 60 giorni (e quelle appena scadute).</p></div><button class="btn ghost sm" data-go="expiry">Scadenziario ${icon('arrow')}</button></div>
    ${upcoming.map(r=>{const d=parseDate(r.expiry),n=dayDiff(d);return`<div class="list-row" data-client="${esc(r.clientCode)}"><span class="date-chip ${n<0?'bad':n<=30?'due':''}"><b>${d.getDate()}</b><span>${DF3.format(d)}</span></span><div class="grow"><strong>${esc(r.client)}</strong><small>${esc(famLabel(famOfScope(r.scope)))} · <span class="mono">${esc(r.serial)}</span></small></div><span class="in-days" style="color:var(--${n<0?'bad':n<=30?'due':'text-3'})">${rel(n)}</span></div>`;}).join('')||empty('calendar','Nessuna scadenza imminente','Nei prossimi 60 giorni non scade nessuna licenza.')}
@@ -271,7 +271,7 @@ function clientsPage(){
  const size=14;const cities=[...new Set(D.clients.map(c=>c.city).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'it'));
  const rows=pageOf(list,size);
  if(ui.clientView==='deleted')return deletedClientsPage();
- return`${hero('I tuoi <span class="grad">clienti</span>.','Anagrafica completa dal portale Zucchetti, unita a licenze, ordini e alle tue note.',`${isAdmin()?`<button class="btn accent" data-new-client>${icon('plus')}Nuovo cliente</button>`:''}<button class="btn" data-action="exportClients">${icon('download')}Esporta CSV</button>`)}
+ return`${hero('I tuoi <span class="grad">clienti</span>.','Anagrafica completa dal portale Zucchetti, unita a licenze, ordini e alle tue note.',`${canEditClients()?`<button class="btn accent" data-new-client>${icon('plus')}Nuovo cliente</button>`:''}<button class="btn" data-action="exportClients">${icon('download')}Esporta CSV</button>`)}
  ${explain('clients','<strong>Clicca su un cliente</strong> per aprire la sua scheda: contatti, licenze, ordini, promemoria e note. Le icone nella colonna Contatti ti permettono di <strong>chiamare, scrivere o aprire la mappa</strong> con un clic. Clicca sull’intestazione di una colonna per ordinarla.')}
  <div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Anagrafica<span class="count">${fmt(list.length)}</span></h2><p>${fmt(D.clients.filter(c=>c.registry).length)} schede dal portale Zucchetti · ${fmt(D.clients.filter(c=>c.mastro).length)} da MastroSQL · ${fmt(D.clients.filter(c=>c.meta.favorite).length)} preferiti</p></div>
   <div class="seg">${[['all','Tutti'],['fav','Preferiti'],['nocontact','Senza contatti'],...(isAdmin()&&D.deleted?.length?[['deleted',`Eliminati · ${D.deleted.length}`]]:[])].map(([k,l])=>`<button class="${ui.clientView===k?'active':''}" data-cview="${k}">${l}</button>`).join('')}</div></div>
@@ -403,7 +403,7 @@ const istCls=s=>({'Aperto':'info','Pianificato':'acc','In corso':'due','In attes
 const prioCls=p=>({'Urgente':'bad','Alta':'due','Bassa':''}[p]??'');
 function interventionsPage(){
  let list=D.interventions;const q=norm(ui.q);
- if(ui.itab==='open')list=list.filter(i=>i.status!=='Chiuso');else if(ui.itab==='closed')list=list.filter(i=>i.status==='Chiuso'&&i.source==='app');else if(ui.itab==='mastro')list=list.filter(i=>i.source==='mastro');
+ if(ui.itab==='open')list=list.filter(i=>i.status!=='Chiuso');else if(ui.itab==='mine')list=list.filter(i=>i.status!=='Chiuso'&&i.source==='app'&&me&&norm(i.technician)===norm(me.name));else if(ui.itab==='today')list=list.filter(i=>i.status!=='Chiuso'&&i.d&&dayDiff(i.d)<=0);else if(ui.itab==='closed')list=list.filter(i=>i.status==='Chiuso'&&i.source==='app');else if(ui.itab==='mastro')list=list.filter(i=>i.source==='mastro');
  if(q)list=list.filter(i=>norm([i.client,i.title,i.work,i.technician,i.machine].join(' ')).includes(q));
  if(ui.tech)list=list.filter(i=>i.technician===ui.tech);
  if(!['date','client','prio'].includes(ui.sort.key))ui.sort={key:'date',dir:-1};
@@ -413,33 +413,13 @@ function interventionsPage(){
  return`${hero('Gli <span class="grad">interventi</span>.','Assistenza tecnica: apri, assegna e chiudi gli interventi presso i clienti. Lo storico di Mastro resta consultabile.',`<button class="btn accent" data-action-local="newIntervention">${icon('plus')}Nuovo intervento</button>`)}
  ${explain('interventions','Crea un intervento con <strong>Nuovo intervento</strong> o dalla scheda di un cliente. Assegna un tecnico, una priorità e aggiornane lo stato fino a <span class="badge ok">Chiuso</span>. ' +(WEB?'Ogni modifica è visibile subito a tutto il team.':'')+' Gli interventi importati da Mastro sono in sola lettura.')}
  <div class="kpis" style="grid-template-columns:repeat(3,1fr)">${kpi('Aperti',D.openInterventions.length,'Da completare','tool','t-info','interventions',2)}${kpi('Urgenti o alta priorità',urgent,'Da fare per primi','alert','t-bad','interventions',3)}${kpi('Pianificati per oggi',today_,DF4.format(new Date()),'calendar','t-due','interventions',4)}</div>
- <div class="card reveal" style="--i:5"><div class="card-head"><div><h2>Elenco interventi<span class="count">${fmt(list.length)}</span></h2></div><div class="seg">${[['open','Da fare'],['closed','Chiusi'],['mastro','Storico Mastro'],['all','Tutti']].map(([k,l])=>`<button class="${ui.itab===k?'active':''}" data-itab="${k}">${l}</button>`).join('')}</div></div>
+ <div class="card reveal" style="--i:5"><div class="card-head"><div><h2>Elenco interventi<span class="count">${fmt(list.length)}</span></h2></div><div class="seg">${[['open','Da fare'],...(WEB&&me?[['mine','I miei']]:[]),['today','Oggi e in ritardo'],['closed','Chiusi'],['mastro','Storico Mastro'],['all','Tutti']].map(([k,l])=>`<button class="${ui.itab===k?'active':''}" data-itab="${k}">${l}</button>`).join('')}</div></div>
  <div class="toolbar">${search('Cerca cliente, lavoro, tecnico…')}<select class="select" id="f-tech"><option value="">Tutti i tecnici</option>${techs.map(t=>`<option${t===ui.tech?' selected':''}>${esc(t)}</option>`).join('')}</select></div>
  <div class="table-wrap"><table class="t-int"><thead><tr>${th('Data','date')}${th('Cliente','client')}<th>Intervento</th><th>Tecnico</th>${th('Priorità','prio')}<th>Stato</th><th></th></tr></thead><tbody>
- ${rows.map((i,k)=>`<tr class="reveal" style="--i:${k}" data-int="${esc(i.id)}" tabindex="0"><td>${i.d?dShort(i.d):'<span class="muted">—</span>'}<br><small class="muted">${i.d?rel(dayDiff(i.d)):''}</small></td><td><div class="who">${markEl(i.client,i.code||i.client)}<div><strong>${hl(i.client,ui.q)}</strong><small>${i.source==='mastro'?'Storico Mastro':esc(i.createdBy?'da '+i.createdBy:'')}</small></div></div></td><td><strong style="font-weight:560">${hl(i.title,ui.q)}</strong>${i.machine?`<br><small class="muted">${esc(machineLabel(i))}</small>`:''}</td><td>${i.technician?esc(i.technician):'<span class="muted">—</span>'}</td><td><span class="badge ${prioCls(i.priority)}">${esc(i.priority)}</span></td><td><span class="badge ${istCls(i.status)}">${esc(i.status)}</span></td><td><span class="row-go">${icon('chevron')}</span></td></tr>`).join('')||`<tr><td colspan="7">${empty('tool','Nessun intervento',ui.itab==='open'?'Non ci sono interventi da fare. Ottimo!':'Modifica i filtri o crea un nuovo intervento.')}</td></tr>`}
+ ${rows.map((i,k)=>`<tr class="reveal" style="--i:${k}" data-int="${esc(i.id)}" tabindex="0"><td>${i.d?dShort(i.d):'<span class="muted">—</span>'}<br><small class="muted">${i.d?rel(dayDiff(i.d)):''}</small></td><td><div class="who">${markEl(i.client,i.code||i.client)}<div><strong>${hl(i.client,ui.q)}</strong><small>${i.source==='mastro'?'Storico Mastro':esc(i.createdBy?'da '+i.createdBy:'')}</small></div></div></td><td><strong style="font-weight:560">${hl(i.title,ui.q)}</strong>${i.machine?`<br><small class="muted">${esc(machineLabel(i))}</small>`:''}</td><td>${i.technician?esc(i.technician):'<span class="muted">—</span>'}</td><td><span class="badge ${prioCls(i.priority)}">${esc(i.priority)}</span></td><td><span class="badge ${istCls(i.status)}">${i.signedAt?'Firmato':esc(i.status)}</span></td><td class="t-acts">${i.source==='app'?(i.signedAt?`<button class="icon-btn sm" data-iq="print" data-id="${esc(i.id)}" data-tip="Rapportino firmato" aria-label="Rapportino">${icon('print')}</button>`:`<button class="icon-btn sm" data-iq="sign" data-id="${esc(i.id)}" data-tip="Firma del cliente" aria-label="Firma">${icon('edit')}</button><button class="icon-btn sm" data-iq="print" data-id="${esc(i.id)}" data-tip="Stampa da portare dal cliente" aria-label="Stampa">${icon('print')}</button>${i.status==='Chiuso'?'':`<button class="icon-btn sm" data-iq="close" data-id="${esc(i.id)}" data-tip="Chiudi" aria-label="Chiudi">${icon('check')}</button><button class="icon-btn sm" data-iq="later" data-id="${esc(i.id)}" data-tip="Posticipa" aria-label="Posticipa">${icon('clock')}</button>`}`):''}<span class="row-go">${icon('chevron')}</span></td></tr>`).join('')||`<tr><td colspan="7">${empty('tool','Nessun intervento',ui.itab==='open'?'Non ci sono interventi da fare. Ottimo!':'Modifica i filtri o crea un nuovo intervento.')}</td></tr>`}
  </tbody></table></div>${pager(list.length,16)}</div>`;
 }
 function machineLabel(i){const c=i.c;const m=c?.machines.find(m=>m.id===i.machine||m.id==='m'+i.machine||m.serial===i.machine);return m?`${m.model||'Macchina'} · ${m.serial}`:(i.machine?'Macchina '+i.machine:'');}
-function machinesPage(){
- let list=D.machines;const q=norm(ui.q);
- if(ui.mtab==='active')list=list.filter(m=>m.active);else if(ui.mtab==='sub')list=list.filter(m=>m.subscribed);else if(ui.mtab==='ver')list=list.filter(m=>m.active&&m.verDays!==null&&m.verDays<=60);else if(ui.mtab==='end')list=list.filter(m=>m.subscribed&&m.endDays!==null&&m.endDays<=60);
- if(q)list=list.filter(m=>norm([m.client,m.model,m.serial,m.fiscalSerial,m.logo,m.type].join(' ')).includes(q));
- if(!['client','ver','end','model'].includes(ui.sort.key))ui.sort={key:'ver',dir:1};
- list=sortBy(list,{client:m=>m.client,model:m=>m.model,ver:m=>m.verNext?+m.verNext:Infinity,end:m=>m.end?+m.end:Infinity});
- const rows=pageOf(list,16);const dueCls=n=>n===null?'':n<0?'bad':n<=60?'due':'';
- return`${hero('Il <span class="grad">parco macchine</span>.','Registratori di cassa e dispositivi installati presso i clienti, con verificazioni periodiche e abbonamenti di assistenza.','')}
- ${explain('machines','Dati importati da <strong>MastroSQL</strong>. La <strong>prossima verificazione</strong> è stimata a 2 anni dall’ultima registrata in Mastro (verificazione periodica biennale dei registratori telematici): controlla sempre la data effettiva. Clicca una riga per aprire il cliente e creare un intervento.')}
- ${D.machines.length?'':`<div class="banner reveal" style="--i:2"><span class="orb">${icon('register')}</span><div class="grow"><h3>Importa il parco macchine da MastroSQL</h3><p>Da Impostazioni → Importa da MastroSQL, su un PC dove Mastro è installato.</p></div><button class="btn" data-go="settings">Vai alle impostazioni ${icon('arrow')}</button></div>`}
- <div class="kpis" style="grid-template-columns:repeat(3,1fr)">${kpi('Macchine attive',D.machines.filter(m=>m.active).length,`${fmt(D.machines.length)} in archivio`,'register','','machines',2)}${kpi('Verificazioni entro 60 gg',D.verDue.length,'Comprese quelle già scadute','shield','t-due','machines',3)}${kpi('Abbonamenti in scadenza',D.contractDue.length,`${fmt(D.machines.filter(m=>m.subscribed).length)} macchine in abbonamento`,'calendar','t-info','machines',4)}</div>
- <div class="card reveal" style="--i:5"><div class="card-head"><div><h2>Macchine<span class="count">${fmt(list.length)}</span></h2></div><div class="seg">${[['active','Attive'],['ver','Verifiche'],['end','Abbonamenti in scadenza'],['sub','In abbonamento'],['all','Tutte']].map(([k,l])=>`<button class="${ui.mtab===k?'active':''}" data-mtab="${k}">${l}</button>`).join('')}</div></div>
- <div class="toolbar">${search('Cerca cliente, modello, matricola, matricola fiscale…')}</div>
- <div class="table-wrap"><table><thead><tr>${th('Cliente','client')}${th('Modello','model')}<th>Matricola</th>${th('Prossima verificazione','ver')}${th('Fine abbonamento','end')}<th>Stato</th><th></th></tr></thead><tbody>
- ${rows.map((m,k)=>`<tr class="reveal" style="--i:${k}" ${m.code?`data-client="${esc(m.code)}" tabindex="0"`:''}><td><div class="who">${markEl(m.client,m.code||m.client)}<div><strong>${hl(m.client,ui.q)}</strong><small>${esc(m.c?.city||'')}</small></div></div></td><td>${hl(m.model||'—',ui.q)}${m.type?`<br><small class="muted">${esc(m.type)}</small>`:''}</td><td class="mono">${m.serial?`<button class="link-btn mono" data-device="${esc(m.serial)}" data-tip="Scheda unica: Mastro, DTR, Ital Retail, licenze e storia">${hl(m.serial,ui.q)}</button>`:'—'}${m.fiscalSerial?`<br><small class="muted">${hl(m.fiscalSerial,ui.q)}</small>`:''}</td>
-  <td>${m.verNext?`${dShort(m.verNext)}<br><small style="color:var(--${dueCls(m.verDays)==='bad'?'bad':dueCls(m.verDays)==='due'?'due':'text-3'})">${rel(m.verDays)}</small>`:'<span class="muted">—</span>'}</td>
-  <td>${m.subscribed?(m.end?`${dShort(m.end)}<br><small style="color:var(--${dueCls(m.endDays)==='bad'?'bad':dueCls(m.endDays)==='due'?'due':'text-3'})">${rel(m.endDays)}</small>`:'In abbonamento'):'<span class="muted">Nessuno</span>'}</td>
-  <td>${m.active?'<span class="badge ok">Attiva</span>':'<span class="badge">Dismessa</span>'}${m.dtr&&typeof dtrMini==='function'?dtrMini(m.dtr):''}${m.ital&&typeof italMini==='function'?italMini(m.ital):''}</td><td>${m.code?`<span class="row-go">${icon('chevron')}</span>`:''}</td></tr>`).join('')||`<tr><td colspan="7">${empty('register','Nessuna macchina',D.machines.length?'Modifica i filtri.':'Importa il parco macchine da MastroSQL.')}</td></tr>`}
- </tbody></table></div>${pager(list.length,16)}</div>`;
-}
 // Intervention editor (modal form). History from Mastro opens read-only.
 function openIntervention(id,clientCode){remember('i',id);
  const it=id?D.interventions.find(i=>i.id===id):null;const signed=!!it?.signedAt;const ro=it?.source==='mastro'||signed;
@@ -464,7 +444,7 @@ function openIntervention(id,clientCode){remember('i',id);
   ${typeof partsSection==='function'?partsSection(it?.parts||[],ro,v.technician):''}
   <label class="field">Lavoro svolto / note<textarea class="textarea" name="work" maxlength="20000" ${ro?'disabled':''} placeholder="Descrizione del problema e del lavoro eseguito…">${esc(v.work||'')}</textarea></label>
   ${it?`<p class="muted" style="font-size:12px">${it.source==='mastro'?'Importato da MastroSQL'+(it.total&&it.total!=='0'?' · totale documento '+esc(it.total)+' €':''):`Creato ${it.created?dTime(it.created):''} ${it.createdBy?'da '+esc(it.createdBy):''}${it.updated&&it.updated!==it.created?` · modificato ${dTime(it.updated)} ${it.updatedBy?'da '+esc(it.updatedBy):''}`:''}`}</p>`:''}
-  <div class="btn-row">${it&&it.source==='app'?(signed?`<button type="button" class="btn ghost need-export" data-m="unsign">Annulla firma</button><button type="button" class="btn" data-m="pdf">${icon('download')}PDF</button><button type="button" class="btn" data-m="print">${icon('print')}Stampa</button>${mailOn()?`<button type="button" class="btn accent" data-m="mail">${icon('mail')}Invia al cliente</button>`:''}`:`<button type="button" class="btn" data-m="sign">${icon('check')}Firma e rapportino</button>`):''}${it&&!ro?`<button type="button" class="btn ghost need-export" data-m="del" style="margin-right:auto;color:var(--bad)">Elimina</button>`:''}${c?`<button type="button" class="btn ghost" data-m="client">Apri cliente</button>`:''}<button type="button" class="btn ghost" data-m="0">${ro?'Chiudi':'Annulla'}</button>${ro?'':`<button class="btn accent" type="submit">${icon('check')}Salva</button>`}</div></form>`;
+  <div class="btn-row">${it&&it.source==='app'?(signed?`<button type="button" class="btn ghost need-export" data-m="unsign">Annulla firma</button><button type="button" class="btn" data-m="pdf">${icon('download')}PDF</button><button type="button" class="btn" data-m="print">${icon('print')}Stampa</button>${mailOn()?`<button type="button" class="btn accent" data-m="mail">${icon('mail')}Invia al cliente</button>`:''}`:`<button type="button" class="btn" data-m="print">${icon('print')}Stampa</button><button type="button" class="btn" data-m="later">${icon('clock')}Posticipa</button><button type="button" class="btn" data-m="sign">${icon('check')}Firma e rapportino</button>`):''}${it&&!ro?`<button type="button" class="btn ghost need-export" data-m="del" style="margin-right:auto;color:var(--bad)">Elimina</button>`:''}${c?`<button type="button" class="btn ghost" data-m="client">Apri cliente</button>`:''}<button type="button" class="btn ghost" data-m="0">${ro?'Chiudi':'Annulla'}</button>${ro?'':`<button class="btn accent" type="submit">${icon('check')}Salva</button>`}</div></form>`;
  document.body.append(m);hideTip();
  const form=m.querySelector('form');const clientInput=m.querySelector('#int-client');
  const resolve=()=>{const n=clientInput.value.trim();return D.clients.find(x=>x.name===n)||D.clients.find(x=>norm(x.name)===norm(n))||null;};
@@ -476,6 +456,7 @@ function openIntervention(id,clientCode){remember('i',id);
   if(b.dataset.m==='client'){close();openClient(c.code);}
   if(b.dataset.m==='pdf'){reportPdf(it.id);}
   if(b.dataset.m==='print'){printReport(it.id);}
+  if(b.dataset.m==='later'){close();intQuick('later',it.id);}
   if(b.dataset.m==='mail'){close();sendReportDialog({...it,c});}
   if(b.dataset.m==='unsign'){close();unsignReport(it);}
   if(b.dataset.m==='sign'){close();openSignature({...it,c:it.c});}
@@ -517,17 +498,17 @@ function teamPage(){
  if(!usersData){api('/api/users').then(d=>{usersData=d;if(page==='team')render(false);}).catch(e=>toast(e.message,'alert'));return hero('<span class="grad">Utenti</span> e accessi.','Caricamento…','');}
  const st=usersData.stationLastContact?new Date(usersData.stationLastContact):null;const stOk=st&&(Date.now()-st)<7*3600e3;
  return`${hero('<span class="grad">Utenti</span> e accessi.','Chi può usare Top Cash Studio, con quale ruolo, e la postazione che sincronizza Zucchetti.','')}
- ${explain('team','<strong>Amministratore</strong>: tutto, compresi utenti e backup. <strong>Ufficio</strong>: consulta, modifica note e promemoria, esporta. <strong>Tecnico</strong>: consulta e scrive note, senza esportare. Se cambi ruolo, disattivi un utente o reimposti la password, le sue sessioni aperte vengono chiuse subito.')}
+ ${rolesCard()}
  <div class="layout-2"><div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Utenti<span class="count">${usersData.users.length}</span></h2><p>${usersData.connected} dispositivi collegati in questo momento.</p></div></div>
   <div class="table-wrap"><table><thead><tr><th>Utente</th><th>Ruolo</th><th>Ultimo accesso</th><th>Stato</th><th></th></tr></thead><tbody>
   ${usersData.users.map(u=>`<tr><td><div class="who">${markEl(u.name,u.username)}<div><strong>${esc(u.name)}${u.username===me.username?' <span class="badge acc">tu</span>':''}</strong><small>${esc(u.username)}</small></div></div></td>
-   <td><select class="select" data-user-role="${esc(u.username)}">${[['admin','Amministratore'],['ufficio','Ufficio'],['tecnico','Tecnico']].map(([k,l])=>`<option value="${k}"${u.role===k?' selected':''}>${l}</option>`).join('')}</select></td>
+   <td>${u.role==='owner'&&me.role!=='owner'?`<span class="role-pill r-owner">${icon('star')}Proprietario</span>`:`<select class="select" data-user-role="${esc(u.username)}">${(u.role==='owner'?[['owner','Proprietario']]:[]).concat([...(me?.role==='owner'?[['owner','Proprietario']]:[]),['admin','Amministratore'],['ufficio','Amministrazione'],['tecnico','Tecnico']].filter(([k])=>k!=='owner'||u.role!=='owner')).map(([k,l])=>`<option value="${k}"${u.role===k?' selected':''}>${l}</option>`).join('')}</select>`}</td>
    <td>${u.lastLogin?dTime(u.lastLogin):'<span class="muted">mai</span>'}</td><td>${u.disabled?'<span class="badge bad">Disattivato</span>':'<span class="badge ok">Attivo</span>'}</td>
    <td><div class="btn-row"><button class="icon-btn sm" data-user-name="${esc(u.username)}" data-tip="Cambia nome" aria-label="Cambia nome">${icon('edit')}</button>${u.username===me.username?'<button class="btn sm ghost" data-go="settings">La tua password</button>':`<button class="btn sm ghost" data-user-del="${esc(u.username)}" data-tip="Elimina utente" aria-label="Elimina utente">${icon('close')}</button><button class="btn sm ghost" data-action-local="resetPwd" data-u="${esc(u.username)}">Nuova password</button><button class="btn sm ghost" data-action-local="toggleUser" data-u="${esc(u.username)}" data-d="${u.disabled?0:1}">${u.disabled?'Riattiva':'Disattiva'}</button>`}</div></td></tr>`).join('')}
   </tbody></table></div></div>
   <div class="stack"><form class="card reveal" style="--i:3" id="new-user"><h2>Nuovo utente</h2><p class="sub">Comunica nome utente e password al collega: potrà cambiarla dalle Impostazioni.</p>
    <div style="display:grid;gap:10px;margin-top:14px"><label class="field">Nome e cognome<input class="input" name="name" required maxlength="80"></label><label class="field">Nome utente<input class="input" name="username" required autocapitalize="none" spellcheck="false" placeholder="es. mario.rossi"></label>
-   <label class="field">Ruolo<select class="select" name="role"><option value="ufficio">Ufficio</option><option value="tecnico">Tecnico</option><option value="admin">Amministratore</option></select></label>
+   <label class="field">Ruolo<select class="select" name="role"><option value="tecnico">Tecnico</option><option value="ufficio">Amministrazione</option><option value="admin">Amministratore</option>${me.role==='owner'?'<option value="owner">Proprietario</option>':''}</select></label>
    <label class="field">Password iniziale<div style="display:flex;gap:6px"><input class="input mono" name="password" required minlength="10" value="${esc(newPassword||(newPassword=genPassword()))}"><button type="button" class="btn sm" data-action-local="genPwd" data-tip="Genera un’altra password">${icon('sync')}</button><button type="button" class="btn sm" data-copy="${esc(newPassword)}" data-tip="Copia">${icon('copy')}</button></div></label>
    <button class="btn accent" type="submit">${icon('plus')}Crea utente</button></div></form>
   <div class="card reveal" style="--i:4"><h2>Postazione di sincronizzazione</h2><p class="sub">Il PC d’ufficio che legge MY Zucchetti e invia i dati al server. Usa una chiave dedicata, mai la password di un utente.</p>
@@ -538,6 +519,15 @@ function teamPage(){
    ${host&&hostInfo?.syncStation?'<p class="sub" style="margin-top:10px"><span class="badge ok">Questo PC è la postazione di sincronizzazione</span></p>':''}
   </div></div></div>
  <div style="margin-top:16px">${devicesCard()}</div><div style="margin-top:16px">${securityCard()}</div>`;
+}
+// the four roles at a glance: what each one sees and can do
+function rolesCard(){
+ const R=[['owner','star','Proprietario','Poteri illimitati: tutto quello che fa un amministratore, più la gestione degli altri amministratori e dei proprietari. Nessuno può modificarlo o bloccarlo.'],
+  ['admin','shield','Amministratore','Tutto: dati, contabilità, magazzino, utenti, dispositivi, backup e impostazioni del server.'],
+  ['ufficio','euro','Amministrazione','Vede e lavora su tutto, contabilità compresa, ed esporta. Non gestisce utenti e impostazioni.'],
+  ['tecnico','tool','Tecnico','Vede tutto tranne la contabilità (fatture, scadenze, saldi e RiBa non arrivano proprio sul suo dispositivo). Interventi, firme e magazzino del furgone.']];
+ return`<div class="roles-grid reveal" style="--i:1">${R.map(([k,ic,l,t])=>`<div class="role-card r-${k}${(me.role===k)?' on':''}"><span class="role-ic">${icon(ic)}</span><div><strong>${l}${me.role===k?' <span class="badge acc">tu</span>':''}</strong><small>${t}</small></div></div>`).join('')}</div>
+  <p class="muted" style="font-size:12.5px;margin:-4px 0 14px">Se cambi ruolo, disattivi un utente o reimposti la password, le sue sessioni aperte vengono chiuse subito.</p>`;
 }
 function securityCard(){const list=(usersData.security||[]).slice(0,25);
  const ic=m=>/sospeso|bloccat/i.test(m)?'alert':/fuori ufficio/i.test(m)?'external':'shield';
@@ -558,7 +548,7 @@ function accountCard(i){if(!WEB||!me)return'';return`<form class="card reveal" s
  <div class="btn-row"><button class="btn sm primary" type="submit">Cambia password</button><button class="btn sm ghost" type="button" data-action-local="logout">Esci</button></div></div></form>`;}
 // ── e-mail for signed reports (administrators, shared server). The password is write-only: the server never sends it back.
 let mailCfg=null,backupInfo=null;
-function mailCard(i){if(!WEB||me?.role!=='admin')return'';
+function mailCard(i){if(!WEB||!(me?.role==='admin'||me?.role==='owner'))return'';
  if(!mailCfg){api('/api/settings/mail').then(d=>{mailCfg=d;if(page==='settings')render(false);}).catch(()=>{});return`<div class="card reveal" style="--i:${i}"><h2>Email rapportini</h2><p class="sub">Caricamento…</p></div>`;}
  const m=mailCfg;const sec=[['starttls','STARTTLS (porta 587)'],['ssl','SSL/TLS (porta 465)'],['none','Nessuna (sconsigliato)']];
  return`<form class="card reveal" style="--i:${i}" id="mail-form" autocomplete="off"><h2>Email rapportini ${m.ready?'<span class="badge ok">attivo</span>':'<span class="badge">non attivo</span>'}</h2>
@@ -571,7 +561,7 @@ function mailCard(i){if(!WEB||me?.role!=='admin')return'';
   <label class="check"><input type="checkbox" name="enabled" ${m.enabled?'checked':''}> Attiva l’invio dei rapportini ai clienti</label>
   ${m.hasPassword?`<label class="check"><input type="checkbox" name="clearPassword"> Cancella la password salvata</label>`:''}
   <div class="btn-row" style="margin-top:12px"><button type="button" class="btn sm ghost" data-mail-test>${icon('mail')}Email di prova</button><button class="btn sm accent" type="submit">${icon('check')}Salva</button></div></form>`;}
-function backupCard(i){if(!WEB||me?.role!=='admin')return'';
+function backupCard(i){if(!WEB||!(me?.role==='admin'||me?.role==='owner'))return'';
  if(!backupInfo){api('/api/settings/backup').then(d=>{backupInfo=d;if(page==='settings')render(false);}).catch(()=>{});return`<div class="card reveal" style="--i:${i}"><h2>Backup automatici</h2><p class="sub">Caricamento…</p></div>`;}
  const b=backupInfo,st=b.status||{};
  return`<form class="card reveal" style="--i:${i}" id="backup-form"><h2>Backup automatici ${st.error?'<span class="badge due">copia esterna non riuscita</span>':b.config.external?'<span class="badge ok">attivi</span>':''}</h2>
@@ -650,28 +640,11 @@ document.addEventListener('change',async e=>{const u=e.target.dataset?.userRole;
 function openClient(code,keep){const c=D.byCode.get(code);if(!c)return;if(!keep)remember('c',code);drawerCode=code;const d=$('#drawer');const wasOpen=!d.hidden;$('#drawer-backdrop').hidden=false;d.hidden=false;if(!keep&&!wasOpen){d.classList.remove('out');}d.classList.toggle('keep',!!keep);
  const m=c.meta;const fact=(label,value,copyable)=>`<div class="fact"><small>${label}</small><span>${value?esc(value):'<span class="muted">—</span>'}${value&&copyable?`<button class="copy" data-copy="${esc(value)}" aria-label="Copia">${icon('copy')}</button>`:''}</span></div>`;
  const scroll=d.scrollTop;
- d.innerHTML=`<div class="d-head"><span class="tag">Scheda cliente</span><div class="btn-row">${isAdmin()?`<button class="btn sm ghost" data-edit-client="${esc(c.code)}">${icon('edit')}Modifica</button>`:''}<button class="icon-btn" data-close aria-label="Chiudi">${icon('close')}</button></div></div><div class="d-body">
- <div class="d-profile">${markEl(c.name,c.code)}<div><h2>${esc(c.name)}</h2><p>Codice cliente ${esc(c.code)} ${badge(c.status)}</p></div></div>
- <div class="quick"><button ${telOk(c.phone)?`data-ext="tel:${esc(c.phone.replace(/[^\d+]/g,''))}"`:'disabled'}>${icon('phone')}Chiama</button><button ${c.email?`data-ext="mailto:${esc(c.email)}"`:'disabled'}>${icon('mail')}Email</button><button ${c.address?`data-ext="${mapsUrl(c)}"`:'disabled'}>${icon('pin')}Mappa</button><button class="${m.favorite?'on':''}" data-fav="${esc(c.code)}">${icon('star')}${m.favorite?'Preferito':'Aggiungi'}</button></div>
- <div class="d-section"><h3>Anagrafica ${c.registry||c.mastro?'':'<span class="badge" data-tip="Completa con una sincronizzazione Zucchetti o un’importazione da MastroSQL">parziale</span>'}${c.mastroOnly?'<span class="badge info" data-tip="Cliente presente solo in MastroSQL">Mastro</span>':''}${c.edit?`<span class="badge acc" data-tip="${esc(c.edit.created?'Creato a mano':'Dati corretti a mano')}${c.edit.updatedBy?' da '+esc(c.edit.updatedBy):''}">${c.edit.created?'creato a mano':'modificato'}</span>`:''}</h3><div class="facts">${fact('Partita IVA',c.vat,1)}${fact('Codice fiscale',c.taxCode,1)}${fact('Telefono',c.phones.join(' · ')||c.phone,1)}${fact('Email',c.emails.join(' · ')||c.email,1)}${fact('Indirizzo',c.address,1)}${fact('Località',c.city)}${fact('Prodotti',c.families.map(famLabel).join(', '))}${fact('Installatore',c.installer)}${c.pec?fact('PEC',c.pec,1):''}${c.contact?fact('Referente',c.contact):''}${c.category?fact('Categoria',c.category):''}</div></div>
- <div class="d-section"><h3>Promemoria</h3><div class="form-row"><label class="field">Stato<select class="select" id="m-state">${['','Da contattare','In attesa','Completato'].map(s=>`<option value="${s}"${(m.followupState||'')===s?' selected':''}>${s||'Nessuno'}</option>`).join('')}</select></label><label class="field">Prossimo contatto<input type="date" class="input" id="m-date" value="${esc(m.nextContact||'')}"></label></div>
-  <label class="field">Note<textarea class="textarea" id="m-note" placeholder="Accordi, preferenze, cose da ricordare…">${esc(c.note)}</textarea></label><div class="btn-row" style="margin-top:10px"><button class="btn primary sm" data-save="${esc(c.code)}">${icon('check')}Salva</button><span class="muted" style="font-size:12px;align-self:center">${WEB?'Visibile a tutto il team.':'Salvato solo sul tuo computer.'}</span></div></div>
- <div class="d-section"><h3>Interventi <span><button class="btn sm ghost" data-newint="${esc(c.code)}">${icon('plus')}Nuovo</button></span></h3>${c.interventions.slice(0,12).map(i=>`<div class="list-row" data-int="${esc(i.id)}"><div class="grow"><strong>${esc(i.title)}</strong><small>${i.d?dShort(i.d):'—'}${i.technician?' · '+esc(i.technician):''}${i.source==='mastro'?' · storico Mastro':''}</small></div><span class="badge ${istCls(i.status)}">${esc(i.status)}</span></div>`).join('')||'<p class="sub">Nessun intervento registrato.</p>'}${c.interventions.length>12?`<p class="sub">e altri ${c.interventions.length-12} nella pagina Interventi.</p>`:''}</div>
- ${c.machines.length?`<div class="d-section"><h3>Macchine installate <span>${c.machines.length}</span></h3>${c.machines.map(m=>`<div class="lic"><div class="lic-top"><strong>${esc(m.model||'Macchina')} <span class="mono muted">${esc(m.serial)}</span></strong>${m.active?'<span class="badge ok">Attiva</span>':'<span class="badge">Dismessa</span>'}</div><div class="lic-meta"><div>Matricola fiscale<b class="mono">${esc(m.fiscalSerial||'—')}</b></div><div>Installata<b>${m.installed?dShort(parseDate(m.installed)):'—'}</b></div><div>Ultima verificazione<b>${m.ver?dShort(m.ver):'—'}</b></div>${m.dtr?`<div>Giornale elettronico (DTR)<b>GE ${m.dtr.geNumber||'—'} · ${dShort(parseDate(m.dtr.geDue))}</b></div><div>Ultima chiusura (DTR)<b>${m.dtr.lastSync?dShort(parseDate(m.dtr.lastSync))+' '+m.dtr.lastSync.slice(11,16):'mai'}${m.dtr.lastZ?' · Z '+fmt(m.dtr.lastZ):''}</b></div><div>Firmware (DTR)<b>${esc(m.dtr.firmware||'—')}</b></div>`:''}<div>Prossima (stimata)<b>${m.verNext?dShort(m.verNext):'—'}</b>${m.verNext?`<span style="color:var(--${m.verDays<0?'bad':m.verDays<=60?'due':'text-3'})">${rel(m.verDays)}</span>`:''}</div><div>Abbonamento<b>${m.subscribed?(m.end?'fino al '+dShort(m.end):'Sì'):'No'}</b></div><div>Importo<b>${m.amount&&m.amount!=='0'?esc(m.amount)+' €':'—'}</b></div></div>${m.notes?`<p class="sub" style="margin-top:8px;white-space:pre-line">${esc(m.notes)}</p>`:''}</div>`).join('')}</div>`:''}
- ${c.mastro?`<div class="d-section"><h3>Dati MastroSQL <span class="muted">cod. ${esc(c.mastro.code)}</span></h3><div class="facts">${fact('Indirizzo completo',[c.mastro.address,[c.mastro.cap,c.mastro.city,c.mastro.prov&&'('+c.mastro.prov+')'].filter(Boolean).join(' ')].filter(Boolean).join(', '),1)}${fact('Zona',c.mastro.zone)}${fact('Telefoni',c.mastro.phones.join(' · '),1)}${fact('Email',c.mastro.emails.join(' · '),1)}${fact('PEC',c.mastro.pec,1)}${fact('Codice fiscale',c.mastro.taxCode,1)}</div>
-  ${c.mastro.notes?`<p class="sub" style="margin-top:10px;white-space:pre-line">${esc(c.mastro.notes)}</p>`:''}
-  ${Object.keys(c.mastro.extra||{}).length?`<details class="extra"><summary>Altri dati da Mastro (${Object.keys(c.mastro.extra).length})</summary><div class="facts">${Object.entries(c.mastro.extra).map(([k,v])=>fact(esc(k.replace(/_/g,' ').toLowerCase()),v,1)).join('')}</div></details>`:''}</div>`:''}
- ${typeof dtrClientSection==='function'?dtrClientSection(c):''}
- ${typeof italClientSection==='function'?italClientSection(c):''}
- ${typeof workClientSection==='function'?workClientSection(c):''}
- ${typeof accClientSection==='function'?accClientSection(c):''}
- <div class="d-section"><h3>Licenze <span>${c.records.length}</span></h3>${c.records.map(r=>{const d=parseDate(r.expiry),n=dayDiff(d);return`<div class="lic"><div class="lic-top"><strong>${esc(famLabel(famOfScope(r.scope)))} <span class="mono muted">${esc(r.serial)}</span></strong><span class="row-act">${badge(licenseStatus(r))} ${licNote(r)}${licEditBtn(r)}</span></div>${D.licEdits?.[r.id]?.note?`<p class="lic-note">${esc(D.licEdits[r.id].note)}</p>`:''}<div class="lic-meta"><div>Scadenza<b>${d?dShort(d):'—'}</b>${d?`<span style="color:var(--${n<0?'bad':n<=30?'due':'text-3'})">${rel(n)}</span>`:''}</div><div>Versione<b>${esc(r.version)||'—'}</b></div><div>Elenco<b>${isCurrent(r)?'Corrente':'Storico'}</b></div><div>Rilasciata<b>${esc((r.released||'—').slice(0,10))}</b></div><div>Aggiornata<b>${esc((r.updated||'—').slice(0,10))}</b></div><div>Blocco<b>${esc(r.blocked)||'—'}</b></div></div></div>`;}).join('')||'<p class="sub">Nessuna licenza negli elenchi letti.</p>'}</div>
- <div class="d-section"><h3>Ordini <span>${c.orders.length}</span></h3>${c.orders.slice(0,20).map(o=>`<div class="list-row" style="cursor:default"><div class="grow"><strong class="mono">${esc(o.number)} <span class="muted">· ${esc(o.serial||'')}</span></strong><small>${o.d?dShort(o.d):esc(o.date)} · ${esc(famLabel(o.family))}</small></div><span class="badge ${orderCls(o.status)}">${esc(o.status)}</span></div>`).join('')||'<p class="sub">Nessun ordine collegato.</p>'}</div>
- </div>`;
+ d.innerHTML=clientCard(c,fact);
  if(keep)d.scrollTop=scroll;else d.querySelector('[data-close]').focus({preventScroll:true});
 }
 function closeDrawer(){const d=$('#drawer');if(d.hidden)return;d.classList.add('out');$('#drawer-backdrop').classList.add('out');setTimeout(()=>{d.hidden=true;d.classList.remove('out');$('#drawer-backdrop').hidden=true;$('#drawer-backdrop').classList.remove('out');},280);drawerCode=null;}
-function saveMeta(code,patch){const old=state.metadata[code]||{favorite:false,nextContact:'',followupState:''};const meta={favorite:!!old.favorite,nextContact:old.nextContact||'',followupState:old.followupState||'',...patch};state.metadata[code]=meta;derive();if(typeof applyEdits==='function')applyEdits();if(typeof deriveDtr==='function')deriveDtr();if(typeof deriveItal==='function')deriveItal();if(typeof deriveWork==='function')deriveWork();send('meta',{code,meta});render(false);openClient(code,true);}
+function saveMeta(code,patch){const old=state.metadata[code]||{favorite:false,nextContact:'',followupState:''};const meta={favorite:!!old.favorite,nextContact:old.nextContact||'',followupState:old.followupState||'',...patch};state.metadata[code]=meta;derive();if(typeof applyEdits==='function')applyEdits();if(typeof deriveDtr==='function')deriveDtr();if(typeof deriveItal==='function')deriveItal();if(typeof deriveRegisters==='function')deriveRegisters();if(typeof deriveWork==='function')deriveWork();send('meta',{code,meta});render(false);openClient(code,true);}
 
 // ───────────────────────── command palette
 const MAIN_TABS=['overview','clients','interventions','warehouse'];
@@ -680,7 +653,10 @@ let cmdSel=0,cmdItems=[];
 function remember(k,id){if(!id)return;const r=store.get('recent',[]).filter(x=>!(x.k===k&&x.id===id));r.unshift({k,id});store.set('recent',r.slice(0,6));}
 function recentItems(){return store.get('recent',[]).map(({k,id})=>{if(k==='c'){const c=D.byCode.get(id);return c&&{g:'Aperti di recente',t:c.name,s:[c.city,c.phone].filter(Boolean).join(' · '),mark:c,run:()=>openClient(c.code)};}
  const i=D.interventions.find(x=>x.id===id);return i&&{g:'Aperti di recente',t:i.title||'Intervento',s:(i.c?.name||i.clientName||'')+' · '+i.status,ic:'tool',run:()=>openIntervention(i.id)};}).filter(Boolean);}
-const isAdmin=()=>!WEB||me?.role==='admin';
+const isAdmin=()=>!WEB||(me?.role==='admin'||me?.role==='owner');
+// every role can create and edit customers; deleting, restoring and merging stay with administrators
+const canEditClients=()=>!WEB||!!me;
+const canAccounting=()=>!WEB||(!!me&&me.role!=='tecnico');
 // warehouse management: administrators only
 const HAS_W=()=>typeof W!=='undefined'&&W&&isAdmin();
 // quick actions shared by the palette, the "Nuovo" menu and the keyboard shortcuts
@@ -690,7 +666,7 @@ function quickActions(){const a=[{t:'Nuovo intervento',s:'N',ic:'tool',run:()=>o
 function openCmd(){$('#cmd').hidden=false;const i=$('#cmd-q');i.value=ui.q||'';cmdRender();setTimeout(()=>{i.focus();i.select();},10);}
 function closeCmd(){$('#cmd').hidden=true;}
 function cmdRender(){const q=norm($('#cmd-q').value.trim());const out=[];
- Object.entries(PAGES).forEach(([k,l],i)=>{if(k==='team'&&!(WEB&&me?.role==='admin'))return;if((k==='warehouse'||k==='check')&&!isAdmin())return;if(!q||norm(l).includes(q))out.push({g:'Sezioni',t:l,s:'Alt + '+(i+1),ic:{overview:'home',clients:'users',licenses:'key',expiry:'calendar',orders:'bag',tasks:'task',sync:'sync',settings:'settings',team:'shield',interventions:'tool',machines:'register',warehouse:'box',accounting:'euro',route:'pin',renewals:'phone',inventory:'grid',check:'check',dtr:'shield',ital:'register'}[k],run:()=>go(k)});});
+ Object.entries(PAGES).forEach(([k,l],i)=>{if(k==='team'&&!(WEB&&(me?.role==='admin'||me?.role==='owner')))return;if((k==='warehouse'||k==='check')&&!isAdmin())return;if(k==='accounting'&&!canAccounting())return;if(!q||norm(l).includes(q))out.push({g:'Sezioni',t:l,s:'Alt + '+(i+1),ic:{overview:'home',clients:'users',licenses:'key',expiry:'calendar',orders:'bag',tasks:'task',sync:'sync',settings:'settings',team:'shield',interventions:'tool',machines:'register',warehouse:'box',accounting:'euro',route:'pin',renewals:'phone',inventory:'grid',check:'check',dtr:'shield',ital:'register'}[k],run:()=>go(k)});});
  if(q){D.clients.filter(c=>c.search.includes(q)).slice(0,8).forEach(c=>out.push({g:'Clienti',t:c.name,s:[c.city,c.phone,c.email].filter(Boolean).join(' · ')||'Cod. '+c.code,mark:c,run:()=>openClient(c.code)}));
   state.records.filter(r=>norm(r.serial).includes(q)).slice(0,5).forEach(r=>out.push({g:'Matricole',t:r.serial,s:r.client+' · scade '+(r.expiry||'—'),ic:'key',run:()=>openClient(r.clientCode)}));
   if(HAS_W())W.items.filter(i=>i.search.includes(q)).slice(0,5).forEach(i=>out.push({g:'Magazzino',t:i.name,s:i.code+(i.barcode?' · '+i.barcode:'')+' · giacenza '+qf(i.total)+' '+i.unit,ic:'box',run:()=>openArticle(i.code)}));
@@ -705,10 +681,10 @@ function cmdRun(i){const it=cmdItems[i];if(!it)return;closeCmd();it.run();}
 // ───────────────────────── render & navigation
 function render(animate){
  if(!D)return;const main=$('#main');const scroll=main.scrollTop;const focus=document.activeElement?.id;const caret=document.activeElement?.selectionStart;
- if(page==='team'&&!(WEB&&me?.role==='admin'))page='overview';
+ if(page==='team'&&!(WEB&&(me?.role==='admin'||me?.role==='owner')))page='overview';
  if(page==='warehouse'&&!isAdmin())page='overview';
- if(page==='apps'&&!(WEB&&!host))page='overview';
- const html={overview,clients:clientsPage,licenses:licensesPage,expiry:expiryPage,orders:ordersPage,tasks:tasksPage,sync:syncPage,settings:settingsPage,team:teamPage,apps:typeof appsPage==='function'?appsPage:overview,interventions:interventionsPage,machines:machinesPage,route:typeof routePage==='function'?routePage:overview,renewals:typeof renewalsPage==='function'?renewalsPage:overview,inventory:typeof inventoryPage==='function'?inventoryPage:overview,check:typeof checkPage==='function'?checkPage:overview,dtr:typeof dtrPage==='function'?dtrPage:overview,ital:typeof italPage==='function'?italPage:overview,warehouse:typeof warehousePage==='function'?warehousePage:overview,accounting:typeof accountingPage==='function'?accountingPage:overview}[page]||overview;
+ if(page==='accounting'&&!canAccounting())page='overview';
+ const html={overview,clients:clientsPage,licenses:licensesPage,expiry:expiryPage,orders:ordersPage,tasks:tasksPage,sync:syncPage,settings:settingsPage,team:teamPage,apps:typeof appsPage==='function'?appsPage:overview,interventions:interventionsPage,machines:typeof machinesPage==='function'?machinesPage:overview,route:typeof routePage==='function'?routePage:overview,renewals:typeof renewalsPage==='function'?renewalsPage:overview,inventory:typeof inventoryPage==='function'?inventoryPage:overview,check:typeof checkPage==='function'?checkPage:overview,dtr:typeof dtrPage==='function'?dtrPage:overview,ital:typeof italPage==='function'?italPage:overview,warehouse:typeof warehousePage==='function'?warehousePage:overview,accounting:typeof accountingPage==='function'?accountingPage:overview}[page]||overview;
  document.body.classList.toggle('anim',!!animate&&!reduced);
  // live update on the same page: remember the numbers shown, to roll only the ones that change
  const before=!animate&&lastRendered===page?$$('#main [data-count]').map(el=>+el.dataset.count):null;
@@ -856,7 +832,7 @@ $('#drawer-backdrop').addEventListener('click',closeDrawer);
 // phone: 4 main sections in the bottom bar, the rest in the "Altro" sheet
 $('#nav-more').addEventListener('click',openMoreSheet);
 function openMoreSheet(){if(document.querySelector('.more-sheet'))return;
- const items=$$('.nav-item[data-page]').filter(b=>!MAIN_TABS.includes(b.dataset.page)&&!(b.dataset.page==='team'&&!(WEB&&me?.role==='admin'))&&!(b.dataset.page==='warehouse'&&!isAdmin())&&!(b.dataset.page==='check'&&!isAdmin())&&!(b.dataset.page==='apps'&&!(WEB&&!host)));
+ const items=$$('.nav-item[data-page]').filter(b=>!MAIN_TABS.includes(b.dataset.page)&&!(b.dataset.page==='team'&&!(WEB&&(me?.role==='admin'||me?.role==='owner')))&&!(b.dataset.page==='warehouse'&&!isAdmin())&&!(b.dataset.page==='check'&&!isAdmin())&&!(b.dataset.page==='accounting'&&!canAccounting()));
  const m=document.createElement('div');m.className='modal more-sheet';
  m.innerHTML=`<div class="sheet-box" role="dialog" aria-label="Altre sezioni"><i class="grip"></i><div class="more-grid">${items.map((b,i)=>{const em=b.querySelector('em.hot')?.textContent||'';return`<button class="more-item${b.dataset.page===page?' on':''}" data-more="${b.dataset.page}" style="--i:${i}">${b.querySelector('svg').outerHTML}<span>${b.querySelector('span').textContent}</span>${em?`<em>${esc(em)}</em>`:''}</button>`;}).join('')}</div></div>`;
  document.body.append(m);
@@ -874,9 +850,25 @@ addEventListener('resize',moveIndicator);
 
 // ───────────────────────── performance profile
 // "auto" measures the real frame rate at startup and picks the lighter profile on slow or low-memory PCs.
+// It also keeps watching while the app is used: data saver, low battery, reduced transparency and real stutters
+// switch to the light profile by themselves, and back when the reason goes away.
+let perfTemp=false;
 function applyPerf(){const pref=store.get('perf','auto');let lite=pref==='lite';
- if(pref==='auto')lite=store.get('perf.detected',null)??((navigator.hardwareConcurrency||8)<=4||(navigator.deviceMemory||8)<=4);
- document.documentElement.dataset.perf=lite?'lite':'full';}
+ if(pref==='auto')lite=perfTemp||!!navigator.connection?.saveData||matchMedia('(prefers-reduced-transparency: reduce)').matches||(store.get('perf.detected',null)??((navigator.hardwareConcurrency||8)<=4||(navigator.deviceMemory||8)<=4));
+ const v=lite?'lite':'full';if(document.documentElement.dataset.perf!==v)document.documentElement.dataset.perf=v;}
+(function watchPerf(){
+ try{navigator.connection?.addEventListener?.('change',applyPerf);}catch{}
+ try{matchMedia('(prefers-reduced-transparency: reduce)').addEventListener('change',applyPerf);}catch{}
+ // battery saver: below 20% and not charging the effects step aside until the device is plugged in
+ navigator.getBattery?.().then(b=>{const f=()=>{const t=!b.charging&&b.level<=.2;if(t!==perfTemp){perfTemp=t;applyPerf();}};f();b.addEventListener('levelchange',f);b.addEventListener('chargingchange',f);}).catch(()=>{});
+ // real stutters while the person uses the app: many long frames in a short time → light profile, remembered
+ let hits=[];const type=PerformanceObserver.supportedEntryTypes?.includes('long-animation-frame')?'long-animation-frame':PerformanceObserver.supportedEntryTypes?.includes('longtask')?'longtask':null;
+ if(!type)return;
+ try{new PerformanceObserver(l=>{if(store.get('perf','auto')!=='auto'||document.documentElement.dataset.perf==='lite'||document.hidden)return;
+  const now=performance.now();for(const e of l.getEntries())if(e.duration>=(type==='longtask'?150:120))hits.push(now);
+  hits=hits.filter(t=>now-t<15000);
+  if(hits.length>=8){hits=[];store.set('perf.detected',true);applyPerf();}}).observe({type,buffered:false});}catch{}
+})();
 function probeFps(){if(store.get('perf','auto')!=='auto')return;let n=0,t0=0;const step=t=>{if(!t0)t0=t;if(++n<40)return requestAnimationFrame(step);const ms=(t-t0)/39;// average frame time while the aurora and splash animate
  const lite=ms>22||(navigator.hardwareConcurrency||8)<=2;if(document.visibilityState==='visible'&&ms<200){store.set('perf.detected',lite);applyPerf();}};setTimeout(()=>requestAnimationFrame(step),1200);}
 function setPerf(v){store.set('perf',v);if(v==='auto')store.set('perf.detected',null);applyPerf();if(v==='auto')probeFps();render(false);toast(v==='lite'?'Modalità leggera attiva: massima fluidità':v==='full'?'Effetti completi attivi':'Prestazioni in automatico');}
@@ -898,12 +890,13 @@ function receive(v){
  if(v.type==='mastro'){mastroState=v;if(v.stage==='preview'){mastroState=null;mastroPreview(v);}if(page==='settings')render(false);if(v.ok===false)toast(v.error,'alert');return;}
  if(v.type==='host'){hostInfo={...hostInfo,...v};offerPublic();if(v.syncStation)document.documentElement.dataset.station='1';else delete document.documentElement.dataset.station;if(page==='settings'||page==='team'||page==='sync')render(false);return;}
  if(v.type!=='state')return;
- state={...state,...v,clients:v.clients||[],orders:v.orders||[],mastroClients:v.mastroClients||[],machines:v.machines||[],interventions:v.interventions||[],warehouses:v.warehouses||[],articles:v.articles||[],stockLevels:v.stockLevels||[],stock:v.stock||[],movements:v.movements||[],invoices:v.invoices||[],dues:v.dues||[],balances:v.balances||[],dueNotes:v.dueNotes||{},metadata:v.metadata||{},notes:v.notes||{}};derive();if(typeof applyEdits==='function')applyEdits();if(typeof deriveDtr==='function')deriveDtr();if(typeof deriveItal==='function')deriveItal();if(typeof deriveWork==='function')deriveWork();
+ state={...state,...v,clients:v.clients||[],orders:v.orders||[],mastroClients:v.mastroClients||[],machines:v.machines||[],interventions:v.interventions||[],warehouses:v.warehouses||[],articles:v.articles||[],stockLevels:v.stockLevels||[],stock:v.stock||[],movements:v.movements||[],invoices:v.invoices||[],dues:v.dues||[],balances:v.balances||[],dueNotes:v.dueNotes||{},metadata:v.metadata||{},notes:v.notes||{}};derive();if(typeof applyEdits==='function')applyEdits();if(typeof deriveDtr==='function')deriveDtr();if(typeof deriveItal==='function')deriveItal();if(typeof deriveRegisters==='function')deriveRegisters();if(typeof deriveWork==='function')deriveWork();
  render(firstState);firstState=false;if(typeof pendingOpen!=='undefined'&&pendingOpen&&D.byCode.has(pendingOpen)){const pc=pendingOpen;pendingOpen='';openClient(pc);}else if(drawerCode){if(D.byCode.has(drawerCode)&&!D.deleted?.some(x=>x.code===drawerCode))openClient(drawerCode,true);else closeDrawer();}
- $('#splash').classList.add('gone');
+ $('#splash')?.classList.add('gone');
 }
 // ───────────────────────── shared server: session, live updates, offline
-function applyRole(){document.documentElement.dataset.role=WEB?(me?.role||'none'):'admin';
+// owner = administrator with unlimited powers: the page treats them as admin, data-owner unlocks what only they can do
+function applyRole(){const r=WEB?(me?.role||'none'):'admin';document.documentElement.dataset.role=r==='owner'?'admin':r;if(r==='owner')document.documentElement.dataset.owner='1';else delete document.documentElement.dataset.owner;
  const foot=$('.company');if(WEB&&me){foot.innerHTML=`<span class="avatar">${esc(initials(me.name))}</span><div><strong>${esc(me.name)}</strong><small id="side-status">${esc(me.roleLabel)}</small></div>`;}}
 let loadTimer=0,loading=false,again=false;
 function scheduleLoad(){clearTimeout(loadTimer);loadTimer=setTimeout(loadState,250);}
@@ -927,8 +920,9 @@ async function loadState(){if(loading){again=true;return;}loading=true;
    // unchanged sections are handed over as copies: the views may decorate the objects they receive, the pristine copy stays clean
    v={...s};for(const k of Object.keys(raw))if(!fresh.includes(k))v[k]=structuredClone(raw[k]);saveRaw();}
   else{raw=s;v=structuredClone(s);}
-  receive({type:'state',...v,syncRunning:state.syncRunning,syncProgress:state.syncProgress,portalConnected:state.portalConnected});
- }catch{setOffline(true);if(firstState)$('#splash').classList.add('gone');}
+  // a problem while drawing the data is not a lost connection: report it, keep the "online" state
+  try{receive({type:'state',...v,syncRunning:state.syncRunning,syncProgress:state.syncProgress,portalConnected:state.portalConnected});}catch(e){console.error('Errore nella visualizzazione dei dati',e);}
+ }catch{setOffline(true);if(firstState)$('#splash')?.classList.add('gone');}
  finally{loading=false;if(again){again=false;scheduleLoad();}}}
 let es=null;
 function openStream(){es?.close();es=new EventSource('/api/stream');
@@ -942,7 +936,7 @@ addEventListener('online',()=>{scheduleLoad();if(es?.readyState===2)openStream()
 document.addEventListener('visibilitychange',()=>{if(WEB&&me&&document.visibilityState==='visible'){scheduleLoad();if(!es||es.readyState===2)openStream();}});
 
 function showAuth(kind,err=''){
- $('#splash').classList.add('gone');es?.close();const a=$('#auth');a.hidden=false;
+ $('#splash')?.classList.add('gone');es?.close();const a=$('#auth');a.hidden=false;
  const setup=kind==='setup';
  a.innerHTML=`<form class="auth-card" id="auth-form" autocomplete="on">
   <img src="assets/tcs-app@2x.png" alt="Top Cash Service" class="auth-logo">
@@ -967,7 +961,7 @@ function deviceName(){const u=navigator.userAgent;const os=/iPhone/.test(u)?'iPh
 const devicePlatform=()=>host?'Windows (app)':'Browser';
 let devTimer=0;
 function showDevice(status,code){
- $('#splash').classList.add('gone');es?.close();clearTimeout(devTimer);const a=$('#auth');a.hidden=false;const blocked=status==='revoked';
+ $('#splash')?.classList.add('gone');es?.close();clearTimeout(devTimer);const a=$('#auth');a.hidden=false;const blocked=status==='revoked';
  a.innerHTML=`<div class="auth-card device-card">
   <img src="assets/tcs-app@2x.png" alt="Top Cash Service" class="auth-logo">
   <h1>${blocked?'Dispositivo bloccato':'Verifica del dispositivo'}</h1>
@@ -988,11 +982,11 @@ async function bootWeb(){
  const hello=post('/api/device/hello',{name:deviceName(),platform:devicePlatform()}).catch(()=>null),session=api('/api/session');session.catch(()=>{});
  try{const h=await hello;if(h?.remote&&h.status==='revoked'){earlyState=null;return showDevice(h.status,h.code);} // no answer (server down, no network): go on with the saved copy, the offline bar says so
   const s=await session;if(s.setupNeeded)return showAuth('setup');if(!s.user)return showAuth('login');me=s.user;startWeb();}
- catch{$('#splash').classList.add('gone');$('#main').innerHTML=`<div class="error-box"><img src="assets/tcs-app@2x.png" alt="Top Cash Service" class="tile"><h2>Server non raggiungibile</h2><p>Il server dell’ufficio non risponde: può essere spento o senza connessione. Controlla anche la tua rete.</p><p class="muted" style="font-size:13px;margin-top:6px">Riprovo da solo ogni 20 secondi.</p><p style="margin-top:16px"><button class="btn accent" data-action-local="reload">Riprova ora</button></p></div>`;setTimeout(()=>location.reload(),20000);}
+ catch{$('#splash')?.classList.add('gone');$('#main').innerHTML=`<div class="error-box"><img src="assets/tcs-app@2x.png" alt="Top Cash Service" class="tile"><h2>Server non raggiungibile</h2><p>Il server dell’ufficio non risponde: può essere spento o senza connessione. Controlla anche la tua rete.</p><p class="muted" style="font-size:13px;margin-top:6px">Riprovo da solo ogni 20 secondi.</p><p style="margin-top:16px"><button class="btn accent" data-action-local="reload">Riprova ora</button></p></div>`;setTimeout(()=>location.reload(),20000);}
 }
 
 {const h=location.hash.slice(1);if(PAGES[h])page=h;} // PWA shortcuts (#clients, #expiry)
 if(WEB){if(host)host.addEventListener('message',e=>receive(e.data));bootWeb();}
 else if(host){host.addEventListener('message',e=>receive(e.data));send('ready');send('hostInfo');}
 else if(window.__PREVIEW_STATE){setTimeout(()=>receive(window.__PREVIEW_STATE),400);}
-else{setTimeout(()=>{$('#splash').classList.add('gone');$('#main').innerHTML=`<div class="error-box"><img src="assets/tcs-app@2x.png" alt="Top Cash Service" class="tile"><h2>Apri l’app Windows</h2><p>Avvia <strong>TopCash.Licenze.exe</strong> per consultare il database dei clienti.</p></div>`;},600);}
+else{setTimeout(()=>{$('#splash')?.classList.add('gone');$('#main').innerHTML=`<div class="error-box"><img src="assets/tcs-app@2x.png" alt="Top Cash Service" class="tile"><h2>Apri l’app Windows</h2><p>Avvia <strong>TopCash.Licenze.exe</strong> per consultare il database dei clienti.</p></div>`;},600);}

@@ -27,6 +27,8 @@
 <script src="admin.js" defer></script>
 <script src="updates.js" defer></script>
 <script src="work.js" defer></script>
+<script src="registers.js" defer></script>
+<script src="client.js" defer></script>
 </head>
 <body>
 <svg class="symbols" aria-hidden="true"><defs>
@@ -101,12 +103,12 @@
   <button class="nav-item" data-page="orders"><svg><use href="#i-bag"/></svg><span>Ordini</span><em id="nav-orders"></em></button>
   <div class="nav-caption">Amministrazione</div>
   <button class="nav-item need-admin" data-page="warehouse"><svg><use href="#i-box"/></svg><span>Magazzino</span><em id="nav-warehouse" class="hot"></em></button>
-  <button class="nav-item" data-page="accounting"><svg><use href="#i-euro"/></svg><span>Contabilità</span><em id="nav-accounting" class="hot"></em></button>
+  <button class="nav-item need-acc" data-page="accounting"><svg><use href="#i-euro"/></svg><span>Contabilità</span><em id="nav-accounting" class="hot"></em></button>
   <div class="nav-caption">Sistema</div>
   <button class="nav-item" data-page="sync"><svg><use href="#i-sync"/></svg><span>Sincronizzazione</span><i id="nav-sync-dot" class="sync-dot"></i></button>
   <button class="nav-item need-admin" data-page="check"><svg><use href="#i-check"/></svg><span>Controllo dati</span><em id="nav-check"></em></button>
   <button class="nav-item" data-page="settings"><svg><use href="#i-settings"/></svg><span>Impostazioni</span></button>
-  <button class="nav-item browser-only" data-page="apps"><svg><use href="#i-download"/></svg><span>Scarica le app</span></button>
+  <button class="nav-item" data-page="apps"><svg><use href="#i-download"/></svg><span>Scarica le app</span></button>
   <button class="nav-item need-admin web-only" data-page="team"><svg><use href="#i-shield"/></svg><span>Utenti</span></button>
   <button class="nav-item nav-more" id="nav-more" aria-haspopup="dialog"><svg><use href="#i-grid"/></svg><span>Altro</span><em id="nav-more-dot" class="hot"></em></button>
  </nav>

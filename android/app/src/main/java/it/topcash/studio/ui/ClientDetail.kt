@@ -62,14 +62,19 @@ import java.time.ZoneOffset
     val ctx = LocalContext.current
     var dueOpen by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf<String?>(null) }
     dueOpen?.let { id -> a.acc.due(id)?.let { d -> DueSheet(vm, d, null) { dueOpen = null } } }
-    val me by vm.me.collectAsState(); val admin = me?.role == "admin"
+    val me by vm.me.collectAsState(); val admin = me?.isAdmin == true
     var editClient by remember { mutableStateOf(false) }
     var editLicense by remember { mutableStateOf<it.topcash.studio.data.ULicense?>(null) }
     if (editClient) ClientEditSheet(vm, c, { editClient = false })
+    // the card is split in tabs: what you need is one tap away instead of at the end of a long scroll
+    val tabs = listOfNotNull("Riepilogo", "Dispositivi", "Licenze", "Interventi", if (me?.seesAccounting != false) "Contabilità" else null)
+    var tab by androidx.compose.runtime.saveable.rememberSaveable(c.code) { mutableStateOf("Riepilogo") }
+    if (tab !in tabs) tab = "Riepilogo"
+    var showOff by androidx.compose.runtime.saveable.rememberSaveable(c.code) { mutableStateOf(false) }
     editLicense?.let { l -> LicenseEditSheet(vm, a, l) { editLicense = null } }
     Page(vm, c.name, null, onBack = { nav.popBackStack() }, compactTitle = true,
         actions = {
-            if (admin) androidx.compose.material3.IconButton({ editClient = true }) { Icon(androidx.compose.material.icons.Icons.Rounded.Edit, "Modifica cliente") }
+            if (me != null) androidx.compose.material3.IconButton({ editClient = true }) { Icon(androidx.compose.material.icons.Icons.Rounded.Edit, "Modifica cliente") }
             val fav = c.meta.favorite
             androidx.compose.material3.IconButton({ vm.saveMeta(c.code, c.meta.copy(favorite = !fav), if (fav) "Rimosso dai preferiti" else "Aggiunto ai preferiti") }) {
                 val s by animateFloatAsState(if (fav) 1.15f else 1f, Bouncy, label = "fav")
@@ -96,6 +101,8 @@ import java.time.ZoneOffset
                 QuickAction(Icons.Rounded.Add, "Intervento", true, Modifier.weight(1f), onNewIntervention)
             }
         }
+        item(key = "tabs") { ChoiceChips(tabs, tab, { tab = it }, Modifier.padding(top = 14.dp)) }
+        if (tab == "Riepilogo") {
         item(key = "anag") {
             SectionTitle("Anagrafica")
             CardBox(Modifier.appear(2)) {
@@ -112,7 +119,7 @@ import java.time.ZoneOffset
                     Text("Contatti e indirizzo arrivano con la sincronizzazione Zucchetti o l'importazione da MastroSQL.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp))
                 c.mastro?.zone?.takeIf { it.isNotBlank() }?.let { Fact("Zona", it) }
                 if (c.families.isNotEmpty()) Fact("Prodotti Zucchetti", c.families.joinToString(", ") { Catalog.family(it) })
-                c.mastro?.notes?.takeIf { it.isNotBlank() }?.let { Fact("Note Mastro", it) }
+                c.mastro?.notes?.takeIf { it.isNotBlank() && it.trim() != "0" }?.let { Fact("Note Mastro", it) }
                 val extra = c.mastro?.extra.orEmpty()
                 if (extra.isNotEmpty()) {
                     var open by remember { mutableStateOf(false) }
@@ -123,13 +130,29 @@ import java.time.ZoneOffset
             }
         }
         item(key = "followup") { FollowUp(vm, c) }
+        }
+        if (tab == "Interventi") {
         item(key = "int-title") { SectionTitle("Interventi") { TextButton(onNewIntervention) { Icon(Icons.Rounded.Add, null, Modifier.size(18.dp)); Text(" Nuovo") } } }
         if (c.interventions.isEmpty()) item(key = "int-empty") { CardBox { Text("Nessun intervento registrato.", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
-        c.interventions.take(15).forEach { x -> item(key = "i" + x.i.id) { InterventionRow(x, a, Modifier.padding(bottom = 8.dp).animateItem(), showClient = false) { onOpenIntervention(x.i.id) } } }
-        if (c.machines.isNotEmpty()) {
-            item(key = "m-title") { SectionTitle("Macchine installate (${c.machines.size})") }
-            c.machines.forEach { m -> item(key = "m" + m.m.id) { MachineCard(m, Modifier.padding(bottom = 8.dp)) } }
+        c.interventions.take(15).forEach { x -> item(key = "i" + x.i.id) { InterventionRow(x, a, Modifier.padding(bottom = 8.dp).animateItem(), showClient = false, vm = vm) { onOpenIntervention(x.i.id) } } }
         }
+        if (tab == "Dispositivi") {
+        val off = c.machines.count { !it.m.active }
+        if (off > 0) item(key = "m-off") {
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Mostra anche le dismesse ($off)", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                androidx.compose.material3.Switch(showOff, { showOff = it })
+            }
+        }
+        val shown = c.machines.filter { showOff || it.m.active }.sortedWith(compareBy({ !it.m.active }, { it.m.model }))
+        devGroups.forEachIndexed { gi, label ->
+            val ms = shown.filter { devCat(it.m.model) == gi }
+            if (ms.isNotEmpty()) {
+                item(key = "mg$gi") { SectionTitle("$label (${ms.count { it.m.active }}${if (ms.any { !it.m.active }) " + ${ms.count { !it.m.active }} dismesse" else ""})") }
+                ms.forEach { m -> item(key = "m" + m.m.id) { MachineCard(m, Modifier.padding(bottom = 8.dp)) } }
+            }
+        }
+        if (shown.isEmpty()) item(key = "m-empty") { CardBox(Modifier.padding(top = 12.dp)) { Text(if (off > 0) "Solo dispositivi dismessi: attiva l'interruttore qui sopra per vederli." else "Nessun dispositivo: importa il parco macchine da MastroSQL.", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
         if (c.registers.isNotEmpty()) {
             item(key = "dtr-title") { SectionTitle("Registratori DTR (${c.registers.size})") }
             c.registers.forEach { r -> item(key = "dtr" + r.r.serial) { RegisterCard(r, Modifier.padding(bottom = 8.dp), showClient = false) } }
@@ -139,8 +162,10 @@ import java.time.ZoneOffset
             c.italDevices.forEach { r -> item(key = "ital" + r.r.serial) { ItalCard(r, Modifier.padding(bottom = 8.dp), showClient = false) } }
         }
         item(key = "assets") { ClientAssets(vm, a, c) }
-        clientAccounting(a, c) { dueOpen = it }
-        if (c.licenses.isNotEmpty()) {
+        }
+        if (tab == "Contabilità" && me?.seesAccounting != false) clientAccounting(a, c) { dueOpen = it }
+        if (tab == "Licenze" && c.licenses.isEmpty()) item(key = "l-empty") { CardBox(Modifier.padding(top = 12.dp)) { Text("Nessuna licenza Zucchetti negli elenchi letti.", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+        if (tab == "Licenze" && c.licenses.isNotEmpty()) {
             item(key = "l-title") { SectionTitle("Licenze Zucchetti (${c.licenses.size})") }
             c.licenses.forEach { l ->
                 item(key = "l" + l.r.id) {
@@ -158,7 +183,7 @@ import java.time.ZoneOffset
                 }
             }
         }
-        if (c.orders.isNotEmpty()) {
+        if (tab == "Licenze" && c.orders.isNotEmpty()) {
             item(key = "or-title") { SectionTitle("Ordini (${c.orders.size})") }
             c.orders.take(20).forEach { o -> item(key = "or" + o.o.id) { OrderRow(o, Modifier.padding(bottom = 8.dp)) } }
         }
@@ -200,3 +225,8 @@ import java.time.ZoneOffset
             dismissButton = { TextButton({ date = ""; picking = false }) { Text("Rimuovi") } }) { DatePicker(st) }
     }
 }
+
+/** Kind of device from the model written in Mastro: registers, automatic cash (Cashmatic), software, printers, scales. */
+private val devGroups = listOf("Registratori di cassa", "Casse automatiche · Cashmatic", "Software e app", "Stampanti", "Bilance")
+private val softRe = Regex("LICENZA|\\bAPP\\b|APP\\.|SOFTWARE|RISTOQUICK|POSBY"); private val printRe = Regex("^STAMP|STAMPANTE")
+private fun devCat(model: String): Int { val s = model.uppercase(); return when { "CASHMATIC" in s -> 1; softRe.containsMatchIn(s) -> 2; printRe.containsMatchIn(s) -> 3; "BILANCIA" in s -> 4; else -> 0 } }

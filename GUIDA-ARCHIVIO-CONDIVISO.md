@@ -36,9 +36,14 @@ Sul PC dell'ufficio che resta sempre acceso (può essere lo stesso PC della post
 
 | Ruolo | Può fare |
 |---|---|
-| Amministratore | tutto: utenti, backup, postazione di sincronizzazione |
-| Ufficio | consulta, modifica note e promemoria, esporta CSV e calendario |
-| Tecnico | consulta e scrive note, non esporta |
+| **Proprietario** | poteri illimitati: tutto quello che fa l'amministratore, più creare, modificare ed eliminare gli **altri amministratori e proprietari**. Deve sempre esserci almeno un proprietario attivo. |
+| **Amministratore** | tutto: utenti (tranne i proprietari), backup, magazzino, postazione di sincronizzazione, contabilità |
+| **Amministrazione** | vede **tutto**, contabilità compresa; **crea e modifica i clienti**, note e promemoria, esporta CSV e calendario |
+| **Tecnico** | vede tutto **tranne la contabilità** (fatture, scadenze, saldi, RiBa e i relativi riepiloghi non gli arrivano proprio, nemmeno sul telefono); **crea e modifica i clienti**, scrive interventi e note |
+
+Eliminare, ripristinare o unire clienti resta agli amministratori.
+
+Con l'aggiornamento 2.7.7 il primo amministratore creato diventa automaticamente **Proprietario** (l'operazione è registrata nel registro sicurezza). Il ruolo "Ufficio" ora si chiama **Amministrazione**.
 
 Se cambi un ruolo, disattivi un utente o reimposti una password, le sue sessioni aperte vengono chiuse subito.
 
@@ -72,6 +77,12 @@ Da fare su un PC dove **MastroSQL è installato** (legge le impostazioni di Mast
 3. Conferma con **Importa**.
 
 Cosa viene importato: anagrafica completa (indirizzo, CAP, provincia, telefoni, email, PEC, zona, note e tutti gli altri campi compilati), **parco macchine** (modello, matricola, matricola fiscale, installazione, verificazione, abbonamento e importo) e **storico interventi**, oltre alla **contabilità** (fatture e note di credito, scadenze di incassi e pagamenti, saldi contabili: vedi sezione 6-bis).
+
+Dalla versione 2.7.7 vengono letti anche:
+- **telefoni** dalla rubrica di Mastro (prima non venivano letti: con la 2.7.7 circa 4.900 clienti avranno il numero e il tasto *Chiama*);
+- **dati fiscali dei registratori**: tutti i campi compilati della scheda macchina, i dati del QR code del misuratore e lo **storico delle verificazioni periodiche** (data, esito, tecnico, sigillo, importo, rapporto; le ultime 12 per cassa, con il totale);
+- **sedi e destinazioni** dei clienti (indirizzo, telefono, orari, note; con link alla mappa);
+- **RiBa** degli ultimi 3 anni (scadenza, importo, pagata o insoluta, banca e documento) — visibili solo a chi vede la contabilità.
 I clienti Mastro vengono collegati a quelli Zucchetti tramite partita IVA o codice fiscale, altrimenti tramite ragione sociale: così ogni cliente compare **una sola volta**, con le sue **licenze Zucchetti** collegate. Se in Mastro lo stesso cliente è registrato due volte (stessa partita IVA), l'app li unisce in un'unica scheda.
 
 > **Sola lettura:** l'app esegue solo letture sul database di Mastro e non modifica nulla. Puoi ripetere l'importazione quando vuoi: i dati Mastro vengono sostituiti con l'ultima lettura, mentre interventi creati nell'app, note e promemoria restano invariati.
@@ -94,13 +105,13 @@ Ogni movimento resta nel registro con utente, data e note.
 
 ## 6-bis. Contabilità
 
-Menu **Contabilità** (PC, browser; su Android in *Altro*), per **tutti** gli utenti. I dati vengono da MastroSQL con *Importa da MastroSQL* (sola lettura: Mastro resta il programma di contabilità e le fatture si emettono sempre da Mastro).
+Menu **Contabilità** (PC, browser; su Android in *Altro*), per proprietario, amministratori e amministrazione (non per i tecnici). I dati vengono da MastroSQL con *Importa da MastroSQL* (sola lettura: Mastro resta il programma di contabilità e le fatture si emettono sempre da Mastro).
 
 - **Riepilogo**: fatturato dell'anno (imponibile, note di credito dedotte) con il confronto con lo stesso periodo dell'anno prima, importo da incassare, **scaduto**, pagamenti ai fornitori nei prossimi 30 giorni e grafico degli ultimi 12 mesi.
 - **Da incassare**: scadenzario clienti. Apri una rata per segnarla come **Sollecitato**, **Promesso**, **Incassato** o **Contestato** con una nota, oppure per preparare l'**email di sollecito** già compilata. Stato e note sono condivisi con il team e **restano anche dopo ogni nuova importazione**.
 - **Fatture**, **Da pagare** (fornitori) e **Clienti** (chi ha importi scaduti in cima).
 - Nella **scheda cliente** c'è la sezione *Contabilità*: fatturato, da incassare, scaduto, saldo contabile di Mastro e rate aperte.
-- Ufficio e amministratore possono esportare **fatture** e **scadenze aperte** in CSV.
+- Amministrazione e amministratori possono esportare **fatture** e **scadenze aperte** in CSV.
 
 ## 7. Rapportino firmato dal cliente
 
@@ -189,6 +200,37 @@ powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\pubblica-release.ps1 -Ver
 Lo script invia il codice, crea il pacchetto e la Release con i file da scaricare (controlla che nei pacchetti non ci siano database, chiavi o impostazioni di Mastro).
 La prima volta accedi a GitHub con `D:\TopCashSQL\.tools\gh\bin\gh.exe auth login` (l'accesso è salvato in `.tools\gh-config`, fuori da Git).
 Il repository è pubblico: i colleghi scaricano i file dalla pagina *Releases* (https://github.com/lapob/tcs-sql/releases) senza account. I pacchetti contengono solo i programmi: per usarli serve comunque un utente del server Top Cash.
+
+## Macchine: marchi, modelli e portali
+
+La pagina **Macchine** riconosce il marchio dal modello scritto in Mastro (DTR, Ital Retail, RCH, Epson, Axon, Ditron, Custom, Olivetti, Micrelec, Sarema, CashMatic, oltre a software, stampanti e bilance) e normalizza i modelli.
+
+- **Marchi e modelli**: una scheda per marchio con macchine attive, numero di modelli e, per DTR e Ital Retail, la **copertura del portale** (quante casse attive sono presenti sul portale e quante mancano). Clic su un marchio per filtrare, poi sui modelli.
+- **Non nei portali**: le casse DTR e Ital Retail attive in Mastro che il portale non conosce, da controllare. Se un portale non è mai stato sincronizzato le casse risultano *da sincronizzare*, non mancanti.
+- La colonna **Portale** e la scheda del registratore mostrano se la cassa è sul portale; nella scheda trovi anche i dati fiscali di Mastro e lo storico delle verificazioni.
+- In fondo alle pagine **Registratori DTR** e **Casse Ital Retail** c'è l'elenco delle casse di Mastro che mancano su quel portale.
+
+## Scheda cliente e lavoro di tutti i giorni
+
+La scheda cliente (PC, browser e Android) si apre con i **contatti rapidi** (Chiama, Email, Mappa, Nuovo intervento) e quattro riquadri da leggere al volo: casse e dispositivi attivi, licenze Zucchetti con la prossima scadenza, interventi aperti, prossima verificazione. Sotto, le schede:
+
+- **Riepilogo**: anagrafica, sedi e punti vendita, **note e promemoria** del team, dati Mastro (chiusi in un riquadro).
+- **Dispositivi**: divisi per tipo — **registratori di cassa**, **casse automatiche Cashmatic**, **software e app**, stampanti, bilance. Prima le **attive**; l'interruttore *Mostra anche le dismesse* fa comparire le altre. Ogni cassa mostra marchio e modello, matricola, presenza sul portale, verificazione, giornale elettronico e abbonamento; un tocco apre la scheda completa. Poi i dati dei portali (DTR, Ital Retail) e PC e sistemi.
+- **Licenze**: licenze Zucchetti in corso (le storiche in un riquadro a parte), con i **commenti** in un riquadro separato, e gli ordini web.
+- **Interventi**: da fare, chiusi e storico Mastro.
+- **Contabilità** (non per i tecnici).
+
+**Interventi in un tocco** — in ogni intervento aperto, nella scheda cliente e nella pagina Interventi:
+- **Firma**: il cliente firma sul telefono o sul tablet, il rapportino diventa definitivo;
+- **Stampa**: il foglio dell'intervento da portare dal cliente, con il riquadro firma vuoto per firmare a penna;
+- **Chiudi**: chiude l'intervento senza aprire il modulo;
+- **Posticipa**: Domani, Dopodomani, Lunedì prossimo, Tra una settimana, due settimane, un mese o un giorno a scelta.
+
+Nella pagina Interventi le viste **I miei** (assegnati a te) e **Oggi e in ritardo** mostrano subito cosa c'è da fare.
+
+## Fluidità automatica
+
+Studio sceglie da solo il profilo grafico per ogni dispositivo (*Impostazioni → Prestazioni → Automatico*): misura la fluidità all'avvio e **continua a controllarla durante l'uso**. Passa da solo alla modalità leggera se lo schermo scatta, con il risparmio dati attivo, con la batteria sotto il 20% (finché non lo metti in carica) o se il sistema chiede trasparenze ridotte; rispetta "riduci movimento" e il contrasto elevato. Su touch i tocchi sono immediati e i pulsanti più grandi.
 
 ## Dopo questo aggiornamento
 

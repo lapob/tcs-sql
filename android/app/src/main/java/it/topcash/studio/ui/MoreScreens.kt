@@ -114,11 +114,11 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
                 MoreRow(Icons.Rounded.Route, "Giro di oggi", "Interventi e verificazioni per località, con il percorso", Modifier.appear(1)) { nav.navigate("route") }
                 MoreRow(Icons.Rounded.Call, "Rinnovi", "Chi chiamare, chi ha rinnovato, chi sollecitare", Modifier.appear(1)) { nav.navigate("renewals") }
                 MoreRow(Icons.Rounded.Computer, "PC e sistemi", if (a.assets.isEmpty()) "Inventario dei PC, stampanti e rete dei clienti" else "${a.assets.count { it.a.active }} in uso · ${a.assetsDue.size} garanzie o scadenze vicine", Modifier.appear(1)) { nav.navigate("inventory") }
-                MoreRow(Icons.Rounded.Euro, "Contabilità", if (a.acc.hasData) "${AccountingView.money0(a.acc.toCollect)} da incassare · ${a.acc.overdue.size} rate scadute" else "Fatture, incassi e pagamenti da MastroSQL", Modifier.appear(0)) { nav.navigate("accounting") }
+                if (me?.seesAccounting != false) MoreRow(Icons.Rounded.Euro, "Contabilità", if (a.acc.hasData) "${AccountingView.money0(a.acc.toCollect)} da incassare · ${a.acc.overdue.size} rate scadute" else "Fatture, incassi e pagamenti da MastroSQL", Modifier.appear(0)) { nav.navigate("accounting") }
                 MoreRow(Icons.Rounded.CalendarMonth, "Scadenziario", "${a.deadlines(0, 120).size} scadenze nei prossimi 120 giorni", Modifier.appear(0)) { nav.navigate("deadlines") }
                 MoreRow(Icons.Rounded.Key, "Licenze Zucchetti", "${a.currentLicenses.size} correnti · ${a.licenses.size - a.currentLicenses.size} storiche", Modifier.appear(1)) { nav.navigate("licenses") }
                 MoreRow(Icons.Rounded.ShoppingBag, "Ordini web", "${a.orders.size} ordini in archivio", Modifier.appear(2)) { nav.navigate("orders") }
-                if (me?.role == "admin") {
+                if (me?.isAdmin == true) {
                     MoreRow(Icons.Rounded.AccountCircle, "Utenti", "Crea, modifica ed elimina gli accessi, compreso il tuo", Modifier.appear(3)) { nav.navigate("users") }
                     if (a.deleted.isNotEmpty()) MoreRow(Icons.Rounded.AccountCircle, "Clienti eliminati", "${a.deleted.size} da ripristinare", Modifier.appear(3)) { nav.navigate("deleted") }
                 }
@@ -176,7 +176,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
 }
 
 @Composable fun LicensesScreen(vm: AppViewModel, a: Archive, nav: NavHostController) {
-    val me by vm.me.collectAsStateWithLifecycle(); val admin = me?.role == "admin"
+    val me by vm.me.collectAsStateWithLifecycle(); val admin = me?.isAdmin == true
     var editing by remember { mutableStateOf<it.topcash.studio.data.ULicense?>(null) }
     editing?.let { l -> LicenseEditSheet(vm, a, l) { editing = null } }
     var tab by rememberSaveable { mutableStateOf("Correnti") }

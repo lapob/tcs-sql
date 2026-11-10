@@ -63,7 +63,7 @@ import java.time.LocalTime
         if (open.isEmpty()) item(key = "open-empty") { CardBox { Text("Nessun intervento aperto. Ottimo lavoro!", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
         open.forEachIndexed { i, x ->
             item(key = "o" + x.i.id) {
-                InterventionRow(x, a, Modifier.padding(bottom = 10.dp).appear(i + 4).animateItem()) { onOpenIntervention(x.i.id) }
+                InterventionRow(x, a, Modifier.padding(bottom = 10.dp).appear(i + 4).animateItem(), vm = vm) { onOpenIntervention(x.i.id) }
             }
         }
         item(key = "dl-title") { SectionTitle("Prossime scadenze") { TextButton({ nav.navigate("deadlines") }) { Text("Scadenziario") } } }

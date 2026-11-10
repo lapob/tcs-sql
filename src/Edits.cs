@@ -65,7 +65,7 @@ public sealed partial class Store
             Trim(e.Phone, 60), email, Trim(e.Pec, 200).ToLowerInvariant(), Trim(e.Contact, 120), Trim(e.Category, 60),
             isNew || old?.Created == true, old?.Deleted ?? false, DateTimeOffset.Now.ToString("O"), Trim(who, 80), old?.MergedInto ?? "");
         SaveEdit("client_edits", "code", code, clean);
-        Log("users", $"{who} ha {(isNew ? "creato" : "modificato")} il cliente {(name.Length > 0 ? name : code)}.");
+        Log("edit", $"{who} ha {(isNew ? "creato" : "modificato")} il cliente {(name.Length > 0 ? name : code)}.");
         return code;
     }
 

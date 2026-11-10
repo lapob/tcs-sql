@@ -52,8 +52,11 @@ function updBanner(){
  el.querySelector('[data-upd-later]').onclick=()=>{el.classList.add('out');setTimeout(()=>el.remove(),260);};
  document.body.appendChild(el);
 }
-// ───────────────────────── "Scarica le app": only on the website (not inside the Windows app, not in the Android app)
-// Same files the PCs and phones get as automatic updates; the device in use is recognised and its app comes first.
+// ───────────────────────── "Scarica le app"
+// Website: Android + Windows + install as app (iPhone/browser), the device in use first.
+// Inside the Windows app: only the Android app (Studio is already installed there).
+// Files: the server's update copies; the Windows app without a server falls back to the official GitHub release.
+const RELEASE='https://github.com/lapob/tcs-sql/releases/latest/download/';
 let installPrompt=null;
 addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;if(page==='apps')render(false);});
 addEventListener('appinstalled',()=>{installPrompt=null;toast('Top Cash Studio installato','check');if(page==='apps')render(false);});
@@ -75,12 +78,13 @@ function appsPage(){
    btn:standalone?`<span class="badge ok">Già installata su questo dispositivo</span>`:installPrompt?`<button class="btn accent app-dl" data-install-pwa>${icon('plus')}Installa come app</button>`:'',
    steps:steps(ios?['Tocca <b>Condividi</b> in Safari','Scegli <b>Aggiungi a schermata Home</b>','Apri l’icona Top Cash dalla Home']:['Apri il menu del browser (⋮ o …)','Scegli <b>Installa app</b> o <b>Aggiungi a schermata Home</b>','Apri Top Cash come una normale app'])}
  };
- const order=[mine,...['android','windows','web'].filter(k=>k!==mine)];
+ if(!WEB){cards.android.b=null;cards.android.btn=`<a class="btn accent app-dl" href="${RELEASE}TopCash-Studio.apk" target="_blank" rel="noopener">${icon('download')}Scarica per Android</a>`;}
+ const order=host?['android']:[mine,...['android','windows','web'].filter(k=>k!==mine)];
  return`<section class="apps-hero reveal" style="--i:0"><div class="apps-hero-glow" aria-hidden="true"></div>
    <span class="apps-hero-ic">${icon('download')}</span>
-   <div><h1>Scarica le app</h1><p>Top Cash Studio su ogni dispositivo, sempre aggiornato. Accedi con lo stesso utente ovunque: i dati sono quelli del server dell’ufficio.</p></div></section>
-  <div class="apps-grid">${order.map((k,i)=>{const c=cards[k];return`<article class="card app-card reveal${k===mine?' mine':''}" style="--i:${i+1}">
-   <div class="app-top"><span class="app-ic ${c.tone}">${icon(c.ic)}</span>${k===mine?'<span class="badge acc">Consigliata per questo dispositivo</span>':''}</div>
+   <div><h1>${host?'App per il telefono':'Scarica le app'}</h1><p>${host?'Porta Top Cash Studio sul telefono Android: stesso utente, stessi dati, sempre aggiornata da sola.':'Top Cash Studio su ogni dispositivo, sempre aggiornato. Accedi con lo stesso utente ovunque: i dati sono quelli del server dell’ufficio.'}</p></div></section>
+  <div class="apps-grid${host?' single':''}">${order.map((k,i)=>{const c=cards[k];return`<article class="card app-card reveal${k===mine?' mine':''}" style="--i:${i+1}">
+   <div class="app-top"><span class="app-ic ${c.tone}">${icon(c.ic)}</span>${k===mine&&!host?'<span class="badge acc">Consigliata per questo dispositivo</span>':''}</div>
    <h2>${c.title}</h2><p class="sub">${c.sub}</p>${k==='web'?'':meta(c.b)}
    <div class="app-cta">${c.btn}</div>${c.steps}</article>`;}).join('')}</div>
   <p class="muted apps-foot">${icon('shield')}Gli stessi file della Release ufficiale. Fuori ufficio le app usano la connessione cifrata.</p>`;

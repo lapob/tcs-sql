@@ -79,6 +79,7 @@ private fun current(c: UClient, k: String) = when (k) { "name" -> c.name; "vat" 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun ClientEditSheet(vm: AppViewModel, c: UClient?, onDismiss: () -> Unit, onCreated: (String) -> Unit = {}) {
+    val isAdmin = vm.me.collectAsState().value?.isAdmin == true
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true); val scope = rememberCoroutineScope()
     val e = c?.edit ?: ClientEdit(); val manual = c == null || e.created
     val values = remember { clientFields.associate { (k, _) -> k to mutableStateOf(e.get(k)) } }
@@ -97,8 +98,8 @@ private fun current(c: UClient, k: String) = when (k) { "name" -> c.name; "vat" 
             }
             Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (c != null) {
-                    IconButton({ confirmDelete = true }) { Icon(Icons.Rounded.Delete, "Elimina", tint = LocalStatus.current.bad) }
-                    if (!manual && c.edit != null) TextButton({ vm.resetClient(c.code); close() }) { Icon(Icons.Rounded.Restore, null, Modifier.size(18.dp)); Text(" Annulla modifiche") }
+                    if (isAdmin) IconButton({ confirmDelete = true }) { Icon(Icons.Rounded.Delete, "Elimina", tint = LocalStatus.current.bad) }
+                    if (isAdmin && !manual && c.edit != null) TextButton({ vm.resetClient(c.code); close() }) { Icon(Icons.Rounded.Restore, null, Modifier.size(18.dp)); Text(" Annulla modifiche") }
                 }
                 Spacer(Modifier.weight(1f))
                 Button({
@@ -181,7 +182,9 @@ private fun current(c: UClient, k: String) = when (k) { "name" -> c.name; "vat" 
     }
 }
 
-private val roles = listOf("admin" to "Amministratore", "ufficio" to "Ufficio", "tecnico" to "Tecnico")
+/** Only the owner can create other owners or touch them. */
+private fun roles(owner: Boolean) = (if (owner) listOf("owner" to "Proprietario") else emptyList()) +
+    listOf("admin" to "Amministratore", "ufficio" to "Amministrazione", "tecnico" to "Tecnico")
 
 /** Users and roles (administrators): create, rename, change role, new password, disable, delete. Your own name too. */
 @Composable fun UsersScreen(vm: AppViewModel, nav: NavHostController) {
@@ -191,7 +194,7 @@ private val roles = listOf("admin" to "Amministratore", "ufficio" to "Ufficio", 
     var creating by rememberSaveable { mutableStateOf(false) }
     Page(null, "Utenti", users?.let { "${it.size} utenti · ${it.count { u -> !u.disabled }} attivi" } ?: "Caricamento…", onBack = { nav.popBackStack() },
         actions = { IconButton({ creating = true }) { Icon(Icons.Rounded.PersonAdd, "Nuovo utente") } }) {
-        item(key = "info") { Text("Amministratore: tutto, compresi utenti e backup. Ufficio: consulta e modifica note e promemoria. Tecnico: consulta e scrive interventi.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 12.dp)) }
+        item(key = "info") { Text("Proprietario: poteri illimitati, gestisce anche gli amministratori. Amministratore: tutto, compresi utenti e backup. Amministrazione: vede tutto, contabilità compresa. Tecnico: tutto tranne la contabilità.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 12.dp)) }
         val list = users.orEmpty()
         if (users != null && list.isEmpty()) item(key = "none") { Empty(Icons.Rounded.Group, "Nessun utente", "") }
         items(list.size, key = { list[it].username }) { i ->
@@ -203,7 +206,7 @@ private val roles = listOf("admin" to "Amministratore", "ufficio" to "Ufficio", 
                         Text(u.name + if (u.username == me?.username) " (tu)" else "", style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text("${u.username} · ultimo accesso ${if (u.lastLogin.isBlank()) "mai" else Dates.short(Dates.parse(u.lastLogin))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Pill(if (u.disabled) "Disattivato" else u.roleLabel.ifBlank { u.role }, if (u.disabled) Tone.Bad else if (u.role == "admin") Tone.Accent else Tone.Neutral)
+                    Pill(if (u.disabled) "Disattivato" else u.roleLabel.ifBlank { u.role }, if (u.disabled) Tone.Bad else if (u.role == "admin" || u.role == "owner") Tone.Accent else Tone.Neutral)
                 }
             }
         }
@@ -216,6 +219,8 @@ private fun genPassword(): String { val a = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLM
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun UserSheet(vm: AppViewModel, u: UserRow, self: Boolean, onDismiss: () -> Unit) {
+    val meOwner = vm.me.collectAsState().value?.isOwner == true
+    val locked = u.role == "owner" && !meOwner
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true); val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf(u.name) }; var role by remember { mutableStateOf(u.role) }
     var newPwd by remember { mutableStateOf<String?>(null) }; var confirmDelete by remember { mutableStateOf(false) }
@@ -226,9 +231,9 @@ private fun genPassword(): String { val a = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLM
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
             Text(u.name, style = MaterialTheme.typography.titleLarge); Text(u.username, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedTextField(name, { if (it.length <= 80) name = it }, Modifier.fillMaxWidth().padding(top = 12.dp), label = { Text("Nome e cognome") }, singleLine = true)
-            if (!self) {
+            if (!self && !locked) {
                 Text("Ruolo", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { roles.forEach { (k, l) -> FilterChip(role == k, { role = k }, label = { Text(l) }, shape = MaterialTheme.shapes.small) } }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { roles(meOwner).forEach { (k, l) -> FilterChip(role == k, { role = k }, label = { Text(l) }, shape = MaterialTheme.shapes.small) } }
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton({ newPwd = genPassword() }) { Text("Nuova password") }
                     OutlinedButton({ vm.updateUser(u.username, UserPatch(disabled = !u.disabled), if (u.disabled) "Utente riattivato" else "Utente disattivato"); close() }) { Text(if (u.disabled) "Riattiva" else "Disattiva") }
@@ -251,7 +256,7 @@ private fun genPassword(): String { val a = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLM
                 OutlinedButton({ if (mine.length < 10) vm.notify("Almeno 10 caratteri") else vm.changePassword(current, mine) { ok -> if (ok) close() } }, Modifier.padding(top = 8.dp)) { Text("Cambia password") }
             }
             Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (!self) IconButton({ confirmDelete = true }) { Icon(Icons.Rounded.Delete, "Elimina utente", tint = LocalStatus.current.bad) }
+                if (!self && !locked) IconButton({ confirmDelete = true }) { Icon(Icons.Rounded.Delete, "Elimina utente", tint = LocalStatus.current.bad) }
                 Spacer(Modifier.weight(1f))
                 Button({
                     val n = name.trim()
@@ -270,6 +275,7 @@ private fun genPassword(): String { val a = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLM
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun NewUserSheet(vm: AppViewModel, onDismiss: () -> Unit) {
+    val meOwner = vm.me.collectAsState().value?.isOwner == true
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true); val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }; var user by remember { mutableStateOf("") }; var role by remember { mutableStateOf("ufficio") }; var pwd by remember { mutableStateOf(genPassword()) }
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -280,7 +286,7 @@ private fun genPassword(): String { val a = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLM
             OutlinedTextField(name, { if (it.length <= 80) name = it }, Modifier.fillMaxWidth().padding(top = 12.dp), label = { Text("Nome e cognome") }, singleLine = true)
             OutlinedTextField(user, { user = it.lowercase().filter { ch -> ch.isLetterOrDigit() || ch in "._-" } }, Modifier.fillMaxWidth().padding(top = 6.dp), label = { Text("Nome utente") }, placeholder = { Text("es. mario.rossi") }, singleLine = true)
             Text("Ruolo", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { roles.forEach { (k, l) -> FilterChip(role == k, { role = k }, label = { Text(l) }, shape = MaterialTheme.shapes.small) } }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { roles(meOwner).forEach { (k, l) -> FilterChip(role == k, { role = k }, label = { Text(l) }, shape = MaterialTheme.shapes.small) } }
             OutlinedTextField(pwd, { pwd = it }, Modifier.fillMaxWidth().padding(top = 10.dp), label = { Text("Password iniziale") }, singleLine = true,
                 trailingIcon = { TextButton({ pwd = genPassword() }) { Text("Genera") } })
             Row(Modifier.fillMaxWidth().padding(vertical = 16.dp)) {

@@ -60,7 +60,7 @@ async function openClientEditor(code){
  const src=c?[c.registry?'Zucchetti':'',c.mastro?'MastroSQL':'',c.records.length?'licenze':''].filter(Boolean).join(', '):'';
  const body=`${c&&!e.created?`<div class="note">${icon('sparkle')}<span>I dati arrivano da ${esc(src||'i portali')}. Quello che cambi qui ha la precedenza e <strong>resta anche dopo le sincronizzazioni</strong>; un campo lasciato vuoto torna al valore di origine.</span></div>`:''}
   <div class="form-grid">${CE_FIELDS.map(([k,l,t,span])=>fieldHtml(k,l,t,e[k]||(c?.edit?'':'')||'',span,`${k==='name'&&(!c||e.created)?'required':''} placeholder="${esc(c&&!e.created?(c[k]||''):'')}" autocomplete="off"`)).join('')}</div>`;
- const extra=c?`${e&&Object.keys(e).length&&!e.created?`<button type="button" class="btn ghost" data-panel-act="reset">${icon('sync')}Annulla modifiche</button>`:''}<button type="button" class="btn ghost danger-text" data-panel-act="delete">${icon('close')}Elimina</button>`:'';
+ const extra=c&&isAdmin()?`${e&&Object.keys(e).length&&!e.created?`<button type="button" class="btn ghost" data-panel-act="reset">${icon('sync')}Annulla modifiche</button>`:''}<button type="button" class="btn ghost danger-text" data-panel-act="delete">${icon('close')}Elimina</button>`:'';
  const v=await formPanel({title:c?c.name:'Nuovo cliente',tag:c?'Modifica cliente':'Anagrafica',sub:c?`Codice ${esc(c.code)}`:'Il cliente compare subito in Studio, anche senza licenze o macchine. Potrai collegarlo a Mastro e ai portali con la partita IVA.',body,ok:c?'Salva modifiche':'Crea cliente',extra});
  if(!v)return;
  if(v.__act==='delete')return deleteClient(c.code);
@@ -104,8 +104,8 @@ async function deleteUser(u){
 document.addEventListener('click',e=>{
  const t=e.target.closest?.('[data-edit-client],[data-new-client],[data-del-client],[data-restore-client],[data-edit-lic],[data-user-name],[data-user-del]');if(!t)return;
  e.stopPropagation();e.preventDefault();
- if(!isAdmin())return toast('Solo un amministratore può modificare.','alert');
  const ds=t.dataset;
+ if(!(('editClient' in ds||'newClient' in ds)?canEditClients():isAdmin()))return toast('Solo un amministratore può farlo.','alert');
  if('newClient' in ds)return openClientEditor(null);
  if(ds.editClient)return openClientEditor(ds.editClient);
  if(ds.delClient)return deleteClient(ds.delClient);

@@ -83,7 +83,7 @@ public static class MastroReader
    var phones=d.Where(kv=>IsPhone(kv.Key)&&kv.Value.Count(char.IsDigit)>=6).Select(kv=>kv.Value).Distinct().ToList();
    var mails=d.Where(kv=>IsMail(kv.Key)&&kv.Value.Contains('@')).SelectMany(kv=>kv.Value.Split([';',',',' '],StringSplitOptions.RemoveEmptyEntries)).Where(x=>x.Contains('@')).Select(x=>x.Trim().ToLowerInvariant()).Distinct().ToList();
    var pec=d.Where(kv=>kv.Key.Contains("PEC",StringComparison.OrdinalIgnoreCase)&&kv.Value.Contains('@')).Select(kv=>kv.Value.Trim().ToLowerInvariant()).FirstOrDefault()??"";
-   var notes=string.Join("\n",d.Where(kv=>kv.Key.StartsWith("NOTE",StringComparison.OrdinalIgnoreCase)&&kv.Value.Length>0).Select(kv=>kv.Value));
+   var notes=string.Join("\n",d.Where(kv=>kv.Key.StartsWith("NOTE",StringComparison.OrdinalIgnoreCase)&&kv.Value.Trim().Length>0&&kv.Value.Trim()!="0").Select(kv=>kv.Value));
    // every other filled field is kept, so no information is lost
    var extra=d.Where(kv=>!known.Contains(kv.Key)&&!IsPhone(kv.Key)&&!IsMail(kv.Key)&&!kv.Key.Contains("PEC",StringComparison.OrdinalIgnoreCase)&&!kv.Key.StartsWith("NOTE",StringComparison.OrdinalIgnoreCase)
     &&kv.Value.Length is >0 and <400&&kv.Value!="0"&&kv.Value!="0.00").Take(60).ToDictionary(kv=>kv.Key,kv=>kv.Value);
@@ -100,14 +100,23 @@ public static class MastroReader
     List<string> tc;
     try{await using var q=new MySqlCommand("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=@t",c);q.Parameters.AddWithValue("@t",t);
      tc=[];await using var r=await q.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))tc.Add(r.GetString(0));}catch{continue;}
-    var cli=tc.FirstOrDefault(k=>k.ToUpperInvariant() is "CODI" or "CODICE" or "COD_CLI" or "CODI_CLIE" or "CLIENTE" or "CODI_CLI");
+    // the customer column wins over a generic code: Mastro's phone book (tele_nume) keeps customers AND suppliers,
+    // CODI is the code of either, CODI_CLI only of customers (0 on supplier rows)
+    string[] cliPref=["CODI_CLI","CODI_CLIE","COD_CLI","CLIENTE","CODI","CODICE"];
+    var cli=cliPref.Select(p=>tc.FirstOrDefault(k=>k.Equals(p,StringComparison.OrdinalIgnoreCase))).FirstOrDefault(k=>k!=null);
+    var onlyCustomers=cli!=null&&!cli.Equals("CODI",StringComparison.OrdinalIgnoreCase)&&!cli.Equals("CODICE",StringComparison.OrdinalIgnoreCase);
     var ph=tc.Where(IsPhone).ToList();var ml=tc.Where(IsMail).ToList();
+    // phone book rows: the number is in NUMERO, its kind in TIPO_NUM (3 = fax, not useful to call)
+    var numCol=tc.FirstOrDefault(k=>k.Equals("NUMERO",StringComparison.OrdinalIgnoreCase));var kindCol=tc.FirstOrDefault(k=>k.Equals("TIPO_NUM",StringComparison.OrdinalIgnoreCase));
+    if(numCol!=null&&kindCol!=null&&!ph.Contains(numCol))ph.Add(numCol);
     if(cli==null||ph.Count+ml.Count==0)continue;
     var hits=0;
     try{
      foreach(var d in await All(t,300_000))
      {
-      if(!byCode.TryGetValue(F(d,cli),out var mc))continue;
+      var key=F(d,cli);if(onlyCustomers&&(key.Length==0||key=="0"))continue;
+      if(!byCode.TryGetValue(key,out var mc))continue;
+      if(kindCol!=null&&F(d,kindCol)=="3")continue;
       foreach(var k in ph){var v=F(d,k).Trim();if(v.Count(char.IsDigit)>=6&&!mc.Phones.Contains(v)){mc.Phones.Add(v);hits++;}}
       foreach(var k in ml)foreach(var e in F(d,k).Split([';',',',' '],StringSplitOptions.RemoveEmptyEntries).Select(x=>x.Trim().ToLowerInvariant()).Where(x=>x.Contains('@')))if(!mc.Emails.Contains(e)){mc.Emails.Add(e);hits++;}
      }
@@ -137,6 +146,66 @@ public static class MastroReader
    }
   }
   else warnings.Add("Tabella 'lis_macc' (parco macchine) non trovata.");
+
+  // ── register details, verification history and QR census (optional: a failure never stops the import)
+  List<RtInfo>? rtList=null;
+  if(tMacc!=null)try
+  {
+   (string Col,string Label)[] rtCols=[("TELEMATICO","Telematico"),("RT_ATTIVA","Attivazione RT"),("RT_DISATTIVA","Disattivazione RT"),("RT_DISMESSO","Dismissione RT"),("RT_FISCALI","Dati fiscali RT"),
+    ("TELE_ATTIVA","Trasmissione attiva dal"),("TELE_QRCODE","QR code"),("FIRMWARE","Firmware"),("FIRMWARE_DATA","Data firmware"),("FIRMWARE_2","Firmware secondario"),("DGFE_DATA","Giornale elettronico (DGFE) dal"),("DGFE_GG","DGFE: giorni"),
+    ("DATA_ULT_ZETA","Ultima chiusura Z"),("AZZ_NUME","Azzeramenti"),("AZZ_DATA","Ultimo azzeramento"),("ANNO_VER","Anno verificazione"),("IMPO_VERIFICA","Importo verificazione"),("LOTTERIA_CODICE","Lotteria scontrini"),("XML2_CODICE","Tracciato XML 7.0"),
+    ("CENSIMENTO_DATA","Censimento"),("FINE_GAR","Fine garanzia"),("FINE_CONTRATTO","Fine contratto"),("MESI","Mesi abbonamento"),("COSTO","Costo"),("MESE_FATTURA","Mese fatturazione"),("UBICAZIONE","Ubicazione"),
+    ("MODE_NUM","Modello (numero)"),("VENDITO","Venditore"),("TECNICO","Tecnico"),("AGENTE","Agente"),("SERVIZIO","Servizio"),("BILANCIA","Bilancia collegata"),("PRODU_ZETA","Produttore: chiusure"),("PRODU_FIRMWARE","Produttore: firmware"),("PRODU_ABB","Produttore: abbonamento"),("PRODU_ABB_DATA","Produttore: abbonamento fino al"),("TELE_12MESI","Trasmissioni 12 mesi"),("RT_AUTO","RT automatico")];
+   static bool Empty(string v)=>v.Length==0||v is "0" or "0.00" or "0,00" or "N" or "n";
+   var byId=new Dictionary<string,RtInfo>();var bySerial=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+   foreach(var d in await All(tMacc,300_000))
+   {
+    var client=F(d,"CODI","CODICE","CLIENTE");if(client.Length==0)continue;
+    var id=F(d,"NUME");if(id.Length==0||id=="0")id=client+"|"+F(d,"MATRICOLA")+"|"+F(d,"DESCRI");id="m"+id;
+    var fields=new Dictionary<string,string>();
+    foreach(var(col,label) in rtCols){var v=F(d,col).Trim();if(!Empty(v))fields[label]=v.Length>200?v[..200]:v;}
+    byId[id]=new RtInfo(id,F(d,"MATRICOLA"),fields,[],0);
+    foreach(var s in new[]{F(d,"MATRICOLA"),F(d,"FISCALE")})if(s.Length>=6)bySerial.TryAdd(s.Replace(" ",""),id);
+   }
+   string? Find(string num,string serial)=>num.Length>0&&byId.ContainsKey("m"+num)?"m"+num:bySerial.TryGetValue(serial.Replace(" ",""),out var x)?x:null;
+   if(Tab("misuratori_dati_qrcode") is string tq)
+    foreach(var d in await All(tq,100_000))
+    {
+     if(Find("",F(d,"MATRICOLA")) is not string id)continue;var f=byId[id].Fields;
+     void Put(string l,string v){if(!Empty(v)&&!f.ContainsKey(l))f[l]=v;}
+     Put("Stato (QR)",F(d,"STATO"));Put("Verificazione periodica (QR)",F(d,"VP"));Put("Tipo verificazione (QR)",F(d,"VP_TIPO"));Put("Firmware disponibile",F(d,"FW_DISP_VERS"));
+     Put("Firmware modello",F(d,"FW_MODELLO_VERS"));Put("Laboratorio (P.IVA)",F(d,"PIVA_LAB"));Put("Censimento QR del",F(d,"DATA_UT"));
+    }
+   if(Tab("verifiche") is string tv)
+   {
+    var hist=new Dictionary<string,List<Verification>>();
+    foreach(var d in await All(tv,400_000))
+    {
+     if(Find(F(d,"NUM_MAC"),F(d,"MATRICOLA")) is not string id)continue;
+     // Mastro leaves ESITO and TIPO_VERIFI at 0: shown only when actually filled in; TIPO is Mastro's own code (1/2/3)
+     var outcome=F(d,"ESITO");if(outcome is "0" or "")outcome="";else outcome=outcome switch{"1" or "P" or "p"=>"Positivo","N" or "n"=>"Negativo",_=>outcome};
+     var kind=F(d,"TIPO_VERIFI");if(kind is "0" or "")kind=F(d,"TIPO") is var vt&&vt.Length>0&&vt!="0"?"Tipo "+vt:"";
+     if(!hist.TryGetValue(id,out var l))hist[id]=l=[];
+     l.Add(new(F(d,"DATA_IN","DATA_FI"),outcome,kind,F(d,"OPERAIO"),F(d,"SIGILLO"),F(d,"IMPORTO") is var a&&a!="0"&&a!="0.00"?a:"",F(d,"NUME_RAPP","NUME"),F(d,"DOVE_ESEGUITO") is var w&&w!="0"?w:"",F(d,"NOTE")));
+    }
+    foreach(var(id,l) in hist){var sorted=l.OrderByDescending(v=>v.Date,StringComparer.Ordinal).ToList();byId[id]=byId[id] with{Verifications=sorted.Take(12).ToList(),VerificationCount=sorted.Count};}
+   }
+   rtList=byId.Values.Where(r=>r.Fields.Count>0||r.VerificationCount>0).ToList();
+  }
+  catch(Exception ex) when(ex is MySqlException or InvalidCastException or FormatException){rtList=null;warnings.Add("Dettagli registratori e verifiche non leggibili: "+ex.Message);}
+
+  // ── shops / delivery addresses of the customers
+  List<Site>? sites=null;
+  if(Tab("destina") is string tdst)try
+  {
+   sites=[];var siteClients=clients.Select(x=>x.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
+   foreach(var d in await All(tdst,50_000))
+   {
+    var code=F(d,"CODI");if(code.Length==0||!siteClients.Contains(code))continue;
+    sites.Add(new(code,F(d,"DESCRI"),F(d,"VIA"),F(d,"CAP"),F(d,"CITTA"),F(d,"PROV"),string.Join(" · ",new[]{F(d,"TELE_1"),F(d,"TELE_2")}.Where(x=>x.Length>0)),F(d,"EMAIL"),F(d,"ORARIO"),F(d,"NOTE"),True(F(d,"CHIUSO"))));
+   }
+  }
+  catch(MySqlException ex){sites=null;warnings.Add("Sedi dei clienti non leggibili: "+ex.Message);}
 
   // ── intervention history: the table with NUME_INTE + DATA_INTE (the y_* tables are Mastro's own change log)
   var interventions=new List<Intervention>();string interTable="";
@@ -257,7 +326,23 @@ public static class MastroReader
    catch(MySqlException){balances=null;warnings.Add("Saldi contabili (mov_con) non leggibili: verranno mostrate solo fatture e scadenze.");}
   }
 
-  var batch=new MastroBatch(clients,machines,interventions,DateTimeOffset.Now.ToString("O"),$"MastroSQL {cfg.Host}/{cfg.Database}",articles,stock,false,invoices,dues,balances);
+  // ── bank receipts (RiBa / effetti) of the customers: open and unpaid ones of the last 3 years
+  List<Riba>? riba=null;
+  if(Tab("effetti") is string tef)try
+  {
+   riba=[];var since=DateTime.Today.AddYears(-3).ToString("yyyy-MM-dd");
+   foreach(var d in await All(tef,100_000))
+   {
+    // CLIFOR: "1"/"C" = customer (Mastro 20 writes 1), "F"/"2" = supplier
+    if(F(d,"CLIFOR") is "F" or "f" or "2")continue;
+    var due=F(d,"SCADENZA");if(string.CompareOrdinal(due,since)<0)continue;
+    var code=Num(F(d,"NUMCLIFOR"));if(code.Length==0)continue;
+    riba.Add(new("rb"+F(d,"NUME"),code,due,Math.Abs(D(F(d,"IMPORTO"))),True(F(d,"PAGATA")),True(F(d,"INSOLUTO")),F(d,"BANCA_CLI","BANCA"),Num(F(d,"NUMDOC")),F(d,"DATADOC"),F(d,"DESCRI")));
+   }
+  }
+  catch(MySqlException ex){riba=null;warnings.Add("Effetti (RiBa) non leggibili: "+ex.Message);}
+
+  var batch=new MastroBatch(clients,machines,interventions,DateTimeOffset.Now.ToString("O"),$"MastroSQL {cfg.Host}/{cfg.Database}",articles,stock,false,invoices,dues,balances,rtList,sites,riba);
   var preview=new Preview(clients.Count,machines.Count,interventions.Count,clients.Count(x=>x.Phones.Count>0),clients.Count(x=>x.Emails.Count>0),cols,machineCols,interTable,clients.Take(6).ToList(),warnings,
    articles.Count,stock.Count,stock.Select(s=>s.Warehouse).Distinct().Count(),invoices?.Count??0,dues?.Count??0,balances?.Count??0);
   return(batch,preview);

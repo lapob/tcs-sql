@@ -4,11 +4,15 @@ using System.Text;
 
 namespace TopCash.Server;
 
+/// Owner: unlimited, and only an owner can touch another owner. Admin: everything else (users, settings, data).
+/// Office ("Amministrazione"): sees and works on everything, no users or settings. Tech: everything but accounting.
 public static class Roles
 {
- public const string Admin="admin",Office="ufficio",Tech="tecnico";
- public static readonly string[] All=[Admin,Office,Tech];
- public static string Label(string r)=>r switch{Admin=>"Amministratore",Office=>"Ufficio",Tech=>"Tecnico",_=>r};
+ public const string Owner="owner",Admin="admin",Office="ufficio",Tech="tecnico";
+ public static readonly string[] All=[Owner,Admin,Office,Tech];
+ public static string Label(string r)=>r switch{Owner=>"Proprietario",Admin=>"Amministratore",Office=>"Amministrazione",Tech=>"Tecnico",_=>r};
+ public static bool IsAdmin(string r)=>r is Owner or Admin;
+ public static bool SeesAccounting(string r)=>r is not Tech;
 }
 public sealed record UserInfo(string Username,string Name,string Role,bool Disabled,string Created,string LastLogin);
 
@@ -25,7 +29,13 @@ public sealed class Users
    CREATE TABLE IF NOT EXISTS users(username TEXT PRIMARY KEY COLLATE NOCASE,name TEXT NOT NULL,role TEXT NOT NULL,hash BLOB NOT NULL,salt BLOB NOT NULL,iterations INTEGER NOT NULL,disabled INTEGER NOT NULL DEFAULT 0,stamp TEXT NOT NULL,created TEXT NOT NULL,last_login TEXT NOT NULL DEFAULT '');
    CREATE TABLE IF NOT EXISTS server_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
    """;q.ExecuteNonQuery();
+  // the owner role arrived with 2.7.7: the first administrator ever created (the one who set the server up) becomes the owner
+  using var o=c.CreateCommand();
+  o.CommandText="UPDATE users SET role='owner' WHERE NOT EXISTS(SELECT 1 FROM users WHERE role='owner') AND username=(SELECT username FROM users WHERE role='admin' AND disabled=0 ORDER BY created,rowid LIMIT 1)";
+  PromotedOwner=o.ExecuteNonQuery()>0;
  }
+ /// True when this start promoted the first administrator to owner (written in the security log).
+ public readonly bool PromotedOwner;
  SqliteConnection Open(){var c=new SqliteConnection(cs);c.Open();return c;}
  public bool Any(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT count(*) FROM users";return (long)q.ExecuteScalar()!>0;}
  public static string? ValidatePassword(string p)=>p.Length<10?"La password deve avere almeno 10 caratteri.":p.Distinct().Count()<5?"La password è troppo semplice.":null;
@@ -69,14 +79,17 @@ public sealed class Users
   using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT username,name,role,disabled,created,last_login FROM users ORDER BY name";using var r=q.ExecuteReader();var list=new List<UserInfo>();
   while(r.Read())list.Add(new(r.GetString(0),r.GetString(1),r.GetString(2),r.GetInt64(3)!=0,r.GetString(4),r.GetString(5)));return list;
  }
- int ActiveAdmins(SqliteConnection c,SqliteTransaction tx){using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="SELECT count(*) FROM users WHERE role='admin' AND disabled=0";return (int)(long)q.ExecuteScalar()!;}
+ int ActiveAdmins(SqliteConnection c,SqliteTransaction tx){using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="SELECT count(*) FROM users WHERE role IN ('admin','owner') AND disabled=0";return (int)(long)q.ExecuteScalar()!;}
+ int ActiveOwners(SqliteConnection c,SqliteTransaction tx){using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="SELECT count(*) FROM users WHERE role='owner' AND disabled=0";return (int)(long)q.ExecuteScalar()!;}
  public void Update(string username,string? role,bool? disabled,string? name)
  {
   using var c=Open();using var tx=c.BeginTransaction();
   var current=Get(username)??throw new InvalidDataException("Utente non trovato.");
   if(role!=null&&!Roles.All.Contains(role))throw new InvalidDataException("Ruolo non valido.");
-  bool losesAdmin=current.User.Role==Roles.Admin&&!current.User.Disabled&&((role!=null&&role!=Roles.Admin)||disabled==true);
+  bool losesAdmin=Roles.IsAdmin(current.User.Role)&&!current.User.Disabled&&((role!=null&&!Roles.IsAdmin(role))||disabled==true);
   if(losesAdmin&&ActiveAdmins(c,tx)<=1)throw new InvalidDataException("Deve restare almeno un amministratore attivo.");
+  bool losesOwner=current.User.Role==Roles.Owner&&!current.User.Disabled&&((role!=null&&role!=Roles.Owner)||disabled==true);
+  if(losesOwner&&ActiveOwners(c,tx)<=1)throw new InvalidDataException("Deve restare almeno un proprietario attivo.");
   using var q=c.CreateCommand();q.Transaction=tx;
   q.CommandText="UPDATE users SET role=coalesce($r,role),disabled=coalesce($d,disabled),name=coalesce($n,name),stamp=$s WHERE username=$u";
   q.Parameters.AddWithValue("$r",(object?)role??DBNull.Value);q.Parameters.AddWithValue("$d",disabled.HasValue?(disabled.Value?1:0):DBNull.Value);q.Parameters.AddWithValue("$n",(object?)name?.Trim()??DBNull.Value);q.Parameters.AddWithValue("$s",Guid.NewGuid().ToString("N"));q.Parameters.AddWithValue("$u",username);
@@ -87,7 +100,8 @@ public sealed class Users
  {
   using var c=Open();using var tx=c.BeginTransaction();
   var current=Get(username)??throw new InvalidDataException("Utente non trovato.");
-  if(current.User.Role==Roles.Admin&&!current.User.Disabled&&ActiveAdmins(c,tx)<=1)throw new InvalidDataException("Deve restare almeno un amministratore attivo.");
+  if(Roles.IsAdmin(current.User.Role)&&!current.User.Disabled&&ActiveAdmins(c,tx)<=1)throw new InvalidDataException("Deve restare almeno un amministratore attivo.");
+  if(current.User.Role==Roles.Owner&&!current.User.Disabled&&ActiveOwners(c,tx)<=1)throw new InvalidDataException("Deve restare almeno un proprietario attivo.");
   using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="DELETE FROM users WHERE username=$u";q.Parameters.AddWithValue("$u",username);q.ExecuteNonQuery();tx.Commit();
  }
  public void SetPassword(string username,string password)

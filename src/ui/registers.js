@@ -1,0 +1,136 @@
+'use strict';
+// ───────────────────────── Registers: brand / model / category of every machine, portal coverage, Mastro fiscal detail.
+// Mastro keeps the model as free text ("DRTCASH+", "DTR DRTCASH", "EPSON FP-81 II RT"): brands are recognised here,
+// then each register of a brand that has a portal (DTR-Service, Ital Retail) is checked against that portal's list.
+const RT_BRANDS=[
+ {k:'dtr',l:'DTR',portal:'dtr',pl:'DTR-Service',hue:212,re:/\bDTR\b|\bDRT|DRT ?CASH|DRT ?PALM|DRT ?FRONT/},
+ {k:'ital',l:'Ital Retail',portal:'ital',pl:'Ital Retail',hue:152,re:/ITAL ?RETAIL|\bNICE\b|\bSPICE\b|ITAL ?START/},
+ {k:'rch',l:'RCH',hue:4,re:/\bRCH\b|PRINT!|\bONDA\b|WALL ?E\b|\bAPE ?\d|\bASSO\b|LDP-?\d/},
+ {k:'epson',l:'Epson',hue:228,re:/EPSON|\bFP[- ]?\d/},
+ {k:'axon',l:'Axon',hue:270,re:/AXON|\bDADO\b|WY ?CASH|\bAURA\b/},
+ {k:'ditron',l:'Ditron',hue:28,re:/DITRON/},
+ {k:'custom',l:'Custom',hue:190,re:/\bCUSTOM\b/},
+ {k:'olivetti',l:'Olivetti',hue:340,re:/OLIVETTI|NETTUN/},
+ {k:'micrelec',l:'Micrelec',hue:48,re:/MICRELEC|HYDRA/},
+ {k:'sarema',l:'Sarema',hue:300,re:/SAREMA/},
+ {k:'cashmatic',l:'Cashmatic',cat:'cash',hue:96,re:/CASHMATIC/},
+ {k:'soft',l:'Software e licenze',cat:'soft',hue:250,re:/LICENZA|\bAPP\b|APP\.|SOFTWARE|RISTOQUICK|POSBY/},
+ {k:'printer',l:'Stampanti',cat:'printer',hue:200,re:/^STAMP|STAMPANTE/},
+ {k:'scale',l:'Bilance',cat:'scale',hue:120,re:/BILANCIA/},
+];
+const RT_OTHER={k:'other',l:'Altri registratori',hue:220};
+const RT_CATS={rt:'Registratori di cassa',cash:'Casse automatiche',soft:'Software e licenze',printer:'Stampanti',scale:'Bilance'};
+let RG=null;
+function rtBrand(model){const s=String(model||'').toUpperCase();return RT_BRANDS.find(b=>b.re.test(s))||RT_OTHER;}
+// "DTR DRTCASH" and "DRTCASH" are the same model: the brand words are dropped, spacing and punctuation normalised
+function rtModel(model,b){let s=String(model||'').toUpperCase().replace(/[^A-Z0-9+!]+/g,' ').trim();
+ if(b.k==='dtr')s=s.replace(/^DTR\s+/,'');else if(b.k==='ital')s=s.replace(/^ITAL ?RETAIL\s+/,'');else if(b.k!=='other'&&b.k!=='soft'&&b.k!=='printer'&&b.k!=='scale')s=s.replace(new RegExp('^'+b.l.toUpperCase()+'\\s*'),'').replace(/^RCH\s*-?\s*/,'');
+ return s.replace(/\s+/g,' ').trim()||String(model||'').trim()||'Senza modello';}
+function deriveRegisters(){
+ if(!D){RG=null;return;}
+ const rt=new Map((state.rt||[]).map(r=>[r.machineId,r]));
+ // a portal never synchronised says nothing about its registers: they are not "missing", the list is just not there yet
+ const synced={dtr:(state.dtr||[]).length>0,ital:(state.ital||[]).length>0};
+ const brands=new Map();
+ for(const m of D.machines){
+  const b=rtBrand(m.model);m.brand=b;m.cat=b.cat||'rt';m.family=rtModel(m.model,b);m.rt=rt.get(m.id)||null;
+  m.fw=m.rt?.fields?.['Firmware']||m.dtr?.firmware||m.ital?.d?.firmware||'';
+  m.portal=b.portal?(!synced[b.portal]?'nosync':(b.portal==='dtr'?m.dtr:m.ital)?'in':'out'):'none';
+  if(!brands.has(b.k))brands.set(b.k,{...b,cat:b.cat||'rt',synced:b.portal?synced[b.portal]:true,all:0,active:0,in:0,out:0,models:new Map()});
+  const g=brands.get(b.k);g.all++;if(m.active){g.active++;if(m.portal==='in')g.in++;else if(m.portal==='out')g.out++;const f=g.models.get(m.family)||{name:m.family,n:0};f.n++;g.models.set(m.family,f);}
+ }
+ const list=[...brands.values()].map(g=>({...g,models:[...g.models.values()].sort((a,b)=>b.n-a.n)})).sort((a,b)=>(a.cat==='rt'?0:1)-(b.cat==='rt'?0:1)||(a.k==='other')-(b.k==='other')||b.active-a.active);
+ const sites=new Map();for(const s of state.sites||[]){if(!sites.has(s.clientCode))sites.set(s.clientCode,[]);sites.get(s.clientCode).push(s);}
+ const riba=new Map();for(const r of state.riba||[]){if(!riba.has(r.clientCode))riba.set(r.clientCode,[]);riba.get(r.clientCode).push(r);}
+ for(const c of D.clients){const ks=c.mastroCodes||[];c.sites=ks.flatMap(k=>sites.get(k)||[]);c.riba=ks.flatMap(k=>riba.get(k)||[]);}
+ RG={brands:list,missing:D.machines.filter(m=>m.active&&m.portal==='out'),verifications:(state.rt||[]).reduce((n,r)=>n+(r.verificationCount||0),0)};
+}
+const brandMark=(b,size='')=>!b?'':`<span class="bmark ${size}" style="--h:${b.hue}">${esc(b.l.split(/\s+/).map(w=>w[0]).join('').slice(0,2))}</span>`;
+function portalBadge(m){
+ if(m.portal==='nosync')return`<span class="pbadge" data-tip="${esc(m.brand.pl)} non è ancora stato sincronizzato">${icon('clock')}${esc(m.brand.pl)} da sincronizzare</span>`;
+ if(m.portal==='in')return`<span class="pbadge in" data-tip="Presente su ${esc(m.brand.pl)}">${icon('check')}${esc(m.brand.pl)}</span>`;
+ if(m.portal==='out')return m.active?`<span class="pbadge out" data-tip="Registratore ${esc(m.brand.l)} attivo in Mastro ma non trovato su ${esc(m.brand.pl)}">${icon('alert')}Non su ${esc(m.brand.pl)}</span>`:`<span class="pbadge">Non su ${esc(m.brand.pl)}</span>`;
+ return'<span class="muted" data-tip="Per questo marchio non c’è un portale collegato">—</span>';
+}
+function brandGrid(){
+ const rt=RG.brands.filter(b=>b.cat==='rt'&&b.active),other=RG.brands.filter(b=>b.cat!=='rt'&&b.active);
+ const card=(b,i)=>{const cov=b.portal&&b.synced&&b.active?Math.round(b.in/b.active*100):null;
+  return`<button class="brand-card reveal${ui.mbrand===b.k?' on':''}" style="--i:${i};--h:${b.hue}" data-mbrand="${b.k}" aria-pressed="${ui.mbrand===b.k}">
+   <div class="brand-top">${brandMark(b)}<div class="grow"><strong>${esc(b.l)}</strong><small>${fmt(b.active)} attive · ${fmt(b.models.length)} modelli</small></div>${b.portal?`<span class="brand-portal">${esc(b.pl)}</span>`:''}</div>
+   ${b.portal&&!b.synced?`<small class="cov-txt">${icon('clock')} ${esc(b.pl)} non ancora sincronizzato: collegalo dall’app Windows per il confronto</small>`:cov!==null?`<div class="cov"><i style="width:${cov}%"></i></div><small class="cov-txt"><b>${fmt(b.in)}</b> nel portale${b.out?` · <span class="warn">${fmt(b.out)} mancanti</span>`:' · tutte presenti'}</small>`:`<small class="cov-txt muted">${b.models.slice(0,3).map(x=>esc(x.name)).join(' · ')}</small>`}</button>`;};
+ return`<div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Marchi e modelli</h2><p>Riconosciuti dal modello scritto in Mastro. Per DTR e Ital Retail controllo se ogni cassa attiva è presente sul portale.</p></div>${ui.mbrand?`<button class="btn sm ghost" data-mbrand="">${icon('close')}Tutti i marchi</button>`:''}</div>
+  <div class="brand-grid">${rt.map(card).join('')}</div>
+  ${other.length?`<div class="cat-row">${other.map((b,i)=>`<button class="chip${ui.mbrand===b.k?' on':''}" data-mbrand="${b.k}">${brandMark(b,'xs')}${esc(RT_CATS[b.cat]||b.l)}<em>${fmt(b.active)}</em></button>`).join('')}</div>`:''}</div>`;
+}
+function machinesPage(){
+ if(!ui.mtab)ui.mtab='active';
+ // the archive can be rebuilt by paths that do not classify (local edits, saves): classify here when needed
+ if(!RG||D.machines.some(m=>!m.brand))deriveRegisters();
+ const brand=ui.mbrand?RG?.brands.find(b=>b.k===ui.mbrand):null;
+ let list=D.machines;const q=norm(ui.q);
+ if(brand)list=list.filter(m=>m.brand.k===brand.k);
+ if(brand&&ui.mmodel)list=list.filter(m=>m.family===ui.mmodel);
+ if(ui.mtab==='active')list=list.filter(m=>m.active);else if(ui.mtab==='sub')list=list.filter(m=>m.subscribed);else if(ui.mtab==='ver')list=list.filter(m=>m.active&&m.verDays!==null&&m.verDays<=60);else if(ui.mtab==='end')list=list.filter(m=>m.subscribed&&m.endDays!==null&&m.endDays<=60);else if(ui.mtab==='gap')list=list.filter(m=>m.active&&m.portal==='out');
+ if(q)list=list.filter(m=>norm([m.client,m.model,m.serial,m.fiscalSerial,m.logo,m.type,m.brand?.l,m.fw].join(' ')).includes(q));
+ if(!['client','ver','end','model'].includes(ui.sort.key))ui.sort={key:'ver',dir:1};
+ list=sortBy(list,{client:m=>m.client,model:m=>(m.brand?.l||'')+' '+m.family,ver:m=>m.verNext?+m.verNext:Infinity,end:m=>m.end?+m.end:Infinity});
+ const rows=pageOf(list,16);const dueCls=n=>n===null?'':n<0?'bad':n<=60?'due':'';
+ const act=D.machines.filter(m=>m.active).length;
+ return`${hero('Il <span class="grad">parco macchine</span>.','Registratori di cassa e dispositivi presso i clienti, divisi per marchio e modello, con presenza nei portali, verificazioni e abbonamenti.','')}
+ ${D.machines.length?'':`<div class="banner reveal" style="--i:1"><span class="orb">${icon('register')}</span><div class="grow"><h3>Importa il parco macchine da MastroSQL</h3><p>Da Impostazioni → Importa da MastroSQL, su un PC dove Mastro è installato.</p></div><button class="btn" data-go="settings">Vai alle impostazioni ${icon('arrow')}</button></div>`}
+ <div class="kpis" style="grid-template-columns:repeat(4,1fr)">${kpi('Macchine attive',act,`${fmt(D.machines.length)} in archivio`,'register','','machines',1)}${kpi('Non nei portali',RG?.missing.length||0,'Casse DTR e Ital Retail da controllare','alert',RG?.missing.length?'t-due':'','machines',2)}${kpi('Verificazioni entro 60 gg',D.verDue.length,RG?.verifications?`${fmt(RG.verifications)} verifiche nello storico`:'Comprese quelle già scadute','shield','t-due','machines',3)}${kpi('Abbonamenti in scadenza',D.contractDue.length,`${fmt(D.machines.filter(m=>m.subscribed).length)} in abbonamento`,'calendar','t-info','machines',4)}</div>
+ ${RG&&D.machines.length?brandGrid():''}
+ <div class="card reveal" style="--i:5"><div class="card-head"><div><h2>${brand?brandMark(brand,'sm')+' '+esc(brand.l):'Macchine'}<span class="count">${fmt(list.length)}</span></h2>${brand?.portal?`<p>${fmt(brand.in)} su ${esc(brand.pl)} · ${fmt(brand.out)} attive non trovate</p>`:''}</div>
+  <div class="seg">${[['active','Attive'],['gap','Non nei portali'],['ver','Verifiche'],['end','Abbonamenti in scadenza'],['sub','In abbonamento'],['all','Tutte']].map(([k,l])=>`<button class="${ui.mtab===k?'active':''}" data-mtab="${k}">${l}${k==='gap'&&RG?.missing.length?` <em class="seg-n">${fmt(RG.missing.length)}</em>`:''}</button>`).join('')}</div></div>
+ ${brand&&brand.models.length>1?`<div class="chips model-chips">${brand.models.slice(0,24).map(x=>`<button class="chip${ui.mmodel===x.name?' on':''}" data-mmodel="${esc(x.name)}">${esc(x.name)}<em>${fmt(x.n)}</em></button>`).join('')}</div>`:''}
+ <div class="toolbar">${search('Cerca cliente, marchio, modello, matricola, firmware…')}</div>
+ <div class="table-wrap"><table><thead><tr>${th('Cliente','client')}${th('Modello','model')}<th>Matricola</th><th>Portale</th>${th('Prossima verificazione','ver')}${th('Fine abbonamento','end')}<th>Stato</th></tr></thead><tbody>
+ ${rows.map((m,k)=>`<tr class="reveal" style="--i:${k}" ${m.code?`data-client="${esc(m.code)}" tabindex="0"`:''}><td><div class="who">${markEl(m.client,m.code||m.client)}<div><strong>${hl(m.client,ui.q)}</strong><small>${esc(m.c?.city||'')}</small></div></div></td>
+  <td><div class="model-cell">${brandMark(m.brand,'xs')}<div><strong>${hl(m.family,ui.q)}</strong><small class="muted">${esc(m.brand.l)}${m.fw?' · fw '+esc(m.fw):''}</small></div></div></td>
+  <td class="mono">${m.serial?`<button class="link-btn mono" data-device="${esc(m.serial)}" data-tip="Scheda unica: Mastro, portali, verifiche, licenze e storia">${hl(m.serial,ui.q)}</button>`:'—'}${m.fiscalSerial&&m.fiscalSerial!=='0'?`<br><small class="muted">${hl(m.fiscalSerial,ui.q)}</small>`:''}</td>
+  <td>${portalBadge(m)}</td>
+  <td>${m.verNext?`${dShort(m.verNext)}<br><small style="color:var(--${dueCls(m.verDays)==='bad'?'bad':dueCls(m.verDays)==='due'?'due':'text-3'})">${rel(m.verDays)}</small>`:'<span class="muted">—</span>'}</td>
+  <td>${m.subscribed?(m.end?`${dShort(m.end)}<br><small style="color:var(--${dueCls(m.endDays)==='bad'?'bad':dueCls(m.endDays)==='due'?'due':'text-3'})">${rel(m.endDays)}</small>`:'In abbonamento'):'<span class="muted">Nessuno</span>'}</td>
+  <td>${m.active?'<span class="badge ok">Attiva</span>':'<span class="badge">Dismessa</span>'}</td></tr>`).join('')||`<tr><td colspan="7">${empty('register','Nessuna macchina',D.machines.length?'Modifica i filtri.':'Importa il parco macchine da MastroSQL.')}</td></tr>`}
+ </tbody></table></div>${pager(list.length,16)}</div>`;
+}
+// inside the DTR and Ital Retail sections: the active registers of that brand that Mastro has but the portal does not
+function portalGapCard(portal){
+ if(!RG)return'';const b=RT_BRANDS.find(x=>x.portal===portal);const list=RG.missing.filter(m=>m.brand.k===b.k);const g=RG.brands.find(x=>x.k===b.k);
+ if(!g)return'';
+ if(!g.synced)return`<div class="card reveal gap-card" style="--i:9"><div class="card-head"><div><h2>${brandMark(b,'sm')} Casse ${esc(b.l)} in Mastro<span class="count">${fmt(g.active)}</span></h2><p>Quando ${esc(b.pl)} sarà sincronizzato, qui vedrai quali di queste casse mancano sul portale.</p></div></div></div>`;
+ return`<div class="card reveal gap-card" style="--i:9"><div class="card-head"><div><h2>${brandMark(b,'sm')} Casse ${esc(b.l)} in Mastro<span class="count">${fmt(g.active)}</span></h2><p>${list.length?`<b>${fmt(list.length)}</b> attive in Mastro non risultano su ${esc(b.pl)}: matricola diversa, cassa non ancora registrata o portale non sincronizzato.`:`Tutte le ${fmt(g.active)} casse attive sono presenti su ${esc(b.pl)}.`}</p></div>${list.length?`<button class="btn sm ghost" data-go="machines" data-mbrand-go="${b.k}">Vedi in Macchine ${icon('arrow')}</button>`:''}</div>
+  <div class="cov big"><i style="width:${g.active?Math.round(g.in/g.active*100):0}%"></i></div>
+  ${list.length?`<div class="gap-list">${list.slice(0,40).map(m=>`<button class="gap-row" data-device="${esc(m.serial||m.fiscalSerial||'')}"><span class="mono">${esc(m.serial||'—')}</span><span class="grow"><strong>${esc(m.client)}</strong><small>${esc(m.family)}${m.c?.city?' · '+esc(m.c.city):''}</small></span>${icon('chevron')}</button>`).join('')}</div>${list.length>40?`<p class="muted" style="font-size:12.5px;margin-top:8px">e altre ${fmt(list.length-40)}: elenco completo in Macchine → Non nei portali.</p>`:''}`:''}</div>`;
+}
+// fiscal detail and verification history in the device sheet
+function rtSection(m){
+ const r=m?.rt;if(!r)return'';const f=r.fields||{};const keys=Object.keys(f);
+ const groups=[['Fiscale',['Telematico','Attivazione RT','Disattivazione RT','Dismissione RT','Dati fiscali RT','Trasmissione attiva dal','Stato (QR)','Censimento','Censimento QR del','Lotteria scontrini','Tracciato XML 7.0','Trasmissioni 12 mesi','RT automatico']],
+  ['Firmware e giornale',['Firmware','Data firmware','Firmware secondario','Firmware disponibile','Firmware modello','Giornale elettronico (DGFE) dal','DGFE: giorni','Ultima chiusura Z','Azzeramenti','Ultimo azzeramento']],
+  ['Verificazione e contratto',['Anno verificazione','Importo verificazione','Verificazione periodica (QR)','Tipo verificazione (QR)','Laboratorio (P.IVA)','Fine garanzia','Fine contratto','Mesi abbonamento','Costo','Mese fatturazione']]];
+ const used=new Set(groups.flatMap(g=>g[1]));const rest=keys.filter(k=>!used.has(k));if(rest.length)groups.push(['Altro',rest]);
+ const val=v=>/^\d{4}-\d{2}-\d{2}$/.test(v)?dShort(parseDate(v)):esc(v);
+ return`${groups.map(([t,ks])=>{const row=ks.filter(k=>f[k]);return row.length?`<div class="d-section"><h3>${t} <span>Mastro</span></h3><div class="facts">${row.map(k=>`<div class="fact"><small>${esc(k)}</small><span>${val(f[k])}</span></div>`).join('')}</div></div>`:'';}).join('')}
+  ${r.verificationCount?`<div class="d-section"><h3>Verifiche periodiche <span>${fmt(r.verificationCount)}</span></h3><div class="ver-list">${r.verifications.map(v=>`<div class="ver-row"><time>${v.date?dShort(parseDate(v.date)):'—'}</time><div class="grow"><strong>${esc(v.type||'Verifica')}${v.outcome?` · <span class="${/neg/i.test(v.outcome)?'danger-text':''}">${esc(v.outcome)}</span>`:''}</strong><small>${[v.technician&&'Tecnico '+v.technician,v.seal&&'Sigillo '+v.seal,v.report&&'Rapporto n. '+v.report,v.amount&&'€ '+v.amount].filter(Boolean).map(esc).join(' · ')}</small>${v.notes?`<small class="muted">${esc(v.notes)}</small>`:''}</div></div>`).join('')}</div>${r.verificationCount>r.verifications.length?`<p class="muted" style="font-size:12px;margin-top:6px">Ultime ${r.verifications.length} di ${fmt(r.verificationCount)}.</p>`:''}</div>`:''}`;
+}
+// shops and RiBa in the client drawer
+function clientExtraSections(c,part){if(c&&c.sites===undefined)deriveRegisters();
+ if(!c)return'';let h='';
+ if(part!=='riba'&&c.sites?.length)h+=`<div class="d-section"><h3>Sedi e punti vendita <span>${c.sites.length}</span></h3>${c.sites.map(s=>`<div class="site-row${s.closed?' closed':''}">${icon('pin')}<div class="grow"><strong>${esc(s.name||'Sede')}${s.closed?' <span class="badge">chiusa</span>':''}</strong><small>${esc([s.address,[s.cap,s.city].filter(Boolean).join(' '),s.prov&&'('+s.prov+')'].filter(Boolean).join(', '))}</small>${s.phone||s.email||s.hours?`<small class="muted">${esc([s.phone,s.email,s.hours&&'Orario '+s.hours].filter(Boolean).join(' · '))}</small>`:''}</div>${s.address?`<a class="icon-btn sm" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([s.address,s.cap,s.city,s.prov].filter(Boolean).join(' '))}" aria-label="Apri in Maps">${icon('external')}</a>`:''}</div>`).join('')}</div>`;
+ if(part!=='sites'&&c.riba?.length&&canAccounting()){const open=c.riba.filter(r=>!r.paid||r.unpaid).sort((a,b)=>(a.due||'').localeCompare(b.due||''));const uns=c.riba.filter(r=>r.unpaid);
+  if(open.length)h+=`<div class="d-section"><h3>RiBa ed effetti <span>${open.length}</span></h3>${uns.length?`<p class="danger-text" style="font-size:13px;margin:0 0 8px">${uns.length} insolut${uns.length===1?'o':'i'} · € ${fmtMoney(uns.reduce((s,r)=>s+r.amount,0))}</p>`:''}${open.slice(0,12).map(r=>`<div class="ver-row"><time>${r.due?dShort(parseDate(r.due)):'—'}</time><div class="grow"><strong>€ ${fmtMoney(r.amount)}${r.unpaid?' · <span class="danger-text">insoluto</span>':''}</strong><small>${esc([r.doc&&'Doc. '+r.doc,r.bank].filter(Boolean).join(' · '))}</small></div></div>`).join('')}</div>`;}
+ return h;
+}
+const fmtMoney=n=>Number(n||0).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2});
+// the DTR and Ital Retail sections gain the coverage card at the bottom
+if(typeof dtrPage==='function'){const base=dtrPage;dtrPage=function(){return base()+portalGapCard('dtr');};}
+if(typeof italPage==='function'){const base=italPage;italPage=function(){return base()+portalGapCard('ital');};}
+document.addEventListener('click',e=>{
+ const t=e.target.closest?.('[data-mbrand],[data-mmodel],[data-mbrand-go]');if(!t)return;
+ if('mbrandGo' in t.dataset){ui.mbrand=t.dataset.mbrandGo;ui.mtab='gap';ui.mmodel='';ui.p=1;return;}
+ e.preventDefault();e.stopPropagation();
+ if('mbrand' in t.dataset){ui.mbrand=ui.mbrand===t.dataset.mbrand?'':t.dataset.mbrand;ui.mmodel='';ui.p=1;}
+ else{ui.mmodel=ui.mmodel===t.dataset.mmodel?'':t.dataset.mmodel;ui.p=1;}
+ render(false);
+},true);

@@ -12,7 +12,7 @@ async function printReport(id){
  if(!WEB)return send('reportPrint',{id});
  const it=state.interventions.find(x=>x.id===id);
  const m=document.createElement('div');m.className='modal';
- m.innerHTML=`<div class="modal-box print-box" role="dialog" aria-label="Anteprima di stampa"><div class="print-head"><h3>Rapportino n. ${esc(it?.reportNo||'')}</h3>
+ m.innerHTML=`<div class="modal-box print-box" role="dialog" aria-label="Anteprima di stampa"><div class="print-head"><h3>${it?.reportNo?'Rapportino n. '+esc(it.reportNo):'Intervento da firmare · '+esc(it?.title||'')}</h3>
   <div class="btn-row"><button class="btn ghost" data-p="0">Chiudi</button><button class="btn" data-p="pdf">${icon('download')}PDF</button><button class="btn accent" data-p="print" disabled>${icon('print')}Stampa</button></div></div>
   <div class="print-view"><span class="sub">Preparo l’anteprima…</span></div></div>`;
  document.body.append(m);
