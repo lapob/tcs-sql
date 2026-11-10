@@ -49,9 +49,30 @@ public partial class MainWindow : Window
   // Fit any screen: 92% of the work area, never above the design size (small laptops get a usable window).
   var area=SystemParameters.WorkArea;Width=Math.Min(1480,area.Width*0.92);Height=Math.Min(960,area.Height*0.92);MinWidth=Math.Min(MinWidth,area.Width);MinHeight=Math.Min(MinHeight,area.Height);
   pushTimer.Tick+=async(_,_)=>{pushTimer.Stop();if(pushPending){pushPending=false;await PushNow();}};
-  Loaded+=Initialize;Closed+=(_,_)=>{timer.Stop();pushTimer.Stop();portal?.Close();dtr?.Quit();ital?.Quit();};
+  Loaded+=Initialize;Closed+=(_,_)=>{timer.Stop();pushTimer.Stop();updateTimer.Stop();portal?.Close();dtr?.Quit();ital?.Quit();if(!updateStarted&&Updater.ReadyVersion!=null)Updater.Apply(false,false);};
+  updateTimer.Tick+=async(_,_)=>await UpdateTick();
   StateChanged+=(_,_)=>{try{if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.MemoryUsageTargetLevel=WindowState==WindowState.Minimized?CoreWebView2MemoryUsageTargetLevel.Low:CoreWebView2MemoryUsageTargetLevel.Normal;}catch{}};
  }
+ // ───────── network updates: the build published by the administrator on the server reaches this PC by itself
+ readonly DispatcherTimer updateTimer=new(){Interval=TimeSpan.FromMinutes(1)};DateTime nextUpdateCheck=DateTime.Now.AddSeconds(30);bool updateStarted,updateBusy;string updateError="";
+ object UpdatePayload()=>new{type="update",current=Updater.CurrentText,ready=Updater.ReadyVersion??"",notes=Updater.ReadyNotes,error=updateError,serverMode=ServerMode};
+ async Task UpdateTick()
+ {
+  if(updateBusy||updateStarted)return;
+  // on the sync station the update installs itself at night, then the app comes back minimised
+  if(Updater.ReadyVersion!=null&&syncToken.Length>0&&DateTime.Now.Hour is 3&&!busy){InstallUpdate(true);return;}
+  if(!ServerMode||DateTime.Now<nextUpdateCheck)return;
+  nextUpdateCheck=DateTime.Now.AddHours(6);await CheckUpdate(false);
+ }
+ async Task CheckUpdate(bool manual)
+ {
+  if(!ServerMode){if(manual)await Notify("Gli aggiornamenti in rete arrivano quando Studio lavora con il server dell'ufficio.");return;}
+  updateBusy=true;var before=Updater.ReadyVersion;
+  try{var v=await Updater.Check(Active);updateError="";if(manual&&v==null)await Notify($"Studio è aggiornato (versione {Updater.CurrentText}).");else if(v!=null&&v!=before)await Notify($"Versione {v} scaricata: si installa alla chiusura, oppure subito con «Riavvia e aggiorna».");}
+  catch(Exception ex){updateError=ex is System.Net.Http.HttpRequestException?"Server non raggiungibile per gli aggiornamenti.":ex.Message;if(manual)await Notify(updateError);}
+  finally{updateBusy=false;Post(UpdatePayload());}
+ }
+ void InstallUpdate(bool minimized){if(Updater.Apply(true,minimized||WindowState==WindowState.Minimized)){updateStarted=true;Close();}}
  readonly DispatcherTimer pushTimer=new(){Interval=TimeSpan.FromMilliseconds(1500)};bool pushPending;DateTime lastPush=DateTime.MinValue;
  /// Uses the nearest "data" folder that already holds the database (e.g. D:\TopCashSQL\data when run from src\bin), else creates one next to the exe.
  static string FindDataFolder()
@@ -82,7 +103,7 @@ public partial class MainWindow : Window
    core.NavigationCompleted+=(_,ev)=>{if(!ev.IsSuccess&&ServerMode&&!serverErrorOpen&&ev.WebErrorStatus is CoreWebView2WebErrorStatus.CannotConnect or CoreWebView2WebErrorStatus.ConnectionAborted or CoreWebView2WebErrorStatus.ConnectionReset or CoreWebView2WebErrorStatus.Disconnected or CoreWebView2WebErrorStatus.HostNameNotResolved or CoreWebView2WebErrorStatus.ServerUnreachable or CoreWebView2WebErrorStatus.Timeout)ShowServerError();};
    await ChooseServer();Navigate();
    await Task.Yield();if(!ServerMode&&Scan(false)>0)await Push();
-   timer.Tick+=async(_,_)=>{if(!busy&&!ServerMode){var count=Scan(false);if(count>0)await Push();}};timer.Start();
+   timer.Tick+=async(_,_)=>{if(!busy&&!ServerMode){var count=Scan(false);if(count>0)await Push();}};timer.Start();updateTimer.Start();
    // DTR-Service: once connected on this PC the session is resumed in the background at every start
    if(DtrWindow.Configured&&(!ServerMode||syncToken.Length>0))OpenDtr(false);
    if(ItalRetailWindow.Configured&&(!ServerMode||syncToken.Length>0))OpenItal(false);
@@ -114,7 +135,7 @@ public partial class MainWindow : Window
   if(r==MessageBoxResult.No){serverUrl="";SaveSettings();}Navigate();
   }finally{serverErrorOpen=false;}
  }
- static readonly HashSet<string> RemoteActions=["external","portal","syncPortal","disconnectServer","setSyncToken","hostInfo","mastroRead","setExternal","dtr","dtrSync","ital","italSync","autostart"];
+ static readonly HashSet<string> RemoteActions=["external","portal","syncPortal","disconnectServer","setSyncToken","hostInfo","mastroRead","setExternal","dtr","dtrSync","ital","italSync","autostart","applyUpdate","checkUpdate"];
  MastroBatch? lastMastro;
  static readonly JsonSerializerOptions jsonIn=new(){PropertyNameCaseInsensitive=true};
  /// Reads Mastro (read-only) on this PC and hands a preview to the page. Local mode keeps the batch for "mastroImport";
@@ -186,7 +207,9 @@ public partial class MainWindow : Window
       Process.Start(new ProcessStartInfo(tmp){UseShellExecute=true});await Notify("PDF aperto: stampalo con Ctrl+P.");}break;
     case "interventionDelete":
      try{store.DeleteIntervention(root.GetProperty("id").GetString()??"");await Push();await Notify("Intervento eliminato.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
-    case "hostInfo":Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,serverExternal,activeServer=Active,portalOpen=portal!=null,autostart=Autostart});break;
+    case "hostInfo":Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,serverExternal,activeServer=Active,portalOpen=portal!=null,autostart=Autostart});Post(UpdatePayload());break;
+    case "checkUpdate":await CheckUpdate(true);break;
+    case "applyUpdate":if(Updater.ReadyVersion!=null)InstallUpdate(false);else await CheckUpdate(true);break;
     case "autostart":
      Autostart=root.GetProperty("on").GetBoolean();Post(new{type="host",autostart=Autostart});
      await Notify(Autostart?"Studio partirà da solo all'accesso a Windows, ridotto a icona.":"Avvio automatico disattivato.");break;
@@ -229,6 +252,12 @@ public partial class MainWindow : Window
      try{var code=store.SaveClient(root.TryGetProperty("code",out var cc)?cc.GetString():"",ed,Environment.UserName);await Push();await Notify("Cliente salvato.");Post(new{type="clientSaved",code});}catch(InvalidDataException ex){await Notify(ex.Message);}break;}
     case "clientDelete":{var del=root.GetProperty("deleted").GetBoolean();store.DeleteClient(root.GetProperty("code").GetString()!,del,Environment.UserName);await Push();await Notify(del?"Cliente eliminato: puoi ripristinarlo da Clienti → Eliminati.":"Cliente ripristinato.");break;}
     case "clientReset":try{store.ResetClient(root.GetProperty("code").GetString()!,Environment.UserName);await Push();await Notify("Modifiche annullate: il cliente torna ai dati dei portali e di Mastro.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
+    case "assetSave":try{store.SaveAsset(JsonSerializer.Deserialize<Asset>(root.GetProperty("asset").GetRawText(),new JsonSerializerOptions{PropertyNameCaseInsensitive=true})!,Environment.UserName);await Push();await Notify("Inventario aggiornato.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
+    case "assetDelete":store.DeleteAsset(root.GetProperty("id").GetString()??"",Environment.UserName);await Push();await Notify("Elemento tolto dall'inventario.");break;
+    case "renewalSave":try{store.SaveRenewal(root.GetProperty("key").GetString()??"",S(root,"status"),S(root,"note"),S(root,"nextContact"),Environment.UserName);await Push();}catch(InvalidDataException ex){await Notify(ex.Message);}break;
+    case "linkSave":try{store.SaveDeviceLink(root.GetProperty("serial").GetString()??"",S(root,"clientCode"),Environment.UserName);await Push();await Notify("Abbinamento salvato.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
+    case "clientMerge":try{store.MergeClient(root.GetProperty("code").GetString()??"",S(root,"into"),Environment.UserName);await Push();await Notify("Clienti uniti.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
+    case "brandsSave":store.SaveHiddenBrands(root.GetProperty("brands").EnumerateArray().Select(x=>x.GetString()??""),Environment.UserName);await Push();await Notify("Regola sulle marche salvata.");break;
     case "licenseSave":{var le=JsonSerializer.Deserialize<LicenseEdit>(root.GetProperty("edit").GetRawText(),new JsonSerializerOptions{PropertyNameCaseInsensitive=true})!;
      try{store.SaveLicense(root.GetProperty("id").GetString()!,le,Environment.UserName);await Push();await Notify(le.Hidden?"Licenza tolta dall’elenco.":"Licenza aggiornata.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;}
     case "meta":var meta=JsonSerializer.Deserialize<ClientMeta>(root.GetProperty("meta").GetRawText(),new JsonSerializerOptions{PropertyNameCaseInsensitive=true})!;store.SaveMeta(root.GetProperty("code").GetString()!,meta);await Push();await Notify("Scheda di lavoro aggiornata.");break;
@@ -253,6 +282,7 @@ public partial class MainWindow : Window
   if(!ServerMode||syncToken.Length>0)return true;
   _=Notify("La sincronizzazione con Zucchetti si avvia dalla postazione dell'ufficio. Un amministratore può attivarla da Impostazioni → Postazione di sincronizzazione.");return false;
  }
+ static string S(JsonElement e,string k)=>e.TryGetProperty(k,out var v)&&v.ValueKind==JsonValueKind.String?v.GetString()??"":"";
  void Post(object payload){try{Dashboard.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(payload,json));}catch{}}
  /// Start with Windows (current user only, HKCU "Run"): keeps the sync station working after a restart.
  const string RunKey=@"Software\Microsoft\Windows\CurrentVersion\Run",RunName="TopCashStudio";
@@ -312,7 +342,8 @@ public partial class MainWindow : Window
   await PushNow();
  }
  Task PushNow(){lastPush=DateTime.UtcNow;if(ServerMode)return Task.CompletedTask; // the shared server feeds the UI itself
-  if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="state",records=store.Licenses(),licenseEdits=store.LicenseEdits(),licenseCleanup=store.LicenseCleanup(),clientEdits=store.ClientEdits(),clients=store.Clients(),orders=store.Orders(),mastroClients=store.MastroClients(),machines=store.Machines(),interventions=store.Interventions(),warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),syncRunning=portal?.Running??false,syncProgress=portal?.Progress??"",sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),dtr=store.DtrRegisters(),dtrStatus=store.DtrState(),ital=store.ItalDevices(),italOrders=store.ItalOrders(),italStatus=store.ItalState(),sourceFolder,dataFolder=store.Folder,autoImport=true,portalConnected=portal?.Authenticated??false},json));return Task.CompletedTask;}
+  var mv=store.Mastro();
+  if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="state",records=store.Licenses(),licenseEdits=store.LicenseEdits(),licenseCleanup=store.LicenseCleanup(),clientEdits=store.ClientEdits(),clients=store.Clients(),orders=store.Orders(),mastroClients=mv.Clients,machines=mv.Machines,interventions=mv.Interventions,brandRule=mv.Excluded,assets=store.Assets(),renewals=store.Renewals(),deviceLinks=store.DeviceLinks(),warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),syncRunning=portal?.Running??false,syncProgress=portal?.Progress??"",sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),dtr=store.DtrRegisters(),dtrStatus=store.DtrState(),ital=store.ItalDevices(),italOrders=store.ItalOrders(),italStatus=store.ItalState(),sourceFolder,dataFolder=store.Folder,autoImport=true,portalConnected=portal?.Authenticated??false},json));return Task.CompletedTask;}
  // In server mode the progress also reaches every browser through the server; locally it goes straight to the page.
  Task Notify(string message){Dashboard.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="toast",message},json));return Task.CompletedTask;}
 }

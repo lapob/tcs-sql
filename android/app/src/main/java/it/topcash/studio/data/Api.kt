@@ -126,6 +126,29 @@ class Api(context: Context) {
             }
         } catch (e: ApiException) { throw e } catch (e: IOException) { throw ApiException("Server non raggiungibile") }
     }
+    // inventory, renewals
+    suspend fun saveAsset(a: Asset) { post("/api/assets/save", json.encodeToString(a)) }
+    suspend fun deleteAsset(id: String) { post("/api/assets/delete", json.encodeToString(IdOnly(id))) }
+    suspend fun saveRenewal(r: RenewalRequest) { post("/api/renewals/save", json.encodeToString(r)) }
+    // network updates: the APK published on the server by the administrator
+    suspend fun updateInfo(): UpdateInfo = json.decodeFromString(get("/api/update/info"))
+    suspend fun downloadApk(dir: java.io.File, b: AppBuild, onProgress: (Float) -> Unit): java.io.File = withContext(Dispatchers.IO) {
+        try {
+            streamHttp.newCall(Request.Builder().url(url("/api/update/android")).get().build()).execute().use { r ->
+                if (!r.isSuccessful) throw r.error()
+                dir.mkdirs(); dir.listFiles()?.forEach { it.delete() }
+                val f = java.io.File(dir, "TopCash-Studio-${b.version}.apk")
+                val md = java.security.MessageDigest.getInstance("SHA-256"); val total = r.body.contentLength().takeIf { it > 0 } ?: b.size
+                r.body.byteStream().use { inp -> f.outputStream().use { out ->
+                    val buf = ByteArray(64 * 1024); var done = 0L
+                    while (true) { val n = inp.read(buf); if (n < 0) break; out.write(buf, 0, n); md.update(buf, 0, n); done += n; if (total > 0) onProgress(done.toFloat() / total) }
+                } }
+                val sha = md.digest().joinToString("") { "%02X".format(it) }
+                if (!sha.equals(b.sha256, ignoreCase = true)) { f.delete(); throw ApiException("Il file scaricato non corrisponde: riprova.") }
+                f
+            }
+        } catch (e: ApiException) { throw e } catch (e: IOException) { throw ApiException("Download non riuscito: server non raggiungibile") }
+    }
     // administrator: customers, licences, users
     suspend fun saveClient(code: String, e: ClientEdit): String = json.decodeFromString<SavedCode>(post("/api/clients/save", json.encodeToString(ClientSaveRequest(code, e)))).code
     suspend fun deleteClient(code: String, deleted: Boolean) { post("/api/clients/delete", json.encodeToString(ClientDeleteRequest(code, deleted))) }

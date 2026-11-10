@@ -21,7 +21,14 @@ function applyEdits(){
   c.search=norm([c.search,c.name,c.vat,c.taxCode,c.city,c.address,c.phone,c.email,c.pec,c.contact,c.category].join(' '));
   if(e.deleted)D.deleted.push(c);
  }
- if(D.deleted.length){const gone=new Set(D.deleted);D.clients=D.clients.filter(c=>!gone.has(c));}
+ // merged duplicates: everything of the duplicate shows under the main customer, the duplicate disappears
+ D.merged=[];
+ for(const [code,e] of Object.entries(edits)){if(!e.mergedInto)continue;const c=D.byCode.get(code),t=D.byCode.get(e.mergedInto);if(!c||!t||c===t||e.deleted)continue;
+  for(const k of ['records','active','orders','machines','interventions'])for(const x of c[k]||[]){(t[k]||=[]).push(x);if(x&&typeof x==='object'&&'c' in x)x.c=t;if(x&&'code' in x&&k!=='records')x.code=t.code;if(x&&'client' in x&&(k==='machines'||k==='interventions'))x.client=t.name;}
+  t.phones=[...new Set([...(t.phones||[]),...(c.phones||[])])];t.emails=[...new Set([...(t.emails||[]),...(c.emails||[])])];
+  if(!t.vat)t.vat=c.vat;if(!t.taxCode)t.taxCode=c.taxCode;if(!t.mastro&&c.mastro)t.mastro=c.mastro;(t.mastroCodes||=[]).push(...(c.mastroCodes||[]));
+  t.search=norm(t.search+' '+c.search);(t.mergedFrom||=[]).push(c);D.byCode.set(code,t);D.merged.push(c);}
+ if(D.deleted.length||D.merged.length){const gone=new Set([...D.deleted,...D.merged]);D.clients=D.clients.filter(c=>!gone.has(c));}
  D.clients.sort((a,b)=>a.name.localeCompare(b.name,'it'));
  D.licEdits=state.licenseEdits||{};
 }
@@ -29,7 +36,7 @@ function applyEdits(){
 /* Sends an administrator change to the server (shared archive) or to the Windows app (local archive). */
 async function adminSend(action,data){
  if(!WEB){if(!host)return toast('Funzione disponibile nell’app Windows.','alert');host.postMessage({action,...data});return true;}
- const url={clientSave:'/api/clients/save',clientDelete:'/api/clients/delete',clientReset:'/api/clients/reset',licenseSave:'/api/licenses/save'}[action];
+ const url={clientSave:'/api/clients/save',clientDelete:'/api/clients/delete',clientReset:'/api/clients/reset',licenseSave:'/api/licenses/save',brandsSave:'/api/settings/brands'}[action];
  try{const r=await post(url,data);return r||true;}catch(e){toast(e.message,'alert');return false;}
 }
 
@@ -108,3 +115,21 @@ document.addEventListener('click',e=>{
  if(ds.userName)return editUserName(u);
  return deleteUser(u);
 },true);
+
+/* Brands of cash register set aside for now (EDIT): their customers and machines leave every list; nothing is deleted. */
+function brandsCard(i){
+ if(!isAdmin())return'';const r=state.brandRule||{brands:['EDIT'],clients:0,machines:0,names:[]};const b=r.brands||[];
+ const none=!(state.machines||[]).length&&!r.machines;
+ return`<div class="card reveal" style="--i:${i}"><h2>Marche messe da parte</h2><p class="sub">I registratori di queste marche non compaiono, e nemmeno i clienti Mastro i cui registratori <strong>in uso</strong> sono tutti di queste marche (con il loro storico). Chi è passato a un’altra marca resta. Nessun dato viene cancellato: togli la marca e torna tutto.</p>
+  <div class="btn-row" style="margin-top:12px">${b.length?b.map(x=>`<span class="badge acc">${esc(x)}</span>`).join(''):'<span class="muted">Nessuna marca esclusa</span>'}</div>
+  <p class="sub" style="margin-top:10px">${none?'Si applica appena importi i dati da MastroSQL.':r.clients||r.machines?`Tolti ora: <strong>${fmt(r.clients)}</strong> clienti e <strong>${fmt(r.machines)}</strong> registratori.`:'Nessun registratore di queste marche nei dati di Mastro.'}</p>
+  ${(r.names||[]).length?`<details class="brand-names"><summary>Vedi i clienti tolti</summary><div>${r.names.map(n=>`<span>${esc(n)}</span>`).join('')}</div></details>`:''}
+  <div class="btn-row" style="margin-top:12px"><button class="btn sm" data-brands-edit>${icon('edit')}Modifica marche</button></div></div>`;
+}
+document.addEventListener('click',async e=>{if(!e.target.closest?.('[data-brands-edit]'))return;e.preventDefault();
+ const cur=(state.brandRule?.brands||['EDIT']).join(', ');
+ const v=await formPanel({title:'Marche messe da parte',tag:'Registratori',sub:'Scrivi le marche separate da una virgola. Lascia vuoto per vedere tutto.',body:`<div class="form-grid">${fieldHtml('brands','Marche','text',cur,2,'placeholder="EDIT" autocomplete="off" maxlength="300"')}</div>`,ok:'Salva'});
+ if(!v||v.__act)return;
+ const brands=String(v.brands||'').split(/[,;]/).map(x=>x.trim().toUpperCase()).filter(Boolean);
+ if(await adminSend('brandsSave',{brands})&&WEB)toast(brands.length?'Marche escluse: '+brands.join(', '):'Ora si vedono tutte le marche.');
+});

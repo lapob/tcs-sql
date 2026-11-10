@@ -30,7 +30,7 @@ public sealed partial class Store
   InitSettings(c);
   InitDtr(c);
   InitItal(c);
-  InitEdits(c);
+  InitEdits(c);InitWork(c);
  }
  public List<ClientRecord> Clients(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM clients";using var r=q.ExecuteReader();var list=new List<ClientRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<ClientRecord>(r.GetString(0))!);return list;}
  public List<OrderRecord> Orders(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM orders";using var r=q.ExecuteReader();var list=new List<OrderRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<OrderRecord>(r.GetString(0))!);return list;}
@@ -279,6 +279,25 @@ public sealed partial class Store
   if(store.Licenses().Single(x=>x.Id==lic.Id).Expiry!="31-01-2031")throw new Exception("Licenze: modifica scadenza");
   store.SaveLicense(lic.Id,new LicenseEdit(Hidden:true),"test");if(store.Licenses().Any(x=>x.Id==lic.Id))throw new Exception("Licenze: nascosta ancora visibile");
   store.SaveLicense(lic.Id,new LicenseEdit(),"test");if(store.LicenseEdits().ContainsKey(lic.Id))throw new Exception("Licenze: ripristino");
-  store.Backup(Path.Combine(folder,"backup.sqlite"));Console.WriteLine("PASS: upsert, deduplicazione, validazione atomica, note, magazzino, rapportini, email, contabilità, backup esterni, DTR-Service, Ital Retail, modifiche amministratore.");
+  // Brands set aside (EDIT): machines hidden, customers hidden only when the registers they use are all of those brands
+  MastroClient Mc(string code,string name)=>new(code,name,"","","","","","","",[],[],"","",new());
+  Machine Mm(string id,string cl,string model,bool active)=>new(id,cl,model,"","S"+id,"","","","","",active,false,"","","","","");
+  store.ImportMastro(new([mc,Mc("A1","Bar Edit"),Mc("B1","Bar Cambiato")],[mm,Mm("m2","A1","EDIT SEVEN TOP",true),Mm("m3","B1","MIS.FISC.EDIT ONE",false),Mm("m4","B1","RCH ONDA",true),Mm("m5","B1","CREDIT CARD READER",true)],[],"t","test"),"test");
+  var bv=store.Mastro();
+  if(bv.Clients.Any(x=>x.Code=="A1")||!bv.Clients.Any(x=>x.Code=="B1")||bv.Machines.Any(x=>x.Id is "m2" or "m3")||!bv.Machines.Any(x=>x.Id=="m5")||bv.Excluded.Clients!=1||bv.Excluded.Machines!=2)throw new Exception("Marche escluse: regola EDIT");
+  store.SaveHiddenBrands([],"test");if(store.Mastro().Machines.Count!=5||store.Mastro().Excluded.Clients!=0)throw new Exception("Marche escluse: ripristino");
+  store.SaveHiddenBrands(["edit"],"test");if(!store.HiddenBrands().SequenceEqual(["EDIT"]))throw new Exception("Marche escluse: salvataggio");
+  // IT inventory, renewals with history, manual device links, merged duplicates
+  var asx=store.SaveAsset(new Asset(ClientCode:"M15",Kind:"PC",Name:"PC cassa",WarrantyTo:"2027-01-31"),"test");if(store.Assets().Single().WarrantyTo!="2027-01-31")throw new Exception("Inventario: salvataggio");
+  try{store.SaveAsset(new Asset(ClientCode:"M15",Name:"x",WarrantyTo:"31/01/2027"),"test");throw new Exception("Inventario: data errata accettata");}catch(InvalidDataException){}
+  try{store.SaveAsset(new Asset(Name:"x"),"test");throw new Exception("Inventario: senza cliente accettato");}catch(InvalidDataException){}
+  store.DeleteAsset(asx.Id,"test");if(store.Assets().Count!=0)throw new Exception("Inventario: eliminazione");
+  store.SaveRenewal("lic|x|2027-01-01","Contattato","richiamare","2026-12-01","test");store.SaveRenewal("lic|x|2027-01-01","Rinnovato","","","test");
+  var rn=store.Renewals()["lic|x|2027-01-01"];if(rn.Status!="Rinnovato"||rn.Steps!.Count!=2||rn.Steps[0].Note!="richiamare")throw new Exception("Rinnovi: storia");
+  try{store.SaveRenewal("k","Boh","","","test");throw new Exception("Rinnovi: stato non valido accettato");}catch(InvalidDataException){}
+  store.SaveDeviceLink("ab123","M15","test");if(store.DeviceLinks()["AB123"]!="M15")throw new Exception("Abbinamenti: salvataggio");
+  store.SaveDeviceLink("AB123","","test");if(store.DeviceLinks().Count!=0)throw new Exception("Abbinamenti: rimozione");
+  store.MergeClient("X1","M15","test");if(store.ClientEdits()["X1"].MergedInto!="M15")throw new Exception("Unione clienti");
+  store.Backup(Path.Combine(folder,"backup.sqlite"));Console.WriteLine("PASS: upsert, deduplicazione, validazione atomica, note, magazzino, rapportini, email, contabilità, backup esterni, DTR-Service, Ital Retail, modifiche amministratore, marche escluse, inventario, rinnovi, unioni.");
  }
 }

@@ -14,6 +14,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Computer
+import androidx.compose.material.icons.rounded.Call
+import androidx.compose.material.icons.rounded.Route
+import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.AccountCircle
@@ -101,11 +105,15 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
 @Composable fun MoreScreen(vm: AppViewModel, a: Archive, nav: NavHostController) {
     val me by vm.me.collectAsStateWithLifecycle()
     Page(vm, "Altro", me?.let { "${it.name} · ${it.roleLabel}" }) {
+        item(key = "update") { UpdateCard(vm) }
         item(key = "items") {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 MoreRow(Icons.Rounded.PointOfSale, "Parco macchine", "${a.machines.count { it.m.active }} attive · ${a.verificationsDue.size} verificazioni entro 60 gg", Modifier.appear(0)) { nav.navigate("machines") }
                 MoreRow(Icons.Rounded.Router, "Registratori DTR", if (a.registers.isEmpty()) "Si collegano dall'app Windows dell'ufficio" else "${a.registers.size} casse · ${a.dtrErrors.size} con errori · ${a.dtrSilent.size} silenziose", Modifier.appear(0)) { nav.navigate("dtr") }
                 MoreRow(Icons.Rounded.PointOfSale, "Casse Ital Retail", if (a.ital.isEmpty()) "Si collegano dall'app Windows dell'ufficio" else "${a.ital.size} casse · ${a.italUpdate.size} da aggiornare · ${a.italNoSub.size} senza abbonamento", Modifier.appear(0)) { nav.navigate("ital") }
+                MoreRow(Icons.Rounded.Route, "Giro di oggi", "Interventi e verificazioni per località, con il percorso", Modifier.appear(1)) { nav.navigate("route") }
+                MoreRow(Icons.Rounded.Call, "Rinnovi", "Chi chiamare, chi ha rinnovato, chi sollecitare", Modifier.appear(1)) { nav.navigate("renewals") }
+                MoreRow(Icons.Rounded.Computer, "PC e sistemi", if (a.assets.isEmpty()) "Inventario dei PC, stampanti e rete dei clienti" else "${a.assets.count { it.a.active }} in uso · ${a.assetsDue.size} garanzie o scadenze vicine", Modifier.appear(1)) { nav.navigate("inventory") }
                 MoreRow(Icons.Rounded.Euro, "Contabilità", if (a.acc.hasData) "${AccountingView.money0(a.acc.toCollect)} da incassare · ${a.acc.overdue.size} rate scadute" else "Fatture, incassi e pagamenti da MastroSQL", Modifier.appear(0)) { nav.navigate("accounting") }
                 MoreRow(Icons.Rounded.CalendarMonth, "Scadenziario", "${a.deadlines(0, 120).size} scadenze nei prossimi 120 giorni", Modifier.appear(0)) { nav.navigate("deadlines") }
                 MoreRow(Icons.Rounded.Key, "Licenze Zucchetti", "${a.currentLicenses.size} correnti · ${a.licenses.size - a.currentLicenses.size} storiche", Modifier.appear(1)) { nav.navigate("licenses") }
@@ -115,6 +123,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
                     if (a.deleted.isNotEmpty()) MoreRow(Icons.Rounded.AccountCircle, "Clienti eliminati", "${a.deleted.size} da ripristinare", Modifier.appear(3)) { nav.navigate("deleted") }
                 }
                 MoreRow(Icons.Rounded.AccountCircle, "Account e impostazioni", "Tema, server, uscita", Modifier.appear(3)) { nav.navigate("account") }
+                MoreRow(Icons.Rounded.SystemUpdate, "Versione ${vm.appVersion}", "Tocca per controllare gli aggiornamenti", Modifier.appear(3)) { vm.checkUpdate(true) }
             }
         }
     }

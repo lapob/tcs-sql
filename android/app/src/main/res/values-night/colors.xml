@@ -2,4 +2,6 @@
 <resources>
     <color name="ic_launcher_background">#FFFFFF</color>
     <color name="splash_bg">#0C0C10</color>
+    <!-- white disc behind the logo: the dark blue of the mark would vanish on the night background -->
+    <color name="splash_icon_bg">#FFFFFF</color>
 </resources>

@@ -41,6 +41,7 @@ import java.time.LocalTime
     val deadlines = remember(a) { a.deadlines(-7, 60).take(8) }
     val open = remember(a) { a.openInterventions.sortedWith(compareBy({ it.i.priority != "Urgente" }, { it.i.priority != "Alta" }, { it.date })).take(5) }
     Page(vm, "$greet${if (first.isNotBlank()) ", $first" else ""}", "Top Cash Service · ${Dates.short(java.time.LocalDate.now())}") {
+        item(key = "update") { UpdateCard(vm) }
         item(key = "kpi") {
             Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

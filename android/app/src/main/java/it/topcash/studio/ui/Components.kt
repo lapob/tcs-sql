@@ -66,11 +66,25 @@ fun Modifier.pressScale(source: MutableInteractionSource): Modifier = composed {
     graphicsLayer { scaleX = s; scaleY = s }
 }
 
-/** Staggered entrance (fade + rise) the first time an element appears. */
+/** Material 3 "emphasized decelerate": quick start, long soft landing. Shared by every entrance in the app. */
+val EmphasizedDecelerate = androidx.compose.animation.core.CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
+
+/** Staggered entrance (fade + gentle rise + a hint of scale) the first time an element appears.
+ *  It plays once: coming back to a screen (or scrolling an item back into view) shows it already in place. */
 fun Modifier.appear(index: Int = 0): Modifier = composed {
-    val a = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { kotlinx.coroutines.delay((index.coerceAtMost(12) * 45).toLong()); a.animateTo(1f, tween(520, easing = FastOutSlowInEasing)) }
-    graphicsLayer { alpha = a.value; translationY = (1f - a.value) * 28.dp.toPx() }
+    var shown by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    val a = remember { Animatable(if (shown) 1f else 0f) }
+    LaunchedEffect(Unit) {
+        if (shown) return@LaunchedEffect
+        kotlinx.coroutines.delay((index.coerceIn(0, 10) * 38).toLong())
+        a.animateTo(1f, tween(560, easing = EmphasizedDecelerate)); shown = true
+    }
+    graphicsLayer {
+        val v = a.value
+        alpha = (v * 1.4f).coerceAtMost(1f) // opaque before the movement ends: no washed-out look
+        translationY = (1f - v) * 18.dp.toPx()
+        val sc = 0.985f + 0.015f * v; scaleX = sc; scaleY = sc
+    }
 }
 
 fun initials(s: String): String = s.replace(Regex("[^\\p{L}\\p{N} ]"), "").split(Regex("\\s+"))

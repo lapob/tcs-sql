@@ -183,6 +183,44 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun act(success: String, block: suspend () -> Unit) = viewModelScope.launch {
         try { block(); _messages.tryEmit(success); refresh() } catch (e: ApiException) { _messages.tryEmit(e.message ?: "Operazione non riuscita") }
     }
+    // ── inventory and renewals (every technician can add PCs and record the outcome of a call)
+    fun saveAsset(a: Asset) = act(if (a.id.isBlank()) "Aggiunto all'inventario" else "Inventario aggiornato") { api.saveAsset(a) }
+    fun deleteAsset(id: String) = act("Tolto dall'inventario") { api.deleteAsset(id) }
+    fun saveRenewal(key: String, status: String, note: String, next: String) = act("Esito salvato") { api.saveRenewal(RenewalRequest(key, status, note, next)) }
+    // ── network updates: compare the APK on the server with this one, download it and hand it to the system installer
+    val appVersion: String = runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull().orEmpty()
+    private val _update = MutableStateFlow<AppBuild?>(null); val update = _update.asStateFlow()
+    private val _updateProgress = MutableStateFlow<Float?>(null); val updateProgress = _updateProgress.asStateFlow()
+    private var lastUpdateCheck = 0L
+    fun checkUpdate(force: Boolean = false) = viewModelScope.launch {
+        if (!force && System.currentTimeMillis() - lastUpdateCheck < 3 * 3600_000L) return@launch
+        lastUpdateCheck = System.currentTimeMillis()
+        try { val b = api.updateInfo().android; _update.value = b?.takeIf { newer(it.version, appVersion) }; if (force && _update.value == null) _messages.tryEmit("L'app è aggiornata (versione $appVersion)") }
+        catch (_: ApiException) { if (force) _messages.tryEmit("Server non raggiungibile per gli aggiornamenti") }
+    }
+    fun installUpdate(context: Context) = viewModelScope.launch {
+        val b = _update.value ?: return@launch
+        if (_updateProgress.value != null) return@launch
+        val pm = context.packageManager
+        if (android.os.Build.VERSION.SDK_INT >= 26 && !pm.canRequestPackageInstalls()) {
+            _messages.tryEmit("Consenti a Top Cash di installare app, poi tocca di nuovo «Aggiorna»")
+            context.startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:" + context.packageName)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            return@launch
+        }
+        _updateProgress.value = 0f
+        try {
+            val f = api.downloadApk(File(context.cacheDir, "updates"), b) { _updateProgress.value = it }
+            val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", f)
+            context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+                .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: ApiException) { _messages.tryEmit(e.message ?: "Aggiornamento non riuscito") }
+        finally { _updateProgress.value = null }
+    }
+    private fun newer(a: String, b: String): Boolean {
+        val x = a.split('.').map { it.toIntOrNull() ?: 0 }; val y = b.substringBefore('-').split('.').map { it.toIntOrNull() ?: 0 }
+        for (i in 0 until maxOf(x.size, y.size)) { val p = x.getOrElse(i) { 0 }; val q = y.getOrElse(i) { 0 }; if (p != q) return p > q }
+        return false
+    }
     // ── administrator
     fun saveClient(code: String, e: ClientEdit, onDone: (String) -> Unit = {}) = viewModelScope.launch {
         try { val c = api.saveClient(code, e); _messages.tryEmit(if (code.isBlank()) "Cliente creato" else "Cliente aggiornato"); refresh(); onDone(c) }

@@ -749,3 +749,39 @@ tbody tr[data-client]:active,tbody tr[data-int]:active,.card[data-go]:active{tra
  .nav-item,.cmd-trigger{padding:0;width:100%}
  #nav .nav-item+.nav-caption{display:block;height:1px;margin:8px 10px;padding:0;background:var(--line);font-size:0}
 }
+
+/* ───────── app updates over the network */
+.upd-list{display:grid;gap:8px;margin-top:14px}
+.upd-row,.upd-me{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:var(--surface-2,rgba(127,127,127,.06));transition:background .3s var(--soft)}
+.upd-row .grow,.upd-me .grow,.upd-banner .grow{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.upd-row .orb.sm,.upd-banner .orb.sm{display:grid;place-items:center;width:32px;height:32px;border-radius:10px;background:var(--surface);color:var(--accent);flex:none;box-shadow:var(--shadow-sm)}
+.upd-me{margin-top:14px}
+.upd-me.ready{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.card .btn.loading{pointer-events:none;opacity:.7}
+.upd-banner{position:fixed;right:20px;bottom:20px;z-index:60;display:flex;align-items:center;gap:12px;max-width:min(460px,calc(100vw - 32px));padding:12px 14px;border-radius:16px;background:var(--surface);box-shadow:var(--shadow-lg,0 18px 50px rgba(0,0,0,.22));animation:panelin .42s var(--soft) both}
+.upd-banner small{color:var(--muted);font-size:12px}
+.upd-banner.out{animation:panelout .24s var(--soft-in) both}
+@media (max-width:760px){.upd-banner{left:16px;right:16px;bottom:16px}.upd-row{flex-wrap:wrap}}
+.brand-names{margin-top:10px}
+.brand-names summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:13px}
+.brand-names div{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;max-height:220px;overflow:auto}
+.brand-names span{font-size:12px;padding:3px 8px;border-radius:8px;background:var(--surface-2,rgba(127,127,127,.08))}
+
+/* ───────── PC e sistemi, rinnovi, giro, controllo dati */
+.link-btn{background:none;border:0;padding:0;color:var(--accent);font:inherit;cursor:pointer;text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--accent) 35%,transparent);text-underline-offset:3px;transition:color .2s var(--soft)}
+.link-btn:hover{text-decoration-color:var(--accent)}
+.as-orb{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent);flex:none}
+.row-badges{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;max-width:46%}
+.ren-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.ren-seg{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.ren-seg label{cursor:pointer}
+.ren-seg input{position:absolute;opacity:0;pointer-events:none}
+.ren-seg span{display:inline-block;padding:7px 12px;border-radius:999px;border:1px solid var(--line,rgba(127,127,127,.25));font-size:13px;transition:background .25s var(--soft),color .25s var(--soft),border-color .25s var(--soft)}
+.ren-seg input:checked+span{background:var(--accent);color:#fff;border-color:var(--accent)}
+.ren-seg input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.route-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+.route-card .list-row .badge{flex:none}
+.chk-group{padding:12px 0;border-bottom:1px solid var(--line,rgba(127,127,127,.15))}
+.chk-group:last-of-type{border-bottom:0}
+.chk-group>small{display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;font-size:11px}
+@media (max-width:760px){.route-grid{grid-template-columns:1fr}.row-badges{max-width:100%;justify-content:flex-start}.list-row:has(.row-badges){flex-wrap:wrap}}

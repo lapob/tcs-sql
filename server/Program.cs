@@ -18,6 +18,7 @@ var store=new Store(dataDir);
 var users=new Users(store.DatabasePath);
 var hub=new Hub(store);
 var devices=new Devices(store.DatabasePath);
+var updates=new Updates(dataDir);
 var uiDir=Path.Combine(AppContext.BaseDirectory,"ui");
 
 var builder=WebApplication.CreateBuilder(new WebApplicationOptions{Args=args,ContentRootPath=AppContext.BaseDirectory});
@@ -87,7 +88,7 @@ app.Use(async(ctx,next)=>
   ctx.Response.Headers.StrictTransportSecurity="max-age=31536000";
   // outside the office: only approved devices reach the API (the app shell itself is public and harmless)
   var p=ctx.Request.Path;
-  if(p.StartsWithSegments("/api")&&!p.StartsWithSegments("/api/device/hello")&&!p.StartsWithSegments("/api/health")&&dev?.Status!=Devices.Approved)
+  if(p.StartsWithSegments("/api")&&!p.StartsWithSegments("/api/device/hello")&&!p.StartsWithSegments("/api/health")&&!(HttpMethods.IsGet(ctx.Request.Method)&&p.StartsWithSegments("/api/update"))&&dev?.Status!=Devices.Approved)
   {
    ctx.Response.StatusCode=403;
    await ctx.Response.WriteAsJsonAsync(new{error=dev?.Status==Devices.Revoked?"Questo dispositivo è stato bloccato dall'amministratore.":"Dispositivo non ancora autorizzato per l'accesso da fuori ufficio.",device=dev?.Status??"unknown",code=dev?.Id??""});
@@ -232,7 +233,9 @@ app.MapGet("/api/state",(HttpContext ctx)=>
 {
  var etag=$"\"v{hub.Version}-{hub.Boot}\"";ctx.Response.Headers.ETag=etag;ctx.Response.Headers.CacheControl="no-cache";
  if(ctx.Request.Headers.IfNoneMatch.ToString()==etag)return Results.StatusCode(304);
- return Results.Bytes(hub.Snapshot(),"application/json");
+ var(body,enc)=hub.SnapshotFor(ctx.Request.Headers.AcceptEncoding.ToString());
+ if(enc!=null){ctx.Response.Headers.ContentEncoding=enc;ctx.Response.Headers.Vary="Accept-Encoding";}
+ return Results.Bytes(body,"application/json");
 }).RequireAuthorization("read");
 app.MapGet("/api/stream",(HttpContext ctx)=>hub.Stream(ctx)).RequireAuthorization("read");
 app.MapPost("/api/note",(HttpContext ctx,NoteRequest r)=>
@@ -261,6 +264,12 @@ app.MapPost("/api/clients/reset",(HttpContext ctx,ClientDeleteRequest r)=>
 {
  try{store.ResetClient(r.Code??"",Who(ctx));hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}
 }).RequireAuthorization("admin");
+app.MapPost("/api/assets/save",(HttpContext ctx,Asset a)=>{try{var r=store.SaveAsset(a,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("read");
+app.MapPost("/api/assets/delete",(HttpContext ctx,IdRequest r)=>{store.DeleteAsset(r.Id,Who(ctx));hub.Changed();return Results.Ok();}).RequireAuthorization("export");
+app.MapPost("/api/renewals/save",(HttpContext ctx,RenewalRequest r)=>{try{var m=store.SaveRenewal(r.Key,r.Status??"",r.Note??"",r.NextContact??"",Who(ctx));hub.Changed();return Results.Ok(m);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("read");
+app.MapPost("/api/links/save",(HttpContext ctx,LinkRequest r)=>{try{store.SaveDeviceLink(r.Serial,r.ClientCode??"",Who(ctx));hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin");
+app.MapPost("/api/clients/merge",(HttpContext ctx,MergeRequest r)=>{try{store.MergeClient(r.Code,r.Into??"",Who(ctx));hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin");
+app.MapPost("/api/settings/brands",(HttpContext ctx,BrandsRequest r)=>{store.SaveHiddenBrands(r?.Brands??[],Who(ctx));hub.Changed();return Results.Ok();}).RequireAuthorization("admin");
 app.MapPost("/api/licenses/save",(HttpContext ctx,LicenseSaveRequest r)=>
 {
  try{store.SaveLicense(r.Id??"",r.Edit??new LicenseEdit(),Who(ctx));hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}
@@ -373,7 +382,29 @@ app.MapPost("/api/sync/batch",(HttpContext ctx,BatchRequest b)=>
 }).RequireRateLimiting("sync");
 app.MapPost("/api/sync/log",(HttpContext ctx,LogRequest r)=>{if(!Station(ctx))return Results.Unauthorized();store.Log(r.Kind is "error" or "portal" or "check"?r.Kind:"portal",r.Message.Length>2000?r.Message[..2000]:r.Message);hub.Changed();return Results.Ok();}).RequireRateLimiting("sync");
 app.MapPost("/api/sync/progress",(HttpContext ctx,ProgressRequest r)=>{if(!Station(ctx))return Results.Unauthorized();hub.SetProgress(r.Running,r.Connected,r.Text.Length>300?r.Text[..300]:r.Text);return Results.Ok();}).RequireRateLimiting("sync");
-app.MapGet("/api/health",()=>Results.Ok(new{ok=true,version=hub.Version}));
+app.MapGet("/api/health",()=>Results.Ok(new{ok=true,version=hub.Version,server=typeof(Hub).Assembly.GetName().Version?.ToString(3)}));
+
+// ───────────────────────── app updates over the network: the administrator uploads a build once, every PC and phone picks it up.
+// Downloads are open (same files as the public GitHub release, no data inside); only an administrator can upload.
+app.MapGet("/api/update/info",(HttpContext ctx)=>{ctx.Response.Headers.CacheControl="no-store";return Results.Ok(updates.Info());});
+app.MapGet("/api/update/{kind}",(string kind)=>
+{
+ if(kind is not("windows" or "android"))return Results.NotFound();
+ var f=updates.FilePath(kind);var v=(kind=="android"?updates.Info().Android:updates.Info().Windows)?.Version??"";
+ if(!File.Exists(f))return Results.NotFound();
+ return Results.File(f,kind=="android"?"application/vnd.android.package-archive":"application/zip",kind=="android"?$"TopCash-Studio-{v}.apk":$"TopCash-Studio-Windows-{v}.zip",enableRangeProcessing:true);
+});
+app.MapPost("/api/update/upload",async(HttpContext ctx,string kind,string version,string? notes)=>
+{
+ var lim=ctx.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();if(lim is{IsReadOnly:false})lim.MaxRequestBodySize=400_000_000;
+ try
+ {
+  var b=await updates.Save(kind,version,notes??"",ctx.Request.Body,Who(ctx));
+  store.Log("users",$"{Who(ctx)} ha pubblicato in rete la versione {b.Version} dell'app {(kind=="android"?"Android":"Windows")}.");
+  hub.Changed();return Results.Ok(updates.Info());
+ }
+ catch(InvalidDataException ex){return Bad(ex.Message);}
+}).RequireAuthorization("admin").DisableAntiforgery();
 
 // Automatic daily backup: data\backups (verified) + copy on the external folder set by the administrator (default H:\TcsSqlOfflineBackups).
 // Hourly check: one file per day; the external copy is retried every hour while the drive is missing.
@@ -398,6 +429,11 @@ record DeviceHello(string? Name,string? Platform);
 record DeviceRename(string? Name);
 record PasswordRequest(string? Current,string? Password);
 record UserRequest(string? Username,string? Name,string? Role,string? Password);
+record BrandsRequest(List<string> Brands);
+record IdRequest(string Id);
+record RenewalRequest(string Key,string? Status,string? Note,string? NextContact);
+record LinkRequest(string Serial,string? ClientCode);
+record MergeRequest(string Code,string? Into);
 record ClientSaveRequest(string? Code,ClientEdit? Edit);
 record ClientDeleteRequest(string? Code,bool Deleted);
 record LicenseSaveRequest(string? Id,LicenseEdit? Edit);

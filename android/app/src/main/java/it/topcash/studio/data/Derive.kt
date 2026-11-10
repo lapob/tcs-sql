@@ -81,8 +81,12 @@ data class UOrder(val o: Order, var client: UClient?, val date: LocalDate?)
 class UClient(
     val code: String, var name: String, var vat: String, var taxCode: String, var city: String, var address: String,
     val phones: MutableList<String>, val emails: MutableList<String>, val families: MutableSet<String>,
-    val licenses: List<ULicense>, val meta: ClientMeta, val note: String, val fromRegistry: Boolean,
+    licenses: List<ULicense>, val meta: ClientMeta, val note: String, val fromRegistry: Boolean,
 ) {
+    /** Mutable: a duplicate merged by the administrator brings its licences here. */
+    val licenses: MutableList<ULicense> = licenses.toMutableList()
+    val assets = mutableListOf<UAsset>()
+    val mergedFrom = mutableListOf<UClient>()
     var mastro: MastroClient? = null
     var mastroOnly = false
     val mastroCodes = mutableListOf<String>()
@@ -109,7 +113,15 @@ class UClient(
         ?.takeIf { it.isNotBlank() } ?: listOf(address, city).filter { it.isNotBlank() }.joinToString(", ")
 }
 
-data class Deadline(val kind: String, val date: LocalDate, val days: Long, val client: UClient?, val clientName: String, val detail: String)
+data class Deadline(val kind: String, val date: LocalDate, val days: Long, val client: UClient?, val clientName: String, val detail: String, val key: String = "")
+/** An item of the IT inventory with its warranty and expiry. */
+class UAsset(val a: Asset, val client: UClient?) {
+    val warranty = Dates.parse(a.warrantyTo); val warDays = Dates.daysFromToday(warranty)
+    val expiry = Dates.parse(a.expiry); val expDays = Dates.daysFromToday(expiry)
+    val due get() = a.active && ((warDays != null && warDays <= 60) || (expDays != null && expDays <= 60))
+    val clientName get() = client?.name ?: "Cliente ${a.clientCode}"
+    val search = norm(listOf(a.name, a.brand, a.kind, a.serial, a.ip, a.os, a.location, a.notes, client?.name).joinToString(" "))
+}
 
 class Archive(val state: ArchiveState) {
     val clients: List<UClient>
@@ -118,6 +130,9 @@ class Archive(val state: ArchiveState) {
     val machines: List<UMachine>
     val registers: List<URegister>
     val ital: List<UItal>
+    val assets: List<UAsset>
+    /** Duplicates merged into another customer by the administrator. */
+    val merged: List<UClient>
     /** Customers deleted by an administrator (hidden everywhere, restorable). */
     val deleted: List<UClient>
     val interventions: List<UIntervention>
@@ -176,8 +191,9 @@ class Archive(val state: ArchiveState) {
             val m = bySerial[k] ?: byTail[k.takeLast(8)].orEmpty().filter { (mk, _) -> mk.endsWith(k) || k.endsWith(mk) }.singleOrNull()?.second
             val cVat = r.detail?.vat?.let(::idKey)?.takeIf { it.length >= 11 }?.let { byVat[it] }
             val cName = nameTo[nameKey(r.client)] ?: r.detail?.holder?.let { nameTo[nameKey(it)] } ?: r.alias.takeIf { it.isNotBlank() }?.let { nameTo[nameKey(it)] }
-            val c = m?.client ?: cVat ?: cName
-            URegister(r, c, m, when { m?.client != null -> "matricola"; cVat != null -> "P.IVA"; cName != null -> "nome"; else -> "" }).also { c?.registers?.add(it) }
+            val cLink = state.deviceLinks[r.serial.uppercase()]?.let { map[it] }
+            val c = cLink ?: m?.client ?: cVat ?: cName
+            URegister(r, c, m, when { cLink != null -> "abbinata a mano"; m?.client != null -> "matricola"; cVat != null -> "P.IVA"; cName != null -> "nome"; else -> "" }).also { c?.registers?.add(it) }
         }
         interventions = state.interventions.map { i ->
             val c = if (i.source == "mastro") mastroTo[i.clientCode] else map[i.clientCode]
@@ -192,8 +208,9 @@ class Archive(val state: ArchiveState) {
         val italOrders = state.italOrders.groupBy { it.serial }
         ital = state.ital.map { r ->
             val m = bySerial[serKey(r.serial)]; val cName = nameTo[nameKey(r.client)] ?: r.note.takeIf { it.isNotBlank() }?.let { nameTo[nameKey(it)] }
-            val c = m?.client ?: cName
-            UItal(r, c, m, when { m?.client != null -> "matricola"; cName != null -> "nome"; else -> "" }, italOrders[r.serial].orEmpty().sortedByDescending { it.date }).also { c?.italDevices?.add(it) }
+            val cLink = state.deviceLinks[r.serial.uppercase()]?.let { map[it] }
+            val c = cLink ?: m?.client ?: cName
+            UItal(r, c, m, when { cLink != null -> "abbinata a mano"; m?.client != null -> "matricola"; cName != null -> "nome"; else -> "" }, italOrders[r.serial].orEmpty().sortedByDescending { it.date }).also { c?.italDevices?.add(it) }
         }
         // administrator's changes: they win over the synchronised data; a customer created by hand exists only here
         val gone = mutableListOf<UClient>()
@@ -215,12 +232,27 @@ class Archive(val state: ArchiveState) {
         map.values.forEach { c -> if (c.pec.isBlank()) c.pec = c.mastro?.pec.orEmpty() }
         deleted = gone.sortedBy { it.name }
         gone.forEach { map.remove(it.code) }
+        // merged duplicates: their licences, machines, devices and history show under the main customer
+        val aliases = HashMap<String, UClient>(); val mergedList = mutableListOf<UClient>()
+        for ((code, e) in state.clientEdits) {
+            if (e.mergedInto.isBlank() || e.deleted) continue
+            val c = map[code] ?: continue; val t = map[e.mergedInto] ?: continue
+            if (c === t) continue
+            t.licenses += c.licenses; c.machines.forEach { it.client = t }; t.machines += c.machines; t.registers += c.registers; t.italDevices += c.italDevices
+            t.interventions += c.interventions; t.orders += c.orders
+            c.phones.filter { it !in t.phones }.forEach(t.phones::add); c.emails.filter { it !in t.emails }.forEach(t.emails::add)
+            if (t.vat.isBlank()) t.vat = c.vat; if (t.taxCode.isBlank()) t.taxCode = c.taxCode; if (t.mastro == null) t.mastro = c.mastro; t.mastroCodes += c.mastroCodes
+            t.mergedFrom += c; aliases[code] = t; mergedList += c; map.remove(code)
+        }
+        merged = mergedList
+        assets = state.assets.map { a -> val c = map[a.clientCode] ?: aliases[a.clientCode]; UAsset(a, c).also { c?.assets?.add(it) } }
         map.values.forEach { c ->
             c.search = norm(c.contact + " " + c.category + " " + listOf(c.name, c.code, c.vat, c.taxCode, c.city, c.address, c.mastro?.pec, c.mastro?.code).joinToString(" ") + " " +
-                c.phones.joinToString(" ") + " " + c.emails.joinToString(" ") + " " + c.licenses.joinToString(" ") { it.r.serial } + " " + c.machines.joinToString(" ") { it.m.serial + " " + it.m.fiscalSerial })
+                c.phones.joinToString(" ") + " " + c.emails.joinToString(" ") + " " + c.licenses.joinToString(" ") { it.r.serial } + " " + c.machines.joinToString(" ") { it.m.serial + " " + it.m.fiscalSerial } +
+                " " + c.assets.joinToString(" ") { it.a.name + " " + it.a.serial + " " + it.a.ip })
         }
         clients = map.values.sortedWith(compareBy(java.text.Collator.getInstance(java.util.Locale.ITALIAN)) { it.name })
-        byCode = map
+        byCode = HashMap(map).apply { putAll(aliases) }
         @Suppress("UNUSED_VARIABLE") val unused = today
     }
 
@@ -242,22 +274,28 @@ class Archive(val state: ArchiveState) {
     val italNoSub by lazy { ital.filter { it.noSub } }
     val italLow by lazy { ital.filter { it.lowDgfe } }
     fun licenseEdit(id: String) = state.licenseEdits[id]
+    val assetsDue by lazy { assets.filter { it.due } }
     val technicians by lazy { interventions.map { it.i.technician }.filter { it.isNotBlank() }.distinct().sorted() }
 
     /** Licences, periodic verifications and contracts in one chronological list. */
     fun deadlines(fromDays: Long = -30, toDays: Long = 120): List<Deadline> = buildList {
-        currentLicenses.forEach { l -> if (l.expiry != null && l.days != null && l.days in fromDays..toDays) add(Deadline("Licenza", l.expiry, l.days, byCode[l.r.clientCode], l.r.client, "${Catalog.family(l.family)} · ${l.r.serial}")) }
+        currentLicenses.forEach { l -> if (l.expiry != null && l.days != null && l.days in fromDays..toDays) add(Deadline("Licenza", l.expiry, l.days, byCode[l.r.clientCode], l.r.client, "${Catalog.family(l.family)} · ${l.r.serial}", "lic|${l.r.id}|${l.expiry}")) }
         machines.forEach { m ->
-            if (m.m.active && m.nextVerification != null && m.verDays != null && m.verDays in fromDays..toDays) add(Deadline("Verificazione", m.nextVerification, m.verDays, m.client, m.clientName, "${m.m.model} · ${m.m.serial}"))
-            if (m.m.subscribed && m.contractEnd != null && m.endDays != null && m.endDays in fromDays..toDays) add(Deadline("Abbonamento", m.contractEnd, m.endDays, m.client, m.clientName, "${m.m.model} · ${m.m.serial}"))
+            if (m.m.active && m.nextVerification != null && m.verDays != null && m.verDays in fromDays..toDays) add(Deadline("Verificazione", m.nextVerification, m.verDays, m.client, m.clientName, "${m.m.model} · ${m.m.serial}", "ver|${m.m.id}|${m.nextVerification}"))
+            if (m.m.subscribed && m.contractEnd != null && m.endDays != null && m.endDays in fromDays..toDays) add(Deadline("Abbonamento", m.contractEnd, m.endDays, m.client, m.clientName, "${m.m.model} · ${m.m.serial}", "con|${m.m.id}|${m.contractEnd}"))
         }
         registers.forEach { r ->
             if (r.geDue != null && r.geDays != null && r.geDays in fromDays..toDays) add(Deadline("Giornale elettronico", r.geDue, r.geDays, r.client, r.name, "GE ${r.r.geNumber} · ${r.r.serial}"))
-            if (r.certDue != null && r.certDays != null && r.certDays in fromDays..toDays) add(Deadline("Certificato RT", r.certDue, r.certDays, r.client, r.name, r.r.serial))
+            if (r.certDue != null && r.certDays != null && r.certDays in fromDays..toDays) add(Deadline("Certificato RT", r.certDue, r.certDays, r.client, r.name, r.r.serial, "cert|${r.r.serial}|${r.certDue}"))
         }
         ital.forEach { r ->
-            if (r.subTo != null && r.subDays != null && r.d?.autoRenew != true && r.subDays in fromDays..toDays) add(Deadline("Abbonamento Ital Retail", r.subTo, r.subDays, r.client, r.name, "${r.r.type} · ${r.r.serial}"))
-            if (r.certDue != null && r.certDays != null && r.certDays in fromDays..toDays) add(Deadline("Certificato RT", r.certDue, r.certDays, r.client, r.name, "Ital Retail · ${r.r.serial}"))
+            if (r.subTo != null && r.subDays != null && r.d?.autoRenew != true && r.subDays in fromDays..toDays) add(Deadline("Abbonamento Ital Retail", r.subTo, r.subDays, r.client, r.name, "${r.r.type.ifBlank { "Cassa" }} · ${r.r.serial}", "isub|${r.r.type.ifBlank { "Cassa" }} · ${r.r.serial}|${r.subTo}"))
+            if (r.certDue != null && r.certDays != null && r.certDays in fromDays..toDays) add(Deadline("Certificato RT", r.certDue, r.certDays, r.client, r.name, "Ital Retail · ${r.r.serial}", "icert|Ital Retail · ${r.r.serial}|${r.certDue}"))
+        }
+        assets.forEach { x ->
+            if (!x.a.active) return@forEach
+            if (x.warranty != null && x.warDays != null && x.warDays in fromDays..toDays) add(Deadline("Garanzia", x.warranty, x.warDays, x.client, x.clientName, "${x.a.kind} ${x.a.name}", "war|${x.a.id}|${x.warranty}"))
+            if (x.expiry != null && x.expDays != null && x.expDays in fromDays..toDays) add(Deadline("Scadenza software", x.expiry, x.expDays, x.client, x.clientName, "${x.a.kind} ${x.a.name}", "aexp|${x.a.id}|${x.expiry}"))
         }
     }.sortedBy { it.date }
 

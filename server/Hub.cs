@@ -31,10 +31,24 @@ public sealed class Hub(Store store)
   {
    if(snapshot!=null&&snapshotVersion==Version)return snapshot;
    var v=Version;
-   snapshot=JsonSerializer.SerializeToUtf8Bytes(new{records=store.Licenses(),licenseEdits=store.LicenseEdits(),licenseCleanup=store.LicenseCleanup(),clientEdits=store.ClientEdits(),clients=store.Clients(),orders=store.Orders(),mastroClients=store.MastroClients(),machines=store.Machines(),interventions=store.Interventions(),
+   var mv=store.Mastro();
+   snapshot=JsonSerializer.SerializeToUtf8Bytes(new{records=store.Licenses(),licenseEdits=store.LicenseEdits(),licenseCleanup=store.LicenseCleanup(),clientEdits=store.ClientEdits(),clients=store.Clients(),orders=store.Orders(),mastroClients=mv.Clients,machines=mv.Machines,interventions=mv.Interventions,brandRule=mv.Excluded,assets=store.Assets(),renewals=store.Renewals(),deviceLinks=store.DeviceLinks(),
     warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),dtr=store.DtrRegisters(),dtrStatus=store.DtrState(),ital=store.ItalDevices(),italOrders=store.ItalOrders(),italStatus=store.ItalState(),features=new{mail=store.MailReady(),backupError=Backups.Status(store).Error},version=v},Json);
-   snapshotVersion=v;return snapshot;
+   snapshotVersion=v;encoded.Clear();return snapshot;
   }
+ }
+ /// The snapshot compressed once per version (Brotli for browsers and phones, gzip as fallback): many MB of archive
+ /// become a few, and the server does not recompress them for every device that asks.
+ readonly ConcurrentDictionary<string,(long v,byte[] b)> encoded=new();
+ public (byte[] body,string? encoding) SnapshotFor(string acceptEncoding)
+ {
+  var raw=Snapshot();long v;lock(gate){raw=snapshot??raw;v=snapshotVersion;}
+  string? enc=acceptEncoding.Contains("br",StringComparison.OrdinalIgnoreCase)?"br":acceptEncoding.Contains("gzip",StringComparison.OrdinalIgnoreCase)?"gzip":null;
+  if(enc==null)return(raw,null);
+  if(encoded.TryGetValue(enc,out var e)&&e.v==v)return(e.b,enc);
+  using var ms=new MemoryStream();
+  using(Stream z=enc=="br"?new System.IO.Compression.BrotliStream(ms,System.IO.Compression.CompressionLevel.Optimal,true):new System.IO.Compression.GZipStream(ms,System.IO.Compression.CompressionLevel.Optimal,true))z.Write(raw);
+  var b=ms.ToArray();encoded[enc]=(v,b);return(b,enc);
  }
  void Broadcast(object message){var line=JsonSerializer.Serialize(message,Json);foreach(var c in clients.Values)c.Writer.TryWrite(line);}
  public int Connected=>clients.Count;

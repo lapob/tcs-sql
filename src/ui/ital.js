@@ -16,7 +16,7 @@ function deriveItal(){
  const orders=new Map();for(const o of state.italOrders||[]){if(!orders.has(o.serial))orders.set(o.serial,[]);orders.get(o.serial).push(o);}
  const devs=list.map(r=>{
   const d=r.detail||null;const m=exact.get(serKey(r.serial))||null;const label=r.client||r.note||'';
-  const cName=byName.get(dtrKey(r.client))||byName.get(dtrKey(r.note))||null;const c=m?.c||cName;const via=m?.c?'serial':cName?'name':'';
+  const cName=byName.get(dtrKey(r.client))||byName.get(dtrKey(r.note))||null;const cLink=D.byCode.get(state.deviceLinks?.[String(r.serial||'').toUpperCase()]);const c=cLink||m?.c||cName;const via=cLink?'manual':m?.c?'serial':cName?'name':'';
   const sub=d?.subTo?days(d.subTo):null,cert=d?.certDue?days(d.certDue):null,seen=d?.dataAt?dayDiff(parseDate(d.dataAt)):null;
   const x={...r,d,m,c,via,code:c?.code||null,label,sub,cert,seen,orders:(orders.get(r.serial)||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')),
    noSub:!r.subscribed,low:d&&d.dgfeFree>=0&&d.dgfeFree<=IT_FREE_LOW,stale:seen!==null&&seen<-IT_STALE,never:!!d&&!d.dataAt};

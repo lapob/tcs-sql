@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- barcode scanning in the warehouse (optional: the app works without a camera) -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- network updates: the new APK published on the office server is offered to the system installer -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <queries>
         <intent><action android:name="android.intent.action.DIAL" /></intent>

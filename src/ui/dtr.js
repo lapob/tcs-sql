@@ -34,7 +34,7 @@ function deriveDtr(){
   const d=r.detail||null;const m=find(serKey(r.serial));
   const cVat=d?.vat?byVat.get(vatKey(d.vat)):null;
   const cName=byName.get(dtrKey(r.client))||(d?.holder?byName.get(dtrKey(d.holder)):null)||(r.alias?byName.get(dtrKey(r.alias)):null)||null;
-  const c=m?.c||cVat||cName;const via=m?.c?'serial':cVat?'vat':cName?'name':'';
+  const cLink=D.byCode.get(state.deviceLinks?.[String(r.serial||'').toUpperCase()]);const c=cLink||m?.c||cVat||cName;const via=cLink?'manual':m?.c?'serial':cVat?'vat':cName?'name':'';
   const ge=days(r.geDue),seen=r.lastSync?dayDiff(parseDate(r.lastSync)):null;
   const cert=d?.certDue?days(d.certDue):null;
   const lic=(d?.licenses||[]).filter(l=>/rt-utility/i.test(l.name||'')).sort((a,b)=>(b.to||'').localeCompare(a.to||''))[0]||null;

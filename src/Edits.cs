@@ -9,7 +9,7 @@ namespace TopCash.Licenze;
 /// Created = customer added by hand (it exists only here); Deleted = hidden from Studio (it can be restored).
 public sealed record ClientEdit(string Name = "", string Vat = "", string TaxCode = "", string City = "", string Address = "",
     string Phone = "", string Email = "", string Pec = "", string Contact = "", string Category = "", bool Created = false,
-    bool Deleted = false, string UpdatedAt = "", string UpdatedBy = "");
+    bool Deleted = false, string UpdatedAt = "", string UpdatedBy = "", string MergedInto = "");
 
 /// Changes made by an administrator to a licence: a corrected expiry, a note, or the licence hidden from Studio.
 public sealed record LicenseEdit(string Expiry = "", string Note = "", bool Hidden = false, string UpdatedAt = "", string UpdatedBy = "");
@@ -63,7 +63,7 @@ public sealed partial class Store
         var vat = Trim(e.Vat, 20).ToUpperInvariant().Replace(" ", "");
         var clean = new ClientEdit(name, vat, Trim(e.TaxCode, 20).ToUpperInvariant().Replace(" ", ""), Trim(e.City, 100), Trim(e.Address, 200),
             Trim(e.Phone, 60), email, Trim(e.Pec, 200).ToLowerInvariant(), Trim(e.Contact, 120), Trim(e.Category, 60),
-            isNew || old?.Created == true, old?.Deleted ?? false, DateTimeOffset.Now.ToString("O"), Trim(who, 80));
+            isNew || old?.Created == true, old?.Deleted ?? false, DateTimeOffset.Now.ToString("O"), Trim(who, 80), old?.MergedInto ?? "");
         SaveEdit("client_edits", "code", code, clean);
         Log("users", $"{who} ha {(isNew ? "creato" : "modificato")} il cliente {(name.Length > 0 ? name : code)}.");
         return code;
@@ -75,6 +75,15 @@ public sealed partial class Store
         var old = ClientEdits().GetValueOrDefault(code) ?? new ClientEdit();
         SaveEdit("client_edits", "code", code, old with { Deleted = deleted, UpdatedAt = DateTimeOffset.Now.ToString("O"), UpdatedBy = Trim(who, 80) });
         Log("users", $"{who} ha {(deleted ? "eliminato" : "ripristinato")} il cliente {(old.Name.Length > 0 ? old.Name : code)}.");
+    }
+
+    /// Merging: the duplicate disappears and its licences, machines, devices and history show under the main customer.
+    public void MergeClient(string code, string into, string who)
+    {
+        if (code.Length is 0 or > 40 || into.Length > 40 || code == into) throw new InvalidDataException("Clienti da unire non validi.");
+        var old = ClientEdits().GetValueOrDefault(code) ?? new ClientEdit();
+        SaveEdit("client_edits", "code", code, old with { MergedInto = into, UpdatedAt = DateTimeOffset.Now.ToString("O"), UpdatedBy = Trim(who, 80) });
+        Log("users", into.Length > 0 ? $"{who} ha unito il cliente {code} in {into}." : $"{who} ha separato di nuovo il cliente {code}.");
     }
 
     /// Removes the administrator's changes: the customer goes back to the data from the sources.
@@ -138,4 +147,39 @@ public sealed partial class Store
         }
         return new { red, old, hidden, keepDays = ExpiredKeepDays };
     }
+}
+
+/// Brands of cash register set aside for now (default EDIT): their machines disappear, and so do the Mastro customers
+/// whose active registers are all of those brands (or, with none active, all their registers), with their Mastro history. Nothing is deleted: the Mastro copy stays intact
+/// and removing the brand from the list brings everything back.
+public sealed record BrandRule(List<string> Brands, string UpdatedAt = "", string UpdatedBy = "");
+public sealed record BrandExcluded(List<string> Brands, int Clients, int Machines, List<string> Names);
+public sealed record MastroView(List<MastroClient> Clients, List<Machine> Machines, List<Intervention> Interventions, BrandExcluded Excluded);
+
+public sealed partial class Store
+{
+ public static readonly List<string> DefaultHiddenBrands = ["EDIT"];
+ public List<string> HiddenBrands() => Setting<BrandRule>("hide.brands")?.Brands ?? [.. DefaultHiddenBrands];
+ public void SaveHiddenBrands(IEnumerable<string> brands, string who)
+ {
+  var list = brands.Select(b => b.Trim().ToUpperInvariant()).Where(b => b.Length is > 1 and <= 40).Distinct().Take(20).ToList();
+  SetSetting("hide.brands", new BrandRule(list, DateTimeOffset.Now.ToString("O"), who));
+  Log("users", list.Count == 0 ? $"{who} ha rimesso visibili tutte le marche di registratori." : $"{who} ha messo da parte i registratori {string.Join(", ", list)} e i loro clienti.");
+ }
+ public static bool IsBrand(Machine m, IReadOnlyCollection<string> brands) =>
+  brands.Count > 0 && brands.Any(b => System.Text.RegularExpressions.Regex.IsMatch(m.Model + " " + m.Type, $@"(?<![\p{{L}}\p{{N}}]){System.Text.RegularExpressions.Regex.Escape(b)}(?![\p{{L}}\p{{N}}])", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+ /// The Mastro snapshot as the app shows it, with the set-aside brands removed.
+ public MastroView Mastro()
+ {
+  var brands = HiddenBrands(); var cl = MastroClients(); var all = Machines(); var iv = Interventions();
+  if (brands.Count == 0) return new(cl, all, iv, new(brands, 0, 0, []));
+  var hiddenMachines = all.Where(m => IsBrand(m, brands)).ToList();
+  if (hiddenMachines.Count == 0) return new(cl, all, iv, new(brands, 0, 0, []));
+  // a customer goes only when the registers it still uses are all of those brands (an old EDIT replaced by another brand keeps it)
+  var gone = all.GroupBy(m => m.ClientCode).Where(g => { var act = g.Where(m => m.Active).ToList(); return (act.Count > 0 ? act : g.ToList()).All(m => IsBrand(m, brands)); }).Select(g => g.Key).ToHashSet();
+  var names = cl.Where(c => gone.Contains(c.Code)).Select(c => c.Name).OrderBy(n => n).ToList();
+  return new(cl.Where(c => !gone.Contains(c.Code)).ToList(), all.Where(m => !IsBrand(m, brands)).ToList(),
+   iv.Where(i => !(i.Source == "mastro" && gone.Contains(i.ClientCode))).ToList(),
+   new(brands, gone.Count, hiddenMachines.Count, names.Take(300).ToList()));
+ }
 }

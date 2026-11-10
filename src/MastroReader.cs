@@ -98,11 +98,13 @@ public static class MastroReader
    var types=new Dictionary<string,string>();
    if(tTipi!=null)foreach(var t in await All(tTipi,10_000)){var k=F(t,"NUME","CODI","CODICE","TIPO");if(k.Length>0)types[k]=F(t,"DESCRI");}
    var rows=await All(tMacc,300_000);machineCols=rows.FirstOrDefault()?.Keys.ToList()??[];
+   // the type column has different names across Mastro versions: any column mentioning TIPO
+   var typeCol=machineCols.FirstOrDefault(k=>k.Contains("TIPO",StringComparison.OrdinalIgnoreCase));
    foreach(var d in rows)
    {
     var client=F(d,"CODI","CODICE","CLIENTE");if(client.Length==0)continue;
     var id=F(d,"NUME");if(id.Length==0||id=="0")id=client+"|"+F(d,"MATRICOLA")+"|"+F(d,"DESCRI");
-    var typeKey=F(d,"TIPO","TIPO_MACC","MACC_TI");
+    var typeKey=F(d,"TIPO","TIPO_MACC","MACC_TI");if(typeKey.Length==0&&typeCol!=null)typeKey=F(d,typeCol);
     machines.Add(new("m"+id,client,F(d,"DESCRI","MODELLO"),types.TryGetValue(typeKey,out var tn)?tn:typeKey,F(d,"MATRICOLA"),F(d,"FISCALE","MATR_FISC"),F(d,"LOGOTIPO"),
      F(d,"DATA_INS"),F(d,"PRIMA_INS"),F(d,"VERIF_DATA","DATA_VERI"),!d.TryGetValue("ATTIVA",out var at)||at.Length==0||True(at),True(F(d,"ABBONATO")),
      F(d,"INIZIO"),F(d,"FINE"),F(d,"FAT_IMP","IMPORTO"),F(d,"FILIALE","FILI_GEN"),string.Join("\n",new[]{F(d,"NOTE1"),F(d,"NOTE"),F(d,"NOTE2")}.Where(x=>x.Length>0))));
@@ -112,19 +114,36 @@ public static class MastroReader
 
   // ── intervention history: the table with NUME_INTE + DATA_INTE (the y_* tables are Mastro's own change log)
   var interventions=new List<Intervention>();string interTable="";
-  foreach(var t in tables.Where(x=>x.Contains("interv",StringComparison.OrdinalIgnoreCase)&&!x.StartsWith("y_",StringComparison.OrdinalIgnoreCase)))
+  // column names only (never data): saved in .runtime/mastro/schema.json to adapt the reader to this Mastro version
+  async Task<List<string>> Cols(string t)
   {
    await using var q=new MySqlCommand("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=@t",c);q.Parameters.AddWithValue("@t",t);
-   var tc=new List<string>();await using(var r=await q.ExecuteReaderAsync(ct))while(await r.ReadAsync(ct))tc.Add(r.GetString(0).ToUpperInvariant());
-   if(tc.Contains("NUME_INTE")&&tc.Contains("DATA_INTE")){interTable=t;break;}
+   var tc=new List<string>();await using(var r=await q.ExecuteReaderAsync(ct))while(await r.ReadAsync(ct))tc.Add(r.GetString(0).ToUpperInvariant());return tc;
   }
+  string[] interWords=["interv","inte","assist","rapport","chiamat","ticket","lavor"];
+  var candidates=tables.Where(x=>!x.StartsWith("y_",StringComparison.OrdinalIgnoreCase)&&interWords.Any(w=>x.Contains(w,StringComparison.OrdinalIgnoreCase)))
+   .OrderBy(x=>Array.FindIndex(interWords,w=>x.Contains(w,StringComparison.OrdinalIgnoreCase))).ToList();
+  var schema=new Dictionary<string,List<string>>();
+  string interNum="NUME_INTE",interDate="DATA_INTE",interClient="CODICE";
+  foreach(var t in candidates.Take(25))
+  {
+   var tc=await Cols(t);schema[t]=tc;
+   if(interTable.Length>0)continue;
+   var num=tc.FirstOrDefault(k=>k=="NUME_INTE")??tc.FirstOrDefault(k=>k.StartsWith("NUME_")&&k.Contains("INT"))??tc.FirstOrDefault(k=>k is "NUME" or "NUMERO");
+   var date=tc.FirstOrDefault(k=>k=="DATA_INTE")??tc.FirstOrDefault(k=>k.StartsWith("DATA")&&k.Contains("INT"))??tc.FirstOrDefault(k=>k is "DATA" or "DATA_DOC" or "DATA_RICH");
+   var cli=tc.FirstOrDefault(k=>k is "CODICE" or "CODI" or "COD_CLI" or "CODI_CLIE" or "CLIENTE_COD");
+   if(num!=null&&date!=null&&cli!=null){interTable=t;interNum=num;interDate=date;interClient=cli;}
+  }
+  if(tMacc!=null)schema[tMacc]=machineCols.Select(x=>x.ToUpperInvariant()).ToList();
+  if(tTipi!=null)schema[tTipi]=await Cols(tTipi);
+  try{File.WriteAllText(Path.Combine(Paths.Runtime("mastro"),"schema.json"),System.Text.Json.JsonSerializer.Serialize(new{read=DateTimeOffset.Now,tables,columns=schema,interTable,interNum,interDate,interClient},new System.Text.Json.JsonSerializerOptions{WriteIndented=true}));}catch{}
   if(interTable.Length>0)
   {
    foreach(var d in await All(interTable,300_000))
    {
-    var n=F(d,"NUME_INTE");var client=F(d,"CODICE","CODI");if(n.Length==0||client.Length==0)continue;
+    var n=F(d,interNum,"NUME_INTE");var client=F(d,interClient,"CODICE","CODI");if(n.Length==0||n=="0"||client.Length==0)continue;
     var work=F(d,"LAVORO","DESCRI","NOTE");
-    interventions.Add(new("mi"+n,client,F(d,"CLIENTE"),F(d,"DATA_INTE"),F(d,"NUME_MACC"),work.Split('\n')[0] is var first&&first.Length>0?(first.Length>90?first[..90]+"…":first):"Intervento n. "+n,
+    interventions.Add(new("mi"+n,client,F(d,"CLIENTE","RAGI_SOCI","DESCRI_CLI"),F(d,interDate,"DATA_INTE"),F(d,"NUME_MACC"),work.Split('\n')[0] is var first&&first.Length>0?(first.Length>90?first[..90]+"…":first):"Intervento n. "+n,
      work,"Chiuso",F(d,"TECNICO","OPERAIO","OPERATORE"),"Normale",F(d,"TOT_DOC"),"mastro","","","",""));
    }
   }

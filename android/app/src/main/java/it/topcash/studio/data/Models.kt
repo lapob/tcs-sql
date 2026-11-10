@@ -70,6 +70,7 @@ import kotlinx.serialization.Serializable
     val dtr: List<DtrRegister> = emptyList(), val dtrStatus: DtrStatus = DtrStatus(),
     val ital: List<ItalDevice> = emptyList(), val italOrders: List<ItalOrder> = emptyList(), val italStatus: DtrStatus = DtrStatus(),
     val clientEdits: Map<String, ClientEdit> = emptyMap(), val licenseEdits: Map<String, LicenseEdit> = emptyMap(), val licenseCleanup: LicenseCleanup = LicenseCleanup(),
+    val assets: List<Asset> = emptyList(), val renewals: Map<String, RenewalMark> = emptyMap(), val deviceLinks: Map<String, String> = emptyMap(),
     val version: Long = 0,
 )
 /** Server capabilities: [mail] = signed reports can be e-mailed to the customer from the server. */
@@ -116,8 +117,20 @@ object Catalog {
 /** Administrator's changes, kept apart from the synchronised copies (never overwritten by a sync). */
 @Serializable data class ClientEdit(val name: String = "", val vat: String = "", val taxCode: String = "", val city: String = "", val address: String = "", val phone: String = "",
     val email: String = "", val pec: String = "", val contact: String = "", val category: String = "", val created: Boolean = false, val deleted: Boolean = false,
-    val updatedAt: String = "", val updatedBy: String = "")
+    val updatedAt: String = "", val updatedBy: String = "", val mergedInto: String = "")
 @Serializable data class LicenseEdit(val expiry: String = "", val note: String = "", val hidden: Boolean = false, val updatedAt: String = "", val updatedBy: String = "")
+/** PC, server, printer, network device or software licence at a customer (no passwords on purpose). */
+@Serializable data class Asset(val id: String = "", val clientCode: String = "", val kind: String = "PC", val name: String = "", val brand: String = "", val serial: String = "",
+    val location: String = "", val ip: String = "", val os: String = "", val purchased: String = "", val warrantyTo: String = "", val expiry: String = "", val notes: String = "",
+    val active: Boolean = true, val updatedAt: String = "", val updatedBy: String = "")
+/** Follow-up of a deadline: outcome, note, when to call again, with its history. */
+@Serializable data class RenewalStep(val at: String = "", val by: String = "", val status: String = "", val note: String = "")
+@Serializable data class RenewalMark(val status: String = "", val note: String = "", val nextContact: String = "", val at: String = "", val by: String = "", val steps: List<RenewalStep>? = null)
+@Serializable data class RenewalRequest(val key: String, val status: String, val note: String, val nextContact: String)
+@Serializable data class IdOnly(val id: String)
+/** A build published on the office server by the administrator (network updates). */
+@Serializable data class AppBuild(val version: String = "", val size: Long = 0, val sha256: String = "", val uploadedAt: String = "", val uploadedBy: String = "", val notes: String = "")
+@Serializable data class UpdateInfo(val windows: AppBuild? = null, val android: AppBuild? = null)
 @Serializable data class LicenseCleanup(val red: Int = 0, val old: Int = 0, val hidden: Int = 0)
 @Serializable data class ClientSaveRequest(val code: String, val edit: ClientEdit)
 @Serializable data class ClientDeleteRequest(val code: String, val deleted: Boolean)

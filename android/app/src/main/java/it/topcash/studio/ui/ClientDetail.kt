@@ -138,6 +138,7 @@ import java.time.ZoneOffset
             item(key = "ital-title") { SectionTitle("Casse Ital Retail (${c.italDevices.size})") }
             c.italDevices.forEach { r -> item(key = "ital" + r.r.serial) { ItalCard(r, Modifier.padding(bottom = 8.dp), showClient = false) } }
         }
+        item(key = "assets") { ClientAssets(vm, a, c) }
         clientAccounting(a, c) { dueOpen = it }
         if (c.licenses.isNotEmpty()) {
             item(key = "l-title") { SectionTitle("Licenze Zucchetti (${c.licenses.size})") }
