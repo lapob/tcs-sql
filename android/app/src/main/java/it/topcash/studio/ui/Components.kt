@@ -43,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.composed
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -62,7 +63,7 @@ import it.topcash.studio.data.Tone
 /** Springy press feedback: the element sinks slightly and bounces back. */
 fun Modifier.pressScale(source: MutableInteractionSource): Modifier = composed {
     val pressed by source.collectIsPressedAsState()
-    val s by animateFloatAsState(if (pressed) 0.965f else 1f, Bouncy, label = "press")
+    val s by animateFloatAsState(if (pressed) 0.98f else 1f, Bouncy, label = "press")
     graphicsLayer { scaleX = s; scaleY = s }
 }
 
@@ -164,7 +165,7 @@ fun hueColor(key: String, dark: Boolean = false): Color { var h = 0; key.forEach
             Box(Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(c.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) { Icon(icon, null, tint = c, modifier = Modifier.size(17.dp)) }
         }
         RollingText("%,d".format(value).replace(',', '.'), MaterialTheme.typography.headlineLarge.tabular, Modifier.padding(top = 14.dp, bottom = 4.dp))
-        Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -214,10 +215,18 @@ fun hueColor(key: String, dark: Boolean = false): Color { var h = 0; key.forEach
 
 /** Horizontally scrolling single-choice chips: labels are never truncated, on any screen width. */
 @Composable fun ChoiceChips(options: List<String>, selected: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
-    androidx.compose.foundation.lazy.LazyRow(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // full bleed: the row runs edge to edge (chips slide under the screen edge, not under an invisible margin) but starts aligned with the page
+    androidx.compose.foundation.lazy.LazyRow(modifier.bleed(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
         items(options.size) { i -> val o = options[i]
             androidx.compose.material3.FilterChip(selected == o, { onSelect(o) }, label = { Text(o, maxLines = 1) }, shape = MaterialTheme.shapes.small,
                 leadingIcon = if (selected == o) { { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.Check, null, Modifier.size(16.dp)) } } else null)
         }
     }
+}
+
+/** Widens an element by [h] on both sides, cancelling the page's side padding (horizontal scrollers go edge to edge). */
+fun Modifier.bleed(h: Dp): Modifier = this.layout { m, c ->
+    val extra = h.roundToPx() * 2
+    val p = m.measure(c.copy(minWidth = (c.minWidth + extra).coerceAtLeast(0), maxWidth = if (c.hasBoundedWidth) c.maxWidth + extra else c.maxWidth))
+    layout((p.width - extra).coerceIn(c.minWidth, c.maxWidth), p.height) { p.place(-h.roundToPx(), 0) }
 }

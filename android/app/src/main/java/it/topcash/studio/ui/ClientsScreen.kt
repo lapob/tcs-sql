@@ -88,7 +88,8 @@ private val filters = listOf("Tutti", "Preferiti", "In scadenza", "Con macchine"
                 Text(listOf(c.city, c.phone, c.families.firstOrNull()?.let(Catalog::family)).filter { !it.isNullOrBlank() }.joinToString(" · ").ifBlank { "Cod. " + c.code.trimStart('0') },
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Pill(c.status, it.topcash.studio.data.Archive.toneOf(c.status))
+            // "Senza licenze" is the normal case for most customers: showing it everywhere is noise and squeezes the name
+            if (c.status != "Senza licenze") Pill(c.status, it.topcash.studio.data.Archive.toneOf(c.status))
         }
     }
 }

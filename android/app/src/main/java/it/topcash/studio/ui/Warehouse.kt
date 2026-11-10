@@ -107,7 +107,7 @@ private val stockFilters = listOf("Tutti", "Disponibili", "Sotto scorta", "Esaur
         item(key = "search") { SearchField(q, { q = it }, "Cerca o scansiona un articolo") }
         item(key = "locs") {
             val opts = listOf<Pair<String?, String>>(null to "Tutti i magazzini") + wh.warehouses.filter { it.active }.map { it.id to (if (it.id == myVan?.id) "Il mio furgone" else it.name) }
-            androidx.compose.foundation.lazy.LazyRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.foundation.lazy.LazyRow(Modifier.padding(top = 10.dp).bleed(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp)) {
                 items(opts.size) { i -> val (id, label) = opts[i]
                     FilterChip(loc == id, { loc = id; locSet = true }, label = { Text(label, maxLines = 1) }, shape = MaterialTheme.shapes.small,
                         leadingIcon = if (loc == id) { { Icon(Icons.Rounded.Warehouse, null, Modifier.size(16.dp)) } } else null) }

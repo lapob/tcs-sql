@@ -10,14 +10,11 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.tween
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -64,8 +61,6 @@ import it.topcash.studio.data.Archive
 import it.topcash.studio.data.Screen
 
 /** Scopes for shared-element transitions (list avatar → detail header). */
-private val navSpring = androidx.compose.animation.core.spring(dampingRatio = 0.86f, stiffness = 420f, visibilityThreshold = androidx.compose.ui.unit.IntOffset(1, 1))
-private val navSpringF = androidx.compose.animation.core.spring<Float>(dampingRatio = 0.8f, stiffness = 500f)
 val LocalShared = compositionLocalOf<SharedTransitionScope?> { null }
 val LocalAnim = compositionLocalOf<AnimatedVisibilityScope?> { null }
 
@@ -89,7 +84,7 @@ object Actions {
     val screen by vm.screen.collectAsStateWithLifecycle()
     // Surface provides the theme's content color to every screen (correct text color in light and dark mode)
     androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-    AnimatedContent(screen, transitionSpec = { (fadeIn(tween(380)) + scaleIn(initialScale = 0.96f)) togetherWith fadeOut(tween(220)) }, label = "root") { s ->
+    AnimatedContent(screen, transitionSpec = { fadeIn(tween(300, 80, EmphasizedDecelerate)) togetherWith fadeOut(tween(120)) }, label = "root") { s ->
         when (s) {
             Screen.Loading -> Box(Modifier.fillMaxSize())
             Screen.Setup -> SetupScreen(vm)
@@ -153,13 +148,13 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
         SharedTransitionLayout(Modifier.fillMaxSize().hazeSourceCompat(haze)) {
             CompositionLocalProvider(LocalShared provides this, LocalAppHaze provides haze, LocalBottomBar provides if (topLevel) androidx.compose.ui.unit.Dp(80f) else androidx.compose.ui.unit.Dp(0f)) {
                 NavHost(nav, startDestination = "home",
-                    // tabs: quick "fade through" both ways. Details: open with a spring slide; on back the page detaches like a
-                    // card (rounded corners, shrinks, slides toward the edge) following the finger during the predictive back gesture,
-                    // while the page underneath comes forward from a slight depth.
-                    enterTransition = { if (isTabSwitch()) fadeIn(tween(210, 70)) + scaleIn(navSpringF, 0.95f) else slideInHorizontally(navSpring) { it / 3 } + fadeIn(tween(220)) },
-                    exitTransition = { if (isTabSwitch()) fadeOut(tween(90)) else slideOutHorizontally(navSpring) { -it / 8 } + scaleOut(navSpringF, 0.96f) + fadeOut(tween(260), 0.35f) },
-                    popEnterTransition = { if (isTabSwitch()) fadeIn(tween(210, 70)) + scaleIn(navSpringF, 0.95f) else slideInHorizontally(navSpring) { -it / 8 } + scaleIn(navSpringF, 0.96f) + fadeIn(tween(240), 0.35f) },
-                    popExitTransition = { if (isTabSwitch()) fadeOut(tween(90)) else scaleOut(navSpringF, 0.86f) + slideOutHorizontally(navSpring) { it / 4 } + fadeOut(tween(230)) },
+                    // Material 3 motion. Tabs: "fade through" (old fades out fast, new fades in with a hint of scale).
+                    // Details: "shared axis X" — the new page slides in a short distance while fading, the old one drifts
+                    // the other way and fades. Back is the exact mirror. Nothing shrinks, no rounded card, no bounce.
+                    enterTransition = { if (isTabSwitch()) fadeIn(tween(220, 60, EmphasizedDecelerate)) + scaleIn(tween(220, 60, EmphasizedDecelerate), 0.98f) else slideInHorizontally(tween(320, easing = EmphasizedDecelerate)) { (it * 0.10f).toInt() } + fadeIn(tween(200, 60)) },
+                    exitTransition = { if (isTabSwitch()) fadeOut(tween(80)) else slideOutHorizontally(tween(320, easing = EmphasizedDecelerate)) { -(it * 0.10f).toInt() } + fadeOut(tween(110)) },
+                    popEnterTransition = { if (isTabSwitch()) fadeIn(tween(220, 60, EmphasizedDecelerate)) + scaleIn(tween(220, 60, EmphasizedDecelerate), 0.98f) else slideInHorizontally(tween(320, easing = EmphasizedDecelerate)) { -(it * 0.10f).toInt() } + fadeIn(tween(200, 60)) },
+                    popExitTransition = { if (isTabSwitch()) fadeOut(tween(80)) else slideOutHorizontally(tween(320, easing = EmphasizedDecelerate)) { (it * 0.10f).toInt() } + fadeOut(tween(110)) },
                 ) {
                     fun screen(r: String, body: @Composable (Archive) -> Unit) = composable(r) {
                         CompositionLocalProvider(LocalAnim provides this) { Box(Modifier.navCard(this)) { if (a == null) LoadingArchive() else body(a) } }
@@ -209,15 +204,8 @@ private val tabRoutes = setOf("home", "clients", "interventions", "warehouse", "
 private fun androidx.compose.animation.AnimatedContentTransitionScope<androidx.navigation.NavBackStackEntry>.isTabSwitch() =
     initialState.destination.route in tabRoutes && targetState.destination.route in tabRoutes
 
-/** While a page is entering or leaving it is drawn as a card: rounded corners and a soft shadow (follows the back gesture). */
-@Composable private fun Modifier.navCard(scope: AnimatedVisibilityScope): Modifier {
-    val corner by scope.transition.animateDp(transitionSpec = { androidx.compose.animation.core.spring(stiffness = 500f) }, label = "navCorner") { st ->
-        if (st == androidx.compose.animation.EnterExitState.Visible) 0.dp else 32.dp }
-    return this.fillMaxSize().graphicsLayer {
-        val r = corner.toPx()
-        if (r > 0.5f) { shape = androidx.compose.foundation.shape.RoundedCornerShape(r); clip = true; shadowElevation = r * 0.5f }
-    }
-}
+/** Pages fill the screen; transitions are pure slide + fade (no card corners or shadow while moving). */
+@Composable private fun Modifier.navCard(@Suppress("UNUSED_PARAMETER") scope: AnimatedVisibilityScope): Modifier = this.fillMaxSize()
 fun NavHostController.switchTab(route: String) = navigate(route) {
     popUpTo(graph.startDestinationId) { saveState = true }; launchSingleTop = true; restoreState = true
 }

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.Icon
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
@@ -68,14 +69,14 @@ import it.topcash.studio.data.AppViewModel
             topBar = {
                 val shown = state.firstVisibleItemIndex > 1
                 val alpha by androidx.compose.animation.core.animateFloatAsState(if (shown) 1f else 0f, label = "title")
-                androidx.compose.material3.TopAppBar(modifier = Modifier.glass(pageHaze),
+                GlassBar(state, pageHaze) { androidx.compose.material3.TopAppBar(
                     title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.graphicsLayer { this.alpha = alpha }) },
                     navigationIcon = { if (onBack != null) IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Indietro") } },
                     actions = actions, scrollBehavior = scroll,
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = clear, scrolledContainerColor = clear),
-                )
+                ) }
             },
-            floatingActionButton = { androidx.compose.foundation.layout.Box(Modifier.padding(bottom = LocalBottomBar.current)) { fab() } },
+            floatingActionButton = { FabSlot(fab) },
         ) { pad -> PageBody(vm, pad, state, header, pageHaze, content) }
         return
     }
@@ -84,14 +85,14 @@ import it.topcash.studio.data.AppViewModel
         contentWindowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            LargeTopAppBar(modifier = Modifier.glass(pageHaze),
+            GlassBar(state, pageHaze) { LargeTopAppBar(
                 title = { Column { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis); if (subtitle != null && scroll.state.collapsedFraction < 0.5f) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
                 navigationIcon = { if (onBack != null) IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Indietro") } },
                 actions = actions, scrollBehavior = scroll,
                 colors = TopAppBarDefaults.largeTopAppBarColors(containerColor = clear, scrolledContainerColor = clear),
-            )
+            ) }
         },
-        floatingActionButton = { androidx.compose.foundation.layout.Box(Modifier.padding(bottom = LocalBottomBar.current)) { fab() } },
+        floatingActionButton = { FabSlot(fab) },
     ) { pad -> PageBody(vm, pad, state, header, pageHaze, content) }
 }
 
@@ -140,5 +141,23 @@ import it.topcash.studio.data.AppViewModel
 @Composable private fun Strip(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, color: androidx.compose.ui.graphics.Color) {
     Row(Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(MaterialTheme.shapes.medium).background(color.copy(alpha = 0.12f)).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, tint = color, modifier = Modifier.size(18.dp)); Text(text, color = color, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 10.dp), maxLines = 2)
+    }
+}
+
+/** The FAB always sits above the glass bottom navigation AND the system gesture bar, and glides when the bar comes and goes. */
+@Composable private fun FabSlot(fab: @Composable () -> Unit) {
+    val sys = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val lift by androidx.compose.animation.core.animateDpAsState(LocalBottomBar.current + sys, androidx.compose.animation.core.spring(dampingRatio = 0.9f, stiffness = 500f), label = "fab")
+    androidx.compose.foundation.layout.Box(Modifier.padding(bottom = lift)) { fab() }
+}
+
+/** The top bar is clear while the page rests at the top (title on the page background, like iOS / Material large titles);
+ *  the frosted glass fades in only once content scrolls underneath it. */
+@Composable private fun GlassBar(state: LazyListState, haze: dev.chrisbanes.haze.HazeState, bar: @Composable () -> Unit) {
+    val under = state.firstVisibleItemIndex > 0 || state.firstVisibleItemScrollOffset > 4
+    val g by androidx.compose.animation.core.animateFloatAsState(if (under) 1f else 0f, tween(220), label = "glass")
+    androidx.compose.foundation.layout.Box {
+        androidx.compose.foundation.layout.Box(Modifier.matchParentSize().graphicsLayer { alpha = g }.glass(haze))
+        bar()
     }
 }

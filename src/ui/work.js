@@ -42,7 +42,7 @@ function inventoryPage(){
  <div class="kpis">${kpi('Elementi',all.filter(a=>a.active).length,'in uso presso i clienti','grid','info','inventory',2)}${kpi('Clienti',new Set(all.filter(a=>a.active).map(a=>a.clientCode)).size,'con almeno un elemento','users','acc','inventory',3)}${kpi('Garanzie',wl,'in scadenza entro 60 giorni','shield','due','inventory',4)}${kpi('Scadute',ex,'garanzie o licenze già scadute','alert','bad','inventory',5)}</div>
  <div class="card reveal" style="--i:6"><div class="card-head"><div><h2>Inventario<span class="count">${fmt(list.length)}</span></h2></div>
   <div class="seg">${[['all','Tutto'],['due','In scadenza'],...kinds.map(k=>[k,k]),['off','Dismessi']].map(([k,l])=>`<button class="${WK.inv===k?'active':''}" data-w-inv="${esc(k)}">${esc(l)}</button>`).join('')}</div></div>
-  <input class="input" data-w-q="invQ" placeholder="Cerca cliente, modello, matricola, IP…" value="${esc(WK.invQ)}" style="margin:6px 0 12px">
+  <label class="search" style="margin:6px 0 12px">${icon('search')}<input data-w-q="invQ" placeholder="Cerca cliente, modello, matricola, IP…" value="${esc(WK.invQ)}" autocomplete="off"></label>
   ${list.length?list.slice(0,n).map(assetRow).join('')+moreBtn('inv',n,list.length):`<div class="empty"><span class="orb">${icon('grid')}</span><h3>${all.length?'Nessun elemento':'Inventario vuoto'}</h3><p>${all.length?'Cambia filtro o ricerca.':'Aggiungi i PC, le stampanti e gli apparati dei tuoi clienti: li ritrovi nella loro scheda.'}</p></div>`}</div>`;
 }
 function assetBadges(a){
@@ -101,7 +101,7 @@ function renewalsPage(){
  <div class="kpis">${kpi('Da gestire',all.filter(open).length,'scadenze senza esito','task','info','renewals',1)}${kpi('Scadute senza esito',all.filter(x=>open(x)&&x.n<0).length,'da sollecitare subito','alert','bad','renewals',2)}${kpi('Da richiamare oggi',recall,'richiami fissati','phone','due','renewals',3)}${kpi('Rinnovati',done,closed?`${Math.round(done*100/closed)}% di quelli chiusi`:'nessun esito ancora','check','ok','renewals',4)}</div>
  <div class="card reveal" style="--i:5"><div class="card-head"><div><h2>Scadenze<span class="count">${fmt(list.length)}</span></h2></div>
   <div class="seg">${[['open','Da gestire'],['late','Scadute'],['recall','Da richiamare'],['done','Rinnovati'],['lost','Persi'],['all','Tutte']].map(([k,l])=>`<button class="${WK.ren===k?'active':''}" data-w-ren="${k}">${l}</button>`).join('')}</div></div>
-  <input class="input" data-w-q="renQ" placeholder="Cerca cliente o matricola…" value="${esc(WK.renQ)}" style="margin:6px 0 12px">
+  <label class="search" style="margin:6px 0 12px">${icon('search')}<input data-w-q="renQ" placeholder="Cerca cliente o matricola…" value="${esc(WK.renQ)}" autocomplete="off"></label>
   ${list.slice(0,n).map(renRow).join('')||`<div class="empty"><span class="orb">${icon('check')}</span><h3>Niente da fare qui</h3><p>Nessuna scadenza in questo elenco.</p></div>`}${moreBtn('ren',n,list.length)}</div>`;
 }
 function renRow(x){
@@ -145,7 +145,7 @@ function routePage(){
   return`https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${encodeURIComponent(dest)}${places.length?'&waypoints='+encodeURIComponent(places.join('|')):''}`;};
  return`${hero('<span class="grad">Giro di oggi</span>.','Interventi aperti, verificazioni entro 30 giorni, casse in errore e giornali quasi pieni, raggruppati per località: un tocco apre il percorso sul telefono.','')}
  ${techs.length?`<div class="seg reveal" style="--i:1;margin-bottom:14px"><button class="${!WK.route?'active':''}" data-w-route="">Tutti</button>${techs.map(t=>`<button class="${WK.route===t?'active':''}" data-w-route="${esc(t)}">${esc(t)}</button>`).join('')}</div>`:''}
- ${ordered.length?`<div class="route-grid">${ordered.map(([city,ss],gi)=>{const url=maps(ss);return`<div class="card reveal route-card" style="--i:${Math.min(gi+2,9)}"><div class="card-head"><div><h2>${esc(city)}<span class="count">${ss.length}</span></h2><p>${esc([...new Set(ss.map(s=>s.zone).filter(Boolean))].join(', ')||'')}</p></div>${url?`<a class="btn sm accent" href="${esc(url)}" target="_blank" rel="noopener">${icon('pin')}Percorso</a>`:''}</div>
+ ${ordered.length?`<div class="route-grid">${ordered.map(([city,ss],gi)=>{const url=maps(ss);return`<div class="card reveal route-card" style="--i:${Math.min(gi+2,9)}"><div class="card-head"><div><h2>${esc(city)}<span class="count">${ss.length}</span></h2><p>${esc([...new Set(ss.map(s=>s.zone).filter(z=>z&&!/^\d+$/.test(z)))].join(', ')||(ss.length===1?'1 tappa':ss.length+' tappe'))}</p></div>${url?`<a class="btn sm accent" href="${esc(url)}" target="_blank" rel="noopener">${icon('pin')}Percorso</a>`:''}</div>
   ${ss.map(s=>`<div class="list-row" ${s.attr} tabindex="0"><span class="badge ${s.cls}">${esc(s.kind)}</span><div class="grow"><strong>${esc(s.c?.name||'Cliente da abbinare')}</strong><small>${esc(s.text)}${addr(s.c)?' · '+esc(addr(s.c)):''}${s.tech?' · '+esc(s.tech):''}</small></div>${s.c?.phone?`<a class="icon-btn sm" href="tel:${esc(s.c.phone.replace(/\s/g,''))}" aria-label="Chiama ${esc(s.c.name)}" data-stop>${icon('phone')}</a>`:''}</div>`).join('')}</div>`;}).join('')}</div>`
  :`<div class="card reveal empty"><span class="orb">${icon('check')}</span><h3>Giornata libera</h3><p>Nessun intervento aperto né verificazione imminente.</p></div>`}`;
 }

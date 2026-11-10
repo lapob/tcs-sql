@@ -139,7 +139,6 @@ class Archive(val state: ArchiveState) {
     val orders: List<UOrder>
 
     init {
-        val today = LocalDate.now()
         fun lic(r: LicenseRecord): ULicense {
             val exp = Dates.parse(r.expiry); val d = Dates.daysFromToday(exp)
             val st = when { r.blocked.equals("SI", true) -> "Bloccata"; d == null -> "Da verificare"; d < 0 -> "Scaduta"; d <= 30 -> "In scadenza"; else -> "Attiva" }
@@ -253,7 +252,6 @@ class Archive(val state: ArchiveState) {
         }
         clients = map.values.sortedWith(compareBy(java.text.Collator.getInstance(java.util.Locale.ITALIAN)) { it.name })
         byCode = HashMap(map).apply { putAll(aliases) }
-        @Suppress("UNUSED_VARIABLE") val unused = today
     }
 
     /** Warehouse: stock per location, average costs, reorder state. */

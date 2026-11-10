@@ -63,7 +63,6 @@ private val AppShapes = Shapes(
     large = RoundedCornerShape(24.dp), extraLarge = RoundedCornerShape(32.dp),
 )
 val Bouncy = spring<Float>(dampingRatio = 0.62f, stiffness = 520f) // soft, a single small rebound: lively without wobbling
-val Snappy = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
 
 @Composable fun TopCashTheme(mode: String, content: @Composable () -> Unit) {
     val dark = when (mode) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }

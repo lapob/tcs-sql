@@ -26,12 +26,16 @@ builder.Host.UseWindowsService(o=>o.ServiceName="TopCashStudio");
 // Two doors: the office network (LAN, default 8470) and the private tunnel (Cloudflare → 127.0.0.1 only, default LAN+2).
 // Everything that arrives on the tunnel door is "outside the office" and needs an approved device.
 var lanUrl=new Uri((args.FirstOrDefault(a=>a.StartsWith("--urls="))?[7..]??Environment.GetEnvironmentVariable("ASPNETCORE_URLS")??"http://0.0.0.0:8470").Split(';')[0].Replace("://*","://0.0.0.0").Replace("://+","://0.0.0.0"));
+// short office address: an internal DNS name (router record, e.g. tcssql.it → this PC) served on port 80 too, so people type just the name
+var lanName=(args.FirstOrDefault(a=>a.StartsWith("--nome="))?[7..]??"").Trim().ToLowerInvariant();
+var shortPort=int.TryParse(args.FirstOrDefault(a=>a.StartsWith("--porta-breve="))?[14..],out var sp)?sp:0;
 var tunnelPort=int.TryParse(args.FirstOrDefault(a=>a.StartsWith("--tunnel-port="))?[14..],out var tp)?tp:lanUrl.Port+2;
 builder.WebHost.UseSetting("urls","");
 builder.WebHost.ConfigureKestrel(k=>
 {
  if(lanUrl.Host is "0.0.0.0")k.ListenAnyIP(lanUrl.Port);else k.Listen(System.Net.IPAddress.Parse(lanUrl.Host is "localhost"?"127.0.0.1":lanUrl.Host),lanUrl.Port);
  k.ListenLocalhost(tunnelPort);
+ if(shortPort>0&&shortPort!=lanUrl.Port&&shortPort!=tunnelPort)k.ListenAnyIP(shortPort); // LAN door as well (only the tunnel port counts as "outside")
 });
 builder.Services.AddSingleton(store).AddSingleton(users).AddSingleton(hub).AddSingleton(devices);
 // the tunnel (cloudflared on this PC) forwards the real client IP and https: trusted only from loopback
@@ -382,6 +386,18 @@ app.MapPost("/api/sync/batch",(HttpContext ctx,BatchRequest b)=>
 }).RequireRateLimiting("sync");
 app.MapPost("/api/sync/log",(HttpContext ctx,LogRequest r)=>{if(!Station(ctx))return Results.Unauthorized();store.Log(r.Kind is "error" or "portal" or "check"?r.Kind:"portal",r.Message.Length>2000?r.Message[..2000]:r.Message);hub.Changed();return Results.Ok();}).RequireRateLimiting("sync");
 app.MapPost("/api/sync/progress",(HttpContext ctx,ProgressRequest r)=>{if(!Station(ctx))return Results.Unauthorized();hub.SetProgress(r.Running,r.Connected,r.Text.Length>300?r.Text[..300]:r.Text);return Results.Ok();}).RequireRateLimiting("sync");
+// addresses other devices of the office use to open Studio in the browser (physical adapters only: no VirtualBox, WSL, VPN)
+app.MapGet("/api/lan",()=>{
+ var host=Environment.MachineName;var port=lanUrl.Port;
+ var ips=System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+  .Where(n=>n.OperationalStatus==System.Net.NetworkInformation.OperationalStatus.Up&&n.NetworkInterfaceType is System.Net.NetworkInformation.NetworkInterfaceType.Ethernet or System.Net.NetworkInformation.NetworkInterfaceType.Wireless80211 or System.Net.NetworkInformation.NetworkInterfaceType.GigabitEthernet
+   &&!System.Text.RegularExpressions.Regex.IsMatch(n.Description+" "+n.Name,"virtual|vmware|virtualbox|hyper-v|vethernet|wsl|tailscale|vpn|loopback|npcap|bluetooth",System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+  .SelectMany(n=>n.GetIPProperties().UnicastAddresses).Where(a=>a.Address.AddressFamily==System.Net.Sockets.AddressFamily.InterNetwork&&!System.Net.IPAddress.IsLoopback(a.Address)&&!a.Address.ToString().StartsWith("169.254."))
+  .Select(a=>a.Address.ToString()).Distinct().ToList();
+ var urls=ips.Select(i=>$"http://{i}:{port}").Append($"http://{host}:{port}").ToList();
+ if(lanName.Length>0)urls.Insert(0,shortPort==80?$"http://{lanName}":$"http://{lanName}:{port}");
+ return Results.Ok(new{host,port,name=lanName,urls});
+}).RequireAuthorization();
 app.MapGet("/api/health",()=>Results.Ok(new{ok=true,version=hub.Version,server=typeof(Hub).Assembly.GetName().Version?.ToString(3)}));
 
 // ───────────────────────── app updates over the network: the administrator uploads a build once, every PC and phone picks it up.

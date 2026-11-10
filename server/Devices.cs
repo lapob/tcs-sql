@@ -82,5 +82,4 @@ public sealed class Devices
   if(q.ExecuteNonQuery()==0)throw new InvalidDataException("Dispositivo non trovato.");
  }
  public void Delete(string id){using var c=Open();using var q=c.CreateCommand();q.CommandText="DELETE FROM devices WHERE id=$id";q.Parameters.AddWithValue("$id",id);q.ExecuteNonQuery();}
- public int PendingCount(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT count(*) FROM devices WHERE status='pending'";return (int)(long)q.ExecuteScalar()!;}
 }

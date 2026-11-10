@@ -72,7 +72,7 @@ public static class MastroReader
   // ── customers
   var raw=await All(tClienti,200_000);
   var cols=raw.FirstOrDefault()?.Keys.ToList()??[];
-  bool IsPhone(string k)=>System.Text.RegularExpressions.Regex.IsMatch(k,@"^(TEL|TELE|TELEF|TELEFONO|CELL|CELLU|CELLULARE|FAX|NUM_TEL|PHONE|RECAPITO)",System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+  bool IsPhone(string k)=>System.Text.RegularExpressions.Regex.IsMatch(k,@"(^|_)(TEL|TELE|TELEF|TELEFONO|TELEFONI|TEL\d|TELE\d|CELL|CELLU|CELLULARE|FAX|PHONE|RECAPITO|RECA_TEL|MOBILE)\d*($|_)",System.Text.RegularExpressions.RegexOptions.IgnoreCase)&&!k.Contains("TELEMAT",StringComparison.OrdinalIgnoreCase);
   bool IsMail(string k)=>System.Text.RegularExpressions.Regex.IsMatch(k,@"(E_?MAIL|^MAIL)",System.Text.RegularExpressions.RegexOptions.IgnoreCase)&&!k.Contains("PEC",StringComparison.OrdinalIgnoreCase);
   var known=new HashSet<string>(["CODI","DESCRI","DESCRI2","PIVA","COD_FIS","VIA","CAP","CITTA","PROV","ZONA","PEC","NOTE","NOTE1"],StringComparer.OrdinalIgnoreCase);
   var clients=new List<MastroClient>();
@@ -90,6 +90,32 @@ public static class MastroReader
    clients.Add(new(code,name,F(d,"PIVA","P_IVA","PARTITA_IVA"),F(d,"COD_FIS","CODFIS","CODICE_FISCALE"),F(d,"VIA","INDIRIZZO"),F(d,"CAP"),F(d,"CITTA","LOCALITA"),F(d,"PROV","PROVINCIA"),F(d,"ZONA"),phones,mails,pec,notes,extra));
   }
   clients=clients.DistinctBy(x=>x.Code).ToList();
+  // phones often live in a separate address book table (one row per number): read every table that has a customer code and phone columns
+  var phoneTables=new List<string>();
+  {
+   var byCode=clients.ToDictionary(x=>x.Code,StringComparer.OrdinalIgnoreCase);
+   string[] bookWords=["tel","rubri","contat","recap","indir","referen","cli_"];
+   foreach(var t in tables.Where(x=>!x.StartsWith("y_",StringComparison.OrdinalIgnoreCase)&&!x.Equals(tClienti,StringComparison.OrdinalIgnoreCase)&&bookWords.Any(w=>x.Contains(w,StringComparison.OrdinalIgnoreCase))).Take(30))
+   {
+    List<string> tc;
+    try{await using var q=new MySqlCommand("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=@t",c);q.Parameters.AddWithValue("@t",t);
+     tc=[];await using var r=await q.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))tc.Add(r.GetString(0));}catch{continue;}
+    var cli=tc.FirstOrDefault(k=>k.ToUpperInvariant() is "CODI" or "CODICE" or "COD_CLI" or "CODI_CLIE" or "CLIENTE" or "CODI_CLI");
+    var ph=tc.Where(IsPhone).ToList();var ml=tc.Where(IsMail).ToList();
+    if(cli==null||ph.Count+ml.Count==0)continue;
+    var hits=0;
+    try{
+     foreach(var d in await All(t,300_000))
+     {
+      if(!byCode.TryGetValue(F(d,cli),out var mc))continue;
+      foreach(var k in ph){var v=F(d,k).Trim();if(v.Count(char.IsDigit)>=6&&!mc.Phones.Contains(v)){mc.Phones.Add(v);hits++;}}
+      foreach(var k in ml)foreach(var e in F(d,k).Split([';',',',' '],StringSplitOptions.RemoveEmptyEntries).Select(x=>x.Trim().ToLowerInvariant()).Where(x=>x.Contains('@')))if(!mc.Emails.Contains(e)){mc.Emails.Add(e);hits++;}
+     }
+    }catch(Exception ex){warnings.Add($"Rubrica '{t}' non leggibile: {ex.Message}");continue;}
+    if(hits>0)phoneTables.Add(t);
+   }
+   if(clients.Count>0&&clients.All(x=>x.Phones.Count==0))warnings.Add("Nessun numero di telefono trovato nei clienti di Mastro: controlla in quale tabella Mastro salva i telefoni (vedi .runtime/mastro/schema.json).");
+  }
 
   // ── machines (cash registers) with verification and contract
   var machines=new List<Machine>();var machineCols=new List<string>();
@@ -134,6 +160,7 @@ public static class MastroReader
    var cli=tc.FirstOrDefault(k=>k is "CODICE" or "CODI" or "COD_CLI" or "CODI_CLIE" or "CLIENTE_COD");
    if(num!=null&&date!=null&&cli!=null){interTable=t;interNum=num;interDate=date;interClient=cli;}
   }
+  schema[tClienti]=cols.Select(x=>x.ToUpperInvariant()).ToList();schema["__rubriche"]=phoneTables;
   if(tMacc!=null)schema[tMacc]=machineCols.Select(x=>x.ToUpperInvariant()).ToList();
   if(tTipi!=null)schema[tTipi]=await Cols(tTipi);
   try{File.WriteAllText(Path.Combine(Paths.Runtime("mastro"),"schema.json"),System.Text.Json.JsonSerializer.Serialize(new{read=DateTimeOffset.Now,tables,columns=schema,interTable,interNum,interDate,interClient},new System.Text.Json.JsonSerializerOptions{WriteIndented=true}));}catch{}

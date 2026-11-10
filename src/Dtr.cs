@@ -49,9 +49,6 @@ public sealed partial class Store
         return map;
     }
 
-    /// When each register's detail was last read (the portal window reads the oldest first).
-    public Dictionary<string, string> DtrDetailAges() => DtrDetails().ToDictionary(k => k.Key, v => v.Value.ReadAt, StringComparer.OrdinalIgnoreCase);
-
     /// Rows: [serial, detail JSON]. Each detail is validated and capped; unknown serials are ignored.
     public string ApplyDtrDetails(List<string> headers, List<List<string>> rows, string capturedAt)
     {

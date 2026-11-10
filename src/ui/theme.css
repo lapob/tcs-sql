@@ -147,3 +147,17 @@ html[data-nav="back"] .anim .reveal{animation-name:fadein;animation-delay:0s}
 @media (prefers-reduced-motion:reduce){.hero h1 .grad{animation:none}.card::before{display:none}.tick-up,.tick-down,.card.live,.pop{animation:none}}
 @media (max-width:860px){body::before{background-size:32px 32px;opacity:.4}}
 @media print{body::before,.card::before{display:none}}
+
+/* ── page change (2.7.1): one short, calm cross-fade. Nothing else moves: no springs, no scaling, no staggered cards on top */
+::view-transition-old(main-content){animation:vt2out .11s cubic-bezier(.4,0,1,1) both}
+::view-transition-new(main-content){animation:vt2in .24s cubic-bezier(.2,.8,.2,1) both}
+html[data-nav="back"]::view-transition-old(main-content){animation:vt2out .11s cubic-bezier(.4,0,1,1) both}
+html[data-nav="back"]::view-transition-new(main-content){animation:vt2back .24s cubic-bezier(.2,.8,.2,1) both}
+@keyframes vt2out{to{opacity:0}}
+@keyframes vt2in{from{opacity:0;transform:translateY(6px)}}
+@keyframes vt2back{from{opacity:0;transform:translateX(-10px)}}
+html[data-nav="back"] .anim .reveal{animation-name:risein;animation-delay:min(calc(var(--i,0)*30ms),180ms)}
+/* first load: a gentle entrance, short and without overshoot */
+.anim .reveal{animation:risein .42s cubic-bezier(.2,.8,.2,1) both;animation-delay:min(calc(var(--i,0)*30ms),180ms)}
+@keyframes risein{from{opacity:0;transform:translateY(8px)}}
+.anim tbody tr.reveal{animation:rowin .3s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(min(var(--i,0),12)*14ms)}

@@ -146,7 +146,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
     val grouped = remember(list) { list.groupBy { it.date.withDayOfMonth(1) } }
     Page(null, "Scadenziario", "Licenze, verificazioni e abbonamenti", onBack = { nav.popBackStack() }) {
         item(key = "kinds") {
-            LazyRow(Modifier.padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyRow(Modifier.padding(bottom = 6.dp).bleed(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp)) {
                 items(listOf("Tutte", "Licenza", "Verificazione", "Abbonamento")) { k -> FilterChip(kind == k, { kind = k }, label = { Text(if (k == "Tutte") k else k + (if (k == "Licenza") "" else "")) }) }
             }
         }

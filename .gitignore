@@ -28,7 +28,6 @@ android/.kotlin/
 android/build/
 android/app/build/
 android/local.properties
-android/legacy-webview/build/
 *.apk
 *.apk.idsig
 *.aab

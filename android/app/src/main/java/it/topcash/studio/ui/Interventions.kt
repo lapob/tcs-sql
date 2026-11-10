@@ -100,7 +100,7 @@ private val itabs = listOf("Da fare", "Chiusi", "Storico Mastro", "Tutti")
         item(key = "search") { SearchField(q, { q = it }, "Cerca cliente, lavoro, tecnico", Modifier.padding(top = 2.dp)) }
         item(key = "tabs") { ChoiceChips(itabs, tab, { tab = it }, Modifier.padding(top = 10.dp)) }
         if (a.technicians.isNotEmpty()) item(key = "techs") {
-            LazyRow(Modifier.padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyRow(Modifier.padding(vertical = 10.dp).bleed(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp)) {
                 item { FilterChip(tech.isEmpty(), { tech = "" }, label = { Text("Tutti i tecnici") }) }
                 items(a.technicians) { t -> FilterChip(tech == t, { tech = if (tech == t) "" else t }, label = { Text(t) }) }
             }
