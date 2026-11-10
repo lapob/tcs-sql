@@ -16,7 +16,7 @@ public sealed record UserInfo(string Username,string Name,string Role,bool Disab
 public sealed class Users
 {
  readonly string cs;
- const int Iterations=210_000;
+ const int Iterations=600_000; // OWASP Password Storage Cheat Sheet: PBKDF2-HMAC-SHA256, 600k iterations
  public Users(string databasePath)
  {
   cs=new SqliteConnectionStringBuilder{DataSource=databasePath}.ToString();
@@ -50,7 +50,10 @@ public sealed class Users
   if(!r.Read()){Rfc2898DeriveBytes.Pbkdf2(password,new byte[16],Iterations,HashAlgorithmName.SHA256,32);return null;}
   var hash=(byte[])r[3];var test=Rfc2898DeriveBytes.Pbkdf2(password,(byte[])r[4],r.GetInt32(5),HashAlgorithmName.SHA256,32);
   if(!CryptographicOperations.FixedTimeEquals(hash,test)||r.GetInt64(6)!=0)return null;
-  var info=new UserInfo(r.GetString(0),r.GetString(1),r.GetString(2),false,r.GetString(8),r.GetString(9));var stamp=r.GetString(7);r.Close();
+  var info=new UserInfo(r.GetString(0),r.GetString(1),r.GetString(2),false,r.GetString(8),r.GetString(9));var stamp=r.GetString(7);var oldIter=r.GetInt32(5);r.Close();
+  // older, weaker hashes are upgraded transparently at the next successful login (same password, new salt, current iterations)
+  if(oldIter<Iterations){var ns=RandomNumberGenerator.GetBytes(16);var nh=Rfc2898DeriveBytes.Pbkdf2(password,ns,Iterations,HashAlgorithmName.SHA256,32);
+   using var up=c.CreateCommand();up.CommandText="UPDATE users SET hash=$h,salt=$s,iterations=$i WHERE username=$u";up.Parameters.AddWithValue("$h",nh);up.Parameters.AddWithValue("$s",ns);up.Parameters.AddWithValue("$i",Iterations);up.Parameters.AddWithValue("$u",info.Username);up.ExecuteNonQuery();}
   using var u=c.CreateCommand();u.CommandText="UPDATE users SET last_login=$t WHERE username=$u";u.Parameters.AddWithValue("$t",DateTimeOffset.Now.ToString("O"));u.Parameters.AddWithValue("$u",info.Username);u.ExecuteNonQuery();
   return(info,stamp);
  }

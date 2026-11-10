@@ -104,7 +104,7 @@ app.Use(async(ctx,next)=>
 });
 app.Use(async(ctx,next)=>
 {
- var h=ctx.Response.Headers;h["X-Content-Type-Options"]="nosniff";h["Referrer-Policy"]="no-referrer";h["X-Frame-Options"]="DENY";h["Permissions-Policy"]="camera=(), microphone=(), geolocation=()";
+ var h=ctx.Response.Headers;h["X-Content-Type-Options"]="nosniff";h["Referrer-Policy"]="no-referrer";h["X-Frame-Options"]="DENY";h["Permissions-Policy"]="camera=(), microphone=(), geolocation=()";h["Content-Security-Policy"]="frame-ancestors 'none'; base-uri 'none'";h["Cross-Origin-Opener-Policy"]="same-origin";h["Cross-Origin-Resource-Policy"]="same-origin";
  // CSRF guard: every state-changing API call must carry a custom header (cannot be sent cross-site without CORS).
  if(ctx.Request.Path.StartsWithSegments("/api")&&!HttpMethods.IsGet(ctx.Request.Method)&&!HttpMethods.IsHead(ctx.Request.Method)&&ctx.Request.Headers["X-Requested-With"]!="topcash")
  {ctx.Response.StatusCode=400;await ctx.Response.WriteAsync("Richiesta non valida.");return;}
