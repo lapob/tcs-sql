@@ -128,7 +128,9 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
-            AnimatedVisibility(topLevel, enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut()) {
+            // leaving a tab the glass bar fades away at once (before the next page slides under it); it comes back softly
+            // once the tab page has arrived: pages never pass through the bar half-way
+            AnimatedVisibility(topLevel, enter = fadeIn(tween(200, 140)) + slideInVertically(tween(280, 140, EmphasizedDecelerate)) { it / 3 }, exit = fadeOut(tween(90))) {
                 // frosted glass: the pages scroll underneath and show through blurred
                 NavigationBar(Modifier.glass(haze, strong = true), containerColor = androidx.compose.ui.graphics.Color.Transparent, tonalElevation = androidx.compose.ui.unit.Dp(0f)) {
                     tabs.forEach { t ->
@@ -145,7 +147,8 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
         val a = archive
         // pages extend under the glass bottom bar (they reserve space with their own bottom content padding)
         SharedTransitionLayout(Modifier.fillMaxSize().hazeSourceCompat(haze)) {
-            CompositionLocalProvider(LocalShared provides this, LocalAppHaze provides haze, LocalBottomBar provides if (topLevel) androidx.compose.ui.unit.Dp(80f) else androidx.compose.ui.unit.Dp(0f)) {
+            val barSpace by androidx.compose.animation.core.animateDpAsState(if (topLevel) androidx.compose.ui.unit.Dp(80f) else androidx.compose.ui.unit.Dp(0f), tween(260, easing = EmphasizedDecelerate), label = "bar")
+            CompositionLocalProvider(LocalShared provides this, LocalAppHaze provides haze, LocalBottomBar provides barSpace) {
                 NavHost(nav, startDestination = "home",
                     // Material 3 motion. Tabs: "fade through" (old fades out fast, new fades in). The system "predictive back"
                     // (page shrinking under the finger, app shrinking to home) is off in the manifest: back plays only this.

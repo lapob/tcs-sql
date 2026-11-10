@@ -447,6 +447,14 @@ mark{background:var(--due-soft);color:inherit;border-radius:3px;padding:0 1px}
 @keyframes vt-out{to{opacity:0;transform:translateY(-6px)}}
 @keyframes vt-in{from{opacity:0;transform:translateY(8px) scale(.992)}}
 main{view-transition-name:main-content}
+/* The page snapshot never slides over the glass bars: it is clipped to the visible area between top bar and bottom bar
+   (measured at every navigation), and the rest of the screen (bars included) does not cross-fade, so no frozen glass. */
+::view-transition-image-pair(main-content){clip-path:inset(var(--vt-top,0px) 0 var(--vt-bottom,0px) 0)}
+::view-transition-old(root),::view-transition-new(root){animation:none}
+/* the "Altro" sheet slides away inside the page change instead of being frozen half-way in the snapshot */
+::view-transition-old(more-sheet){animation:sheetout .26s var(--ease) both}
+::view-transition-old(more-dim){animation:fadeout .22s var(--ease) both}
+::view-transition-group(more-sheet),::view-transition-group(more-dim){animation:none}
 
 .error-box{max-width:520px;margin:15vh auto;text-align:center}
 .error-box h2{font:650 22px var(--font-display);margin-bottom:8px}
@@ -504,7 +512,7 @@ main{view-transition-name:main-content}
  .nav-item svg{width:21px;height:21px}
  .shell{margin-left:0}
  .topbar{height:56px;padding:0 14px;padding-top:env(safe-area-inset-top);box-sizing:content-box}
- .shell::after{bottom:calc(64px + env(safe-area-inset-bottom));height:40px}
+ .shell::after{display:none} /* the bottom bar is already glass: a second fade above it looked like a halo */
  .crumbs span,.crumbs svg{display:none}
  .crumbs strong{font-size:16px}
  .top-actions .btn span,.top-actions .btn{font-size:0;gap:0;width:38px;padding:0;justify-content:center}
@@ -976,3 +984,16 @@ td .svc{padding:3px 8px;font-size:11px;margin:0 4px 4px 0}td small svg{width:12p
 .cs-pay:hover{transform:translateY(-1px);filter:brightness(1.05)}.cs-pay:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.cs-pay svg{width:13px;height:13px}
 .cs-pay.t-late{background:var(--bad-soft);color:var(--bad)}.cs-pay.t-due{background:var(--due-soft);color:var(--due)}.cs-pay.t-ok{background:var(--ok-soft);color:var(--ok)}
 @media (prefers-reduced-motion:reduce){.cs-pay{transition:none}}
+
+/* portals and sign-ins */
+.access-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px;margin-top:6px}
+.access-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--surface-2,var(--surface));min-width:0;transition:border-color .2s,transform .2s}
+.access-row .grow{min-width:0}.access-row small{display:block;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.access-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:4px;vertical-align:middle;background:var(--text-3)}
+.access-row.s-ok .access-dot{background:var(--ok)}.access-row.s-bad .access-dot{background:var(--bad);box-shadow:0 0 0 4px color-mix(in srgb,var(--bad) 18%,transparent)}
+.access-row.s-off .access-dot,.access-row.s-todo .access-dot{background:var(--due)}
+.access-row.s-bad{border-color:color-mix(in srgb,var(--bad) 45%,var(--line))}
+.access-row .btn{flex:none}
+.access-row>small{flex:none;max-width:120px;text-align:right;font-size:12px}
+/* a group caption whose items are all hidden for this role (or this device) never shows alone */
+:root:not([data-role="admin"]) .nav-caption.need-admin{display:none!important}

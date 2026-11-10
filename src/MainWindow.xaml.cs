@@ -81,7 +81,7 @@ public partial class MainWindow : Window
   {var candidate=Path.Combine(dir.FullName,"data");if(File.Exists(Path.Combine(candidate,"clienti-licenze.sqlite")))return candidate;}
   return Path.Combine(AppContext.BaseDirectory,"data");
  }
- static bool SafeExternal(string url)=>url.StartsWith("mailto:",StringComparison.OrdinalIgnoreCase)||url.StartsWith("tel:",StringComparison.OrdinalIgnoreCase)||url.StartsWith("https://www.google.com/maps/search/",StringComparison.Ordinal);
+ static bool SafeExternal(string url)=>url.StartsWith("mailto:",StringComparison.OrdinalIgnoreCase)||url.StartsWith("tel:",StringComparison.OrdinalIgnoreCase)||url.StartsWith("https://www.google.com/maps/search/",StringComparison.Ordinal)||url.StartsWith("https://github.com/lapob/tcs-sql/releases/",StringComparison.Ordinal); // official app downloads
  async void Initialize(object? sender,RoutedEventArgs e)
  {
   try

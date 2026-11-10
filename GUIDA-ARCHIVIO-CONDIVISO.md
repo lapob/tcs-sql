@@ -203,7 +203,7 @@ Il repository è pubblico: i colleghi scaricano i file dalla pagina *Releases* (
 
 ## Macchine: marchi, modelli e portali
 
-La pagina **Macchine** riconosce il marchio dal modello scritto in Mastro e divide i registratori in quattro **sezioni**: **DTR**, **Ital Retail**, **Epson** e **Registratori di cassa** (tutti gli altri: RCH, Axon, Custom, Olivetti… il marchio resta scritto nel modello). A parte: casse automatiche Cashmatic, software e licenze, stampanti, bilance. La scheda cliente usa le stesse sezioni, su PC e su Android.
+La pagina **Macchine** riconosce il marchio dal modello scritto in Mastro e divide i registratori in cinque **sezioni**: **DTR**, **Ital Retail**, **Axon Micrelec**, **Epson** e **Registratori di cassa** (tutti gli altri: RCH, Custom, Olivetti… il marchio resta scritto nel modello). A parte: casse automatiche Cashmatic, software e licenze, stampanti, bilance. La scheda cliente usa le stesse sezioni, su PC e su Android.
 
 - **Edit, Ditron e derivati** (Smarty, Nina, Zero, Spot, Fly, Globe, Quadra, Flexy, Zip, Speedy, Mikropos, Seven, Buffetti One…) **non compaiono più** in Studio: restano solo in MastroSQL, che non viene toccato. Un modello scritto con "RCH" resta.
 - **Sezioni**: una scheda per sezione con macchine attive, numero di modelli e, per DTR e Ital Retail, la **copertura del portale** (quante casse attive sono presenti sul portale e quante mancano). Clic su una sezione per filtrare, poi sui modelli.
@@ -242,6 +242,10 @@ Le scritte seguono i numeri: *1 licenza* / *3 licenze*, *scaduta 132 giorni fa* 
 ### Clienti archiviati (automatico, nessuna cancellazione)
 
 I clienti **senza** dispositivi attivi, licenze in corso, tecnico, pagamenti aperti, interventi negli ultimi 3 anni, ordini negli ultimi 2, note, preferito o dati dei portali vengono tolti dalla lista **Attivi** e messi in **Archiviati · N**. Non viene cancellato nulla: la ricerca li trova sempre, e appena ricevono una macchina, una licenza, un intervento o una nota tornano da soli tra gli attivi.
+
+## Portali e accessi
+
+La scheda **Portali e accessi** (in Panoramica quando manca un accesso, sempre in *Sincronizzazione*) mostra lo stato di MY Zucchetti, DTR-Service, Ital Retail e Axon Micrelec: verde collegato, giallo mai collegato, rosso accesso da rifare. Sulla postazione di sincronizzazione **Accedi di nuovo** apre la finestra del portale: accedi tu, Studio non salva le password e legge i dati in sola lettura.
 
 ## Fluidità automatica
 

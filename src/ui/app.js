@@ -241,8 +241,7 @@ function overview(){
  </div>
  <div class="layout-2"><div class="stack">
   ${todayCard()}
-  ${state.italStatus?.error?`<div class="banner reveal" style="--i:5"><span class="orb">${icon('alert')}</span><div class="grow"><h3>Ital Retail: serve un nuovo accesso</h3><p>${esc(state.italStatus.error)}</p></div><button class="btn" data-go="ital">Casse Ital Retail ${icon('arrow')}</button></div>`:''}
-  ${state.dtrStatus?.error?`<div class="banner reveal" style="--i:5"><span class="orb">${icon('alert')}</span><div class="grow"><h3>DTR-Service: serve un nuovo accesso</h3><p>${esc(state.dtrStatus.error)}</p></div><button class="btn" data-go="dtr">Registratori ${icon('arrow')}</button></div>`:''}
+  ${typeof accessCard==='function'&&(!WEB||isAdmin())?accessCard(true):''}
   ${WEB&&(me?.role==='admin'||me?.role==='owner')&&state.features?.backupError?`<div class="banner reveal" style="--i:5"><span class="orb">${icon('alert')}</span><div class="grow"><h3>Copia esterna dei backup non riuscita</h3><p>${esc(state.features.backupError)} Collega il disco: il server riprova da solo ogni ora.</p></div><button class="btn" data-go="settings">Impostazioni ${icon('arrow')}</button></div>`:''}
   ${needSync?`<div class="banner reveal" style="--i:6"><span class="orb">${icon('sync')}</span><div class="grow"><h3>Completa le anagrafiche dei clienti</h3><p>Avvia una sincronizzazione: verranno letti indirizzi, telefoni, email, codici fiscali e ordini da MY Zucchetti.</p></div><button class="btn" data-go="sync">Come si fa ${icon('arrow')}</button></div>`:`<div class="banner reveal" style="--i:6"><span class="orb">${icon('shield')}</span><div class="grow"><h3>Archivio allineato con Zucchetti</h3><p>Ultima lettura dal portale: ${esc(lastCapture())}. ${WEB?'Tutto il team vede gli stessi dati, in tempo reale.':'I dati restano sul tuo computer.'}</p></div><button class="btn" data-go="sync">Dettagli ${icon('arrow')}</button></div>`}
   <div class="card reveal" style="--i:7"><div class="card-head"><div><h2>Prossime scadenze</h2><p>Licenze che scadono nei prossimi 60 giorni (e quelle appena scadute).</p></div><button class="btn ghost sm" data-go="expiry">Scadenziario ${icon('arrow')}</button></div>
@@ -370,6 +369,7 @@ function syncPage(){
  const step1=state.portalConnected,step2=(state.clients||[]).length>0;
  return`${hero('<span class="grad">Sincronizzazione</span> Zucchetti.','Come arrivano i dati, cosa è stato letto e la cronologia di ogni aggiornamento.','')}
  ${explain('sync','La sincronizzazione apre MY Zucchetti in una finestra protetta: <strong>accedi tu</strong> con le tue credenziali (l’app non le salva). Poi l’app legge licenze, anagrafiche e ordini di tutte le famiglie, <strong>solo in lettura</strong>, e si ripete da sola ogni 6 ore finché la finestra resta aperta.')}
+ ${typeof accessCard==='function'?accessCard(false):''}
  <div class="layout-half"><div class="stack">
   <div class="card reveal" style="--i:2"><div class="conn"><span class="zlogo">Z</span><div><h2>MY Zucchetti Group</h2><p class="sub">${state.syncRunning?`<span class="badge acc"><span class="spinner"></span><span id="sync-live">${esc(state.syncProgress||'Sincronizzazione in corso')}</span></span>`:state.portalConnected?'<span class="badge ok">Sessione attiva</span>':'<span class="badge">Non collegato</span>'}</p></div></div>
    ${WEB&&!hostInfo?.syncStation?`<ol class="steps"><li class="done">Questo dispositivo è collegato all’<strong>archivio condiviso</strong> e riceve ogni aggiornamento in tempo reale.</li><li class="${step2?'done':''}">La <strong>postazione dell’ufficio</strong> legge MY Zucchetti e invia i dati al server, in automatico ogni 6 ore.</li><li>Se servono dati più recenti, chiedi a chi gestisce la postazione di premere <strong>Sincronizza tutto</strong>.</li></ol>`:
@@ -711,9 +711,13 @@ function go(p,keepQuery,fromHistory){if(!PAGES[p])return;const change=()=>{page=
  if(p!==page){if(!fromHistory)navHistory.push(p);transition(change,fromHistory?'back':'fwd');}else change();}
 // View Transitions with graceful fallback: a new navigation skips the running one, and aborted transitions are silent.
 let vt=null;
-function transition(fn,dir='fwd'){if(!document.startViewTransition||reduced||document.hidden){fn();return;}
+function transition(fn,dir='fwd'){const pre=()=>{const c=transition.cleanup;transition.cleanup=null;c?.();};
+ if(!document.startViewTransition||reduced||document.hidden){pre();fn();return;}
+ // clip the page snapshot to the area the bars leave free (top glass bar, bottom tab bar on phones)
+ {const m=$('#main'),tb=$('.topbar'),sb=$('.sidebar');if(m){const r=m.getBoundingClientRect(),t=tb?.getBoundingClientRect(),s=sb?.getBoundingClientRect();const root=document.documentElement.style;
+  root.setProperty('--vt-top',Math.max(0,(t?t.bottom:r.top)-r.top)+'px');root.setProperty('--vt-bottom',(s&&s.width>=innerWidth-2&&s.top<r.bottom?Math.max(0,r.bottom-s.top):0)+'px');}}
  document.documentElement.dataset.nav=dir;clearTimeout(transition.t);transition.t=setTimeout(()=>{delete document.documentElement.dataset.nav;},900); // never left behind
- let done=false;const once=()=>{if(!done){done=true;fn();document.body.classList.remove('anim');}};setTimeout(once,350); // the page cross-fade is the only motion: no card-by-card entrance on top of it (it made sections wobble and pop in late) // never block navigation if the window is not painting
+ let done=false;const once=()=>{if(!done){done=true;pre();fn();document.body.classList.remove('anim');}};setTimeout(once,350); // the page cross-fade is the only motion: no card-by-card entrance on top of it (it made sections wobble and pop in late) // never block navigation if the window is not painting
  vt?.skipTransition();const t=vt=document.startViewTransition(once);for(const p of[t.ready,t.finished,t.updateCallbackDone])p.catch(()=>{});t.finished.finally(()=>{if(vt===t){vt=null;delete document.documentElement.dataset.nav;}});}
 // ── pointer spotlight on cards (theme.css): one passive listener, at most one style write per frame
 {let lit=null,px=0,py=0,raf=0;
@@ -840,7 +844,12 @@ function openMoreSheet(){if(document.querySelector('.more-sheet'))return;
  m.innerHTML=`<div class="sheet-box" role="dialog" aria-label="Altre sezioni"><i class="grip"></i><div class="more-grid">${items.map((b,i)=>{const em=b.querySelector('em.hot')?.textContent||'';return`<button class="more-item${b.dataset.page===page?' on':''}" data-more="${b.dataset.page}" style="--i:${i}">${b.querySelector('svg').outerHTML}<span>${b.querySelector('span').textContent}</span>${em?`<em>${esc(em)}</em>`:''}</button>`;}).join('')}</div></div>`;
  document.body.append(m);
  const close=()=>{m.classList.add('out');setTimeout(()=>m.remove(),260);};
- m.addEventListener('click',e=>{const b=e.target.closest('[data-more]');if(b){close();go(b.dataset.more);}else if(!e.target.closest('.sheet-box'))close();});
+ m.addEventListener('click',e=>{const b=e.target.closest('[data-more]');
+  if(b&&b.dataset.more===page)close();
+  else if(b){ // the sheet leaves inside the page change (no frozen glass): removed when the new page is drawn
+   const box=m.querySelector('.sheet-box');if(document.startViewTransition&&!reduced){box.style.viewTransitionName='more-sheet';m.style.viewTransitionName='more-dim';transition.cleanup=()=>m.remove();setTimeout(()=>m.isConnected&&m.remove(),600);go(b.dataset.more);}
+   else{m.remove();go(b.dataset.more);}}
+  else if(!e.target.closest('.sheet-box'))close();});
  document.addEventListener('keydown',function k(e){if(e.key==='Escape'){close();document.removeEventListener('keydown',k,true);}},true);
  // swipe down to close
  const box=m.querySelector('.sheet-box');let y0=null;box.addEventListener('pointerdown',e=>{y0=e.clientY;});box.addEventListener('pointerup',e=>{if(y0!==null&&e.clientY-y0>60)close();y0=null;});

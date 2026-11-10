@@ -12,11 +12,10 @@ const RT_BRANDS=[
  {k:'ital',l:'Ital Retail',portal:'ital',pl:'Ital Retail',hue:152,re:/ITAL ?RETAIL|\bNICE\b|\bSPICE\b|ITAL ?START|^NEXT\b/},
  {k:'rch',l:'RCH',hue:4,re:/\bRCH\b|PRINT!|\bONDA\b|WALL ?E\b|\bAPE ?\d|\bASSO\b|LDP-?\d/},
  {k:'epson',l:'Epson',hue:228,re:/EPSON|\bFP[- ]?\d/},
- {k:'axon',l:'Axon',hue:270,re:/AXON|\bDADO\b|WY ?CASH|\bAURA\b/},
+ {k:'axon',l:'Axon Micrelec',portal:'axon',pl:'Axon Micrelec',hue:270,re:/AXON|\bDADO\b|WY ?CASH|\bAURA\b|MICRELEC|HYDRA/},
  {k:'ditron',l:'Ditron',hue:28,re:/DITRON/},
  {k:'custom',l:'Custom',hue:190,re:/\bCUSTOM\b/},
  {k:'olivetti',l:'Olivetti',hue:340,re:/OLIVETTI|NETTUN/},
- {k:'micrelec',l:'Micrelec',hue:48,re:/MICRELEC|HYDRA/},
  {k:'sarema',l:'Sarema',hue:300,re:/SAREMA/},
  {k:'cashmatic',l:'Cashmatic',cat:'cash',hue:96,re:/CASHMATIC/},
  {k:'soft',l:'Software e licenze',cat:'soft',hue:250,re:/LICENZA|\bAPP\b|APP\.|SOFTWARE|RISTOQUICK|POSBY/},
@@ -24,26 +23,26 @@ const RT_BRANDS=[
  {k:'scale',l:'Bilance',cat:'scale',hue:120,re:/BILANCIA/},
 ];
 const RT_OTHER={k:'other',l:'Registratori di cassa',hue:220};
-const RT_OWN=new Set(['dtr','ital','epson']);
-const secOrd=k=>{const i=['dtr','ital','epson','other'].indexOf(k);return i<0?9:i;};
+const RT_OWN=new Set(['dtr','ital','axon','epson']);
+const secOrd=k=>{const i=['dtr','ital','axon','epson','other'].indexOf(k);return i<0?9:i;};
 const RT_CATS={rt:'Registratori di cassa',cash:'Casse automatiche',soft:'Software e licenze',printer:'Stampanti',scale:'Bilance'};
 let RG=null;
 function rtBrand(model){const s=String(model||'').toUpperCase();return RT_BRANDS.find(b=>b.re.test(s))||RT_OTHER;}
 // "DTR DRTCASH" and "DRTCASH" are the same model: the brand words are dropped, spacing and punctuation normalised
 function rtModel(model,b){let s=String(model||'').toUpperCase().replace(/[^A-Z0-9+!]+/g,' ').trim();
- if(b.k==='dtr')s=s.replace(/^DTR\s+/,'');else if(b.k==='ital')s=s.replace(/^ITAL ?RETAIL\s+/,'');else if(b.k!=='other'&&b.k!=='soft'&&b.k!=='printer'&&b.k!=='scale')s=s.replace(new RegExp('^'+b.l.toUpperCase()+'\\s*'),'').replace(/^RCH\s*-?\s*/,'');
+ if(b.k==='dtr')s=s.replace(/^DTR\s+/,'');else if(b.k==='axon')s=s.replace(/^(AXON|MICRELEC)\s+/,'');else if(b.k==='ital')s=s.replace(/^ITAL ?RETAIL\s+/,'');else if(b.k!=='other'&&b.k!=='soft'&&b.k!=='printer'&&b.k!=='scale')s=s.replace(new RegExp('^'+b.l.toUpperCase()+'\\s*'),'').replace(/^RCH\s*-?\s*/,'');
  return s.replace(/\s+/g,' ').trim()||String(model||'').trim()||'Senza modello';}
 function deriveRegisters(){
  if(!D){RG=null;return;}
  const rt=new Map((state.rt||[]).map(r=>[r.machineId,r]));
  // a portal never synchronised says nothing about its registers: they are not "missing", the list is just not there yet
- const synced={dtr:(state.dtr||[]).length>0,ital:(state.ital||[]).length>0};
+ const synced={dtr:(state.dtr||[]).length>0,ital:(state.ital||[]).length>0,axon:(state.axon||[]).length>0};
  const brands=new Map();
  for(const m of D.machines){
   const b0=rtBrand(m.model);const b=b0.cat||RT_OWN.has(b0.k)?b0:RT_OTHER;m.maker=b0.cat||b0.k==='other'?'':b0.l;
   m.brand=b;m.cat=b.cat||'rt';m.family=(m.maker&&b===RT_OTHER?m.maker+' ':'')+rtModel(m.model,b0);m.rt=rt.get(m.id)||null;
   m.fw=m.rt?.fields?.['Firmware']||m.dtr?.firmware||m.ital?.d?.firmware||'';
-  m.portal=b.portal?(!synced[b.portal]?'nosync':(b.portal==='dtr'?m.dtr:m.ital)?'in':'out'):'none';
+  m.portal=b.portal?(!synced[b.portal]?'nosync':(b.portal==='dtr'?m.dtr:b.portal==='ital'?m.ital:m.axon)?'in':'out'):'none';
   if(!brands.has(b.k))brands.set(b.k,{...b,cat:b.cat||'rt',synced:b.portal?synced[b.portal]:true,all:0,active:0,in:0,out:0,models:new Map()});
   const g=brands.get(b.k);g.all++;if(m.active){g.active++;if(m.portal==='in')g.in++;else if(m.portal==='out')g.out++;const f=g.models.get(m.family)||{name:m.family,n:0};f.n++;g.models.set(m.family,f);}
  }
@@ -66,7 +65,7 @@ function brandGrid(){
   return`<button class="brand-card reveal${ui.mbrand===b.k?' on':''}" style="--i:${i};--h:${b.hue}" data-mbrand="${b.k}" aria-pressed="${ui.mbrand===b.k}">
    <div class="brand-top">${brandMark(b)}<div class="grow"><strong>${esc(b.l)}</strong><small>${plur(b.active,'attiva','attive')} · ${plur(b.models.length,'modello','modelli')}</small></div>${b.portal?`<span class="brand-portal">${esc(b.pl)}</span>`:''}</div>
    ${b.portal&&!b.synced?`<small class="cov-txt">${icon('clock')} ${esc(b.pl)} non ancora sincronizzato: collegalo dall’app Windows per il confronto</small>`:cov!==null?`<div class="cov"><i style="width:${cov}%"></i></div><small class="cov-txt"><b>${fmt(b.in)}</b> nel portale${b.out?` · <span class="warn">${fmt(b.out)} mancanti</span>`:' · tutte presenti'}</small>`:`<small class="cov-txt muted">${b.models.slice(0,3).map(x=>esc(x.name)).join(' · ')}</small>`}</button>`;};
- return`<div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Sezioni</h2><p>DTR, Ital Retail ed Epson hanno la loro sezione; tutti gli altri sono in Registratori di cassa. Per DTR e Ital Retail controllo se ogni cassa attiva è presente sul portale.${D.dropped?` <span class="muted">${plur(D.dropped,'macchina Edit/Ditron esclusa','macchine Edit/Ditron escluse')}.</span>`:''}</p></div>${ui.mbrand?`<button class="btn sm ghost" data-mbrand="">${icon('close')}Tutti i marchi</button>`:''}</div>
+ return`<div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Sezioni</h2><p>DTR, Ital Retail, Axon Micrelec ed Epson hanno la loro sezione; tutti gli altri sono in Registratori di cassa. Per i marchi con un portale controllo se ogni cassa attiva è presente sul portale.${D.dropped?` <span class="muted">${plur(D.dropped,'macchina Edit/Ditron esclusa','macchine Edit/Ditron escluse')}.</span>`:''}</p></div>${ui.mbrand?`<button class="btn sm ghost" data-mbrand="">${icon('close')}Tutti i marchi</button>`:''}</div>
   <div class="brand-grid">${rt.map(card).join('')}</div>
   ${other.length?`<div class="cat-row">${other.map((b,i)=>`<button class="chip${ui.mbrand===b.k?' on':''}" data-mbrand="${b.k}">${brandMark(b,'xs')}${esc(RT_CATS[b.cat]||b.l)}<em>${fmt(b.active)}</em></button>`).join('')}</div>`:''}</div>`;
 }
@@ -142,3 +141,26 @@ document.addEventListener('click',e=>{
  else{ui.mmodel=ui.mmodel===t.dataset.mmodel?'':t.dataset.mmodel;ui.p=1;}
  render(false);
 },true);
+
+// ───────────────────────── Portals and sign-ins: one place that says which access is missing and reopens it in one click.
+// Sign-ins happen on the office sync station (Windows app); elsewhere the card only says what is missing.
+function portalAccess(){
+ const ago=s=>s?Math.floor((Date.now()-new Date(s))/864e5):null;
+ const zLast=(state.sources||[]).map(s=>s.capturedAt).filter(Boolean).sort().pop()||'';
+ const z={k:'z',name:'MY Zucchetti',mark:'Z',hue:4,act:'portal',sub:'Licenze, anagrafiche e ordini'};
+ const zd=ago(zLast);z.state=!zLast?'off':zd>3?'bad':'ok';
+ z.text=!zLast?'Mai sincronizzato':zd>3?`Ultima lettura ${plur(zd,'giorno','giorni')} fa: serve un nuovo accesso`:`Aggiornato ${dTime(zLast)}`;
+ const portal=(k,name,st,act,hue,sub)=>{const s=st||{};return{k,name,mark:name.split(/[\s-]+/).filter(w=>w.length>2).map(w=>w[0]).join('').slice(0,2).toUpperCase(),hue,act,sub,
+  state:s.error?'bad':!s.lastSync?'off':'ok',text:s.error?String(s.error):!s.lastSync?'Mai collegato':`Aggiornato ${dTime(s.lastSync)}`};};
+ const axonN=(D?.machines||[]).filter(m=>m.active&&m.brand?.k==='axon').length;
+ return[z,portal('dtr','DTR-Service',state.dtrStatus,'dtr',212,'Registratori DTR'),portal('ital','Ital Retail',state.italStatus,'ital',152,'Casse Ital Retail'),
+  {k:'axon',name:'Axon Micrelec',mark:'AM',hue:270,act:'',sub:`${plur(axonN,'cassa attiva','casse attive')} in Mastro`,state:'todo',text:'Portale da collegare: serve l’indirizzo dell’area rivenditori'}];
+}
+function accessCard(onlyMissing){
+ const list=portalAccess();const missing=list.filter(p=>p.state!=='ok');
+ if(onlyMissing&&!missing.filter(p=>p.state!=='todo').length)return'';
+ const head=missing.length?`${plur(missing.length,'accesso da rifare','accessi da rifare')}`:'Tutti i portali sono collegati';
+ const btn=p=>p.state==='ok'?(WEB?'':`<button class="btn ghost sm" data-action="${p.act}">${icon('external')}Apri</button>`):!p.act?'':WEB?'<small class="muted">dalla postazione dell’ufficio</small>':`<button class="btn accent sm" data-action="${p.act}">${icon('external')}Accedi di nuovo</button>`;
+ return`<div class="card reveal access-card" style="--i:1"><div class="card-head"><div><h2>Portali e accessi</h2><p>${head}. ${WEB?'Gli accessi si rifanno dall’app Windows della postazione di sincronizzazione.':'Accedi tu nella finestra del portale: Studio non salva le password e poi legge i dati in sola lettura.'}</p></div></div>
+ <div class="access-list">${list.map(p=>`<div class="access-row s-${p.state}"><span class="bmark" style="--h:${p.hue}">${esc(p.mark)}</span><div class="grow"><strong>${esc(p.name)} <span class="access-dot" aria-hidden="true"></span></strong><small>${esc(p.sub)} · ${esc(p.text)}</small></div>${btn(p)}</div>`).join('')}</div></div>`;
+}
