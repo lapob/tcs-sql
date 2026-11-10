@@ -32,7 +32,7 @@ public sealed class Hub(Store store)
    if(snapshot!=null&&snapshotVersion==Version)return snapshot;
    var v=Version;
    snapshot=JsonSerializer.SerializeToUtf8Bytes(new{records=store.All(),clients=store.Clients(),orders=store.Orders(),mastroClients=store.MastroClients(),machines=store.Machines(),interventions=store.Interventions(),
-    warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),features=new{mail=store.MailReady(),backupError=Backups.Status(store).Error},version=v},Json);
+    warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),dtr=store.DtrRegisters(),dtrStatus=store.DtrState(),features=new{mail=store.MailReady(),backupError=Backups.Status(store).Error},version=v},Json);
    snapshotVersion=v;return snapshot;
   }
  }

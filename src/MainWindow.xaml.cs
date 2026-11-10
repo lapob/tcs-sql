@@ -49,7 +49,7 @@ public partial class MainWindow : Window
   // Fit any screen: 92% of the work area, never above the design size (small laptops get a usable window).
   var area=SystemParameters.WorkArea;Width=Math.Min(1480,area.Width*0.92);Height=Math.Min(960,area.Height*0.92);MinWidth=Math.Min(MinWidth,area.Width);MinHeight=Math.Min(MinHeight,area.Height);
   pushTimer.Tick+=async(_,_)=>{pushTimer.Stop();if(pushPending){pushPending=false;await PushNow();}};
-  Loaded+=Initialize;Closed+=(_,_)=>{timer.Stop();pushTimer.Stop();portal?.Close();};
+  Loaded+=Initialize;Closed+=(_,_)=>{timer.Stop();pushTimer.Stop();portal?.Close();dtr?.Quit();};
   StateChanged+=(_,_)=>{try{if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.MemoryUsageTargetLevel=WindowState==WindowState.Minimized?CoreWebView2MemoryUsageTargetLevel.Low:CoreWebView2MemoryUsageTargetLevel.Normal;}catch{}};
  }
  readonly DispatcherTimer pushTimer=new(){Interval=TimeSpan.FromMilliseconds(1500)};bool pushPending;DateTime lastPush=DateTime.MinValue;
@@ -83,6 +83,8 @@ public partial class MainWindow : Window
    await ChooseServer();Navigate();
    await Task.Yield();if(!ServerMode&&Scan(false)>0)await Push();
    timer.Tick+=async(_,_)=>{if(!busy&&!ServerMode){var count=Scan(false);if(count>0)await Push();}};timer.Start();
+   // DTR-Service: once connected on this PC the session is resumed in the background at every start
+   if(DtrWindow.Configured&&(!ServerMode||syncToken.Length>0))OpenDtr(false);
   }
   catch(Exception ex)
   {
@@ -111,7 +113,7 @@ public partial class MainWindow : Window
   if(r==MessageBoxResult.No){serverUrl="";SaveSettings();}Navigate();
   }finally{serverErrorOpen=false;}
  }
- static readonly HashSet<string> RemoteActions=["external","portal","syncPortal","disconnectServer","setSyncToken","hostInfo","mastroRead","setExternal"];
+ static readonly HashSet<string> RemoteActions=["external","portal","syncPortal","disconnectServer","setSyncToken","hostInfo","mastroRead","setExternal","dtr","dtrSync"];
  MastroBatch? lastMastro;
  static readonly JsonSerializerOptions jsonIn=new(){PropertyNameCaseInsensitive=true};
  /// Reads Mastro (read-only) on this PC and hands a preview to the page. Local mode keeps the batch for "mastroImport";
@@ -199,7 +201,7 @@ public partial class MainWindow : Window
      catch(Exception ex){await Notify("Server non raggiungibile: "+ex.Message);break;}
      serverUrl=url;activeServer=url;SaveSettings();portal?.Close();Navigate();break;
     case "disconnectServer":serverUrl="";serverExternal="";activeServer="";syncToken="";SaveSettings();portal?.Close();Navigate();break;
-    case "setSyncToken":syncToken=root.GetProperty("token").GetString()??"";SaveSettings();if(portal!=null)portal.Target=SyncTarget();
+    case "setSyncToken":syncToken=root.GetProperty("token").GetString()??"";SaveSettings();if(portal!=null)portal.Target=SyncTarget();if(dtr!=null)dtr.Target=SyncTarget();
      Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,portalOpen=portal!=null});await Notify(syncToken.Length>0?"Questo PC è ora la postazione di sincronizzazione.":"Postazione di sincronizzazione disattivata.");break;
     case "ready":await Push();break;
     case "scan":Scan(true);await Push();await Notify("Cartella controllata. Consulta il registro per i dettagli.");break;
@@ -221,6 +223,8 @@ public partial class MainWindow : Window
     case "note":store.SaveNote(root.GetProperty("code").GetString()!,root.GetProperty("note").GetString()!);await Notify("Nota salvata sul computer.");break;
     case "meta":var meta=JsonSerializer.Deserialize<ClientMeta>(root.GetProperty("meta").GetRawText(),new JsonSerializerOptions{PropertyNameCaseInsensitive=true})!;store.SaveMeta(root.GetProperty("code").GetString()!,meta);await Push();await Notify("Scheda di lavoro aggiornata.");break;
     case "portal":if(CanSync())OpenPortal();break;
+    case "dtr":if(CanSync())OpenDtr(true);break;
+    case "dtrSync":if(CanSync()){OpenDtr(false);if(dtr!=null)await dtr.StartSync();}break;
     case "syncPortal":if(CanSync()){OpenPortal();if(portal!=null)await portal.StartSync();}break;
     case "external":var ext=root.GetProperty("url").GetString()??"";if(SafeExternal(ext))Process.Start(new ProcessStartInfo(ext){UseShellExecute=true});break;
     case "exportClients":
@@ -238,6 +242,17 @@ public partial class MainWindow : Window
   _=Notify("La sincronizzazione con Zucchetti si avvia dalla postazione dell'ufficio. Un amministratore può attivarla da Impostazioni → Postazione di sincronizzazione.");return false;
  }
  void Post(object payload){try{Dashboard.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(payload,json));}catch{}}
+ DtrWindow? dtr;
+ void OpenDtr(bool show)
+ {
+  if(dtr==null)
+  {
+   dtr=new DtrWindow(SyncTarget(),async()=>await Push()){Owner=this};
+   dtr.SignInRequired=()=>Dispatcher.InvokeAsync(async()=>{dtr?.Reveal();await Notify("DTR-Service chiede di accedere di nuovo: ho aperto la finestra di accesso.");});
+   if(show)dtr.Reveal();else dtr.StartHidden();
+  }
+  else if(show)dtr.Reveal();
+ }
  void OpenPortal(){if(portal==null){portal=new PortalWindow(SyncTarget(),async()=>await Push());portal.ProgressChanged=Progress;portal.Owner=this;portal.Closed+=(_,_)=>portal=null;portal.Show();}else{portal.Show();portal.Activate();}}
  int Scan(bool log)
  {
@@ -267,7 +282,7 @@ public partial class MainWindow : Window
   await PushNow();
  }
  Task PushNow(){lastPush=DateTime.UtcNow;if(ServerMode)return Task.CompletedTask; // the shared server feeds the UI itself
-  if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="state",records=store.All(),clients=store.Clients(),orders=store.Orders(),mastroClients=store.MastroClients(),machines=store.Machines(),interventions=store.Interventions(),warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),syncRunning=portal?.Running??false,syncProgress=portal?.Progress??"",sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),sourceFolder,dataFolder=store.Folder,autoImport=true,portalConnected=portal?.Authenticated??false},json));return Task.CompletedTask;}
+  if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="state",records=store.All(),clients=store.Clients(),orders=store.Orders(),mastroClients=store.MastroClients(),machines=store.Machines(),interventions=store.Interventions(),warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),syncRunning=portal?.Running??false,syncProgress=portal?.Progress??"",sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),dtr=store.DtrRegisters(),dtrStatus=store.DtrState(),sourceFolder,dataFolder=store.Folder,autoImport=true,portalConnected=portal?.Authenticated??false},json));return Task.CompletedTask;}
  // In server mode the progress also reaches every browser through the server; locally it goes straight to the page.
  Task Notify(string message){Dashboard.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="toast",message},json));return Task.CompletedTask;}
 }

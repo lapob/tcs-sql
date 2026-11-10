@@ -111,7 +111,7 @@ async function api(path,opt={}){
 const post=(p,b)=>api(p,{method:'POST',body:JSON.stringify(b||{})});
 function download(url){const a=document.createElement('a');a.href=url;a.download='';document.body.append(a);a.click();a.remove();toast('Download avviato','download');}
 function pickAndUpload(){const i=document.createElement('input');i.type='file';i.accept='.csv,.json,.xlsx';i.onchange=async()=>{const f=i.files[0];if(!f)return;const fd=new FormData();fd.append('file',f);try{const r=await api('/api/import',{method:'POST',body:fd});toast(r.message||'Importazione completata');}catch(e){toast(e.message,'alert');}};i.click();}
-const HOST_ACTIONS=['portal','syncPortal','external','setSyncToken','disconnectServer','connectServer','hostInfo','setExternal'];
+const HOST_ACTIONS=['portal','syncPortal','dtr','dtrSync','external','setSyncToken','disconnectServer','connectServer','hostInfo','setExternal'];
 function send(action,data={}){
  if(!WEB){if(host)host.postMessage({action,...data});else toast('Funzione disponibile nell’app Windows (TopCash.Licenze.exe).','alert');return;}
  if(host&&HOST_ACTIONS.includes(action))return host.postMessage({action,...data});
@@ -129,6 +129,7 @@ function send(action,data={}){
   case'backup':download('/api/backup');break;
   case'import':pickAndUpload();break;
   case'external':if(data.url.startsWith('https://'))window.open(data.url,'_blank','noopener');else location.href=data.url;break;
+  case'dtr':case'dtrSync':toast('DTR-Service si aggiorna dalla postazione dell’ufficio: sessione controllata ogni 15 minuti, dati ogni 2 ore.','sync');break;
   case'syncPortal':case'portal':toast('La lettura da Zucchetti parte dalla postazione dell’ufficio, in automatico ogni 6 ore.','sync');break;
   default:toast('Funzione non disponibile da qui.','alert');
  }
@@ -159,7 +160,7 @@ function ask({title,text='',ok='Conferma',danger=false,html='',cancel=true}){ret
 async function copy(text){try{await navigator.clipboard.writeText(text);toast('Copiato negli appunti');}catch{toast('Copia non riuscita','alert');}}
 
 // ───────────────────────── shared UI pieces
-const PAGES={overview:'Panoramica',clients:'Clienti',interventions:'Interventi',machines:'Macchine',warehouse:'Magazzino',accounting:'Contabilità',licenses:'Licenze',expiry:'Scadenze',orders:'Ordini',tasks:'Attività',sync:'Sincronizzazione',settings:'Impostazioni',team:'Utenti'};
+const PAGES={overview:'Panoramica',clients:'Clienti',interventions:'Interventi',machines:'Macchine',dtr:'Registratori DTR',warehouse:'Magazzino',accounting:'Contabilità',licenses:'Licenze',expiry:'Scadenze',orders:'Ordini',tasks:'Attività',sync:'Sincronizzazione',settings:'Impostazioni',team:'Utenti'};
 function hero(title,text,actions=''){return`<section class="hero reveal"><div><h1>${title}</h1><p>${text}</p></div><div class="btn-row">${actions}</div></section>`;}
 function explain(id,html){if(store.get('hide.'+id,false))return'';return`<div class="explain reveal" style="--i:1"><span class="orb">${icon('sparkle')}</span><div>${html}</div><button class="x" data-hide-explain="${id}" aria-label="Nascondi spiegazione" data-tip="Nascondi questa spiegazione">${icon('close')}</button></div>`;}
 function kpi(label,value,note,ic,tone,go,i,tip){return`<div class="card kpi ${tone} reveal" style="--i:${i}" data-go="${go}" tabindex="0" ${tip?`data-tip="${esc(tip)}"`:''}><div class="kpi-top"><span>${label}</span><span class="kpi-icon">${icon(ic)}</span></div><div class="kpi-value" data-count="${value}">${fmt(value)}</div><div class="kpi-note">${note}</div></div>`;}
@@ -197,6 +198,7 @@ function overview(){
   ${kpi('Interventi aperti',D.openInterventions.length,D.verDue.length?`${fmt(D.verDue.length)} verificazioni entro 60 gg`:`${fmt(D.orders30.length)} ordini Zucchetti in 30 gg`,'tool','t-info','interventions',5,'Interventi tecnici non ancora chiusi')}
  </div>
  <div class="layout-2"><div class="stack">
+  ${state.dtrStatus?.error?`<div class="banner reveal" style="--i:5"><span class="orb">${icon('alert')}</span><div class="grow"><h3>DTR-Service: serve un nuovo accesso</h3><p>${esc(state.dtrStatus.error)}</p></div><button class="btn" data-go="dtr">Registratori ${icon('arrow')}</button></div>`:''}
   ${WEB&&me?.role==='admin'&&state.features?.backupError?`<div class="banner reveal" style="--i:5"><span class="orb">${icon('alert')}</span><div class="grow"><h3>Copia esterna dei backup non riuscita</h3><p>${esc(state.features.backupError)} Collega il disco: il server riprova da solo ogni ora.</p></div><button class="btn" data-go="settings">Impostazioni ${icon('arrow')}</button></div>`:''}
   ${needSync?`<div class="banner reveal" style="--i:6"><span class="orb">${icon('sync')}</span><div class="grow"><h3>Completa le anagrafiche dei clienti</h3><p>Avvia una sincronizzazione: verranno letti indirizzi, telefoni, email, codici fiscali e ordini da MY Zucchetti.</p></div><button class="btn" data-go="sync">Come si fa ${icon('arrow')}</button></div>`:`<div class="banner reveal" style="--i:6"><span class="orb">${icon('shield')}</span><div class="grow"><h3>Archivio allineato con Zucchetti</h3><p>Ultima lettura dal portale: ${esc(lastCapture())}. ${WEB?'Tutto il team vede gli stessi dati, in tempo reale.':'I dati restano sul tuo computer.'}</p></div><button class="btn" data-go="sync">Dettagli ${icon('arrow')}</button></div>`}
   <div class="card reveal" style="--i:7"><div class="card-head"><div><h2>Prossime scadenze</h2><p>Licenze che scadono nei prossimi 60 giorni (e quelle appena scadute).</p></div><button class="btn ghost sm" data-go="expiry">Scadenziario ${icon('arrow')}</button></div>
@@ -575,6 +577,7 @@ function openClient(code,keep){const c=D.byCode.get(code);if(!c)return;if(!keep)
  ${c.mastro?`<div class="d-section"><h3>Dati MastroSQL <span class="muted">cod. ${esc(c.mastro.code)}</span></h3><div class="facts">${fact('Indirizzo completo',[c.mastro.address,[c.mastro.cap,c.mastro.city,c.mastro.prov&&'('+c.mastro.prov+')'].filter(Boolean).join(' ')].filter(Boolean).join(', '),1)}${fact('Zona',c.mastro.zone)}${fact('Telefoni',c.mastro.phones.join(' · '),1)}${fact('Email',c.mastro.emails.join(' · '),1)}${fact('PEC',c.mastro.pec,1)}${fact('Codice fiscale',c.mastro.taxCode,1)}</div>
   ${c.mastro.notes?`<p class="sub" style="margin-top:10px;white-space:pre-line">${esc(c.mastro.notes)}</p>`:''}
   ${Object.keys(c.mastro.extra||{}).length?`<details class="extra"><summary>Altri dati da Mastro (${Object.keys(c.mastro.extra).length})</summary><div class="facts">${Object.entries(c.mastro.extra).map(([k,v])=>fact(esc(k.replace(/_/g,' ').toLowerCase()),v,1)).join('')}</div></details>`:''}</div>`:''}
+ ${typeof dtrClientSection==='function'?dtrClientSection(c):''}
  ${typeof accClientSection==='function'?accClientSection(c):''}
  <div class="d-section"><h3>Licenze <span>${c.records.length}</span></h3>${c.records.map(r=>{const d=parseDate(r.expiry),n=dayDiff(d);return`<div class="lic"><div class="lic-top"><strong>${esc(famLabel(famOfScope(r.scope)))} <span class="mono muted">${esc(r.serial)}</span></strong>${badge(licenseStatus(r))}</div><div class="lic-meta"><div>Scadenza<b>${d?dShort(d):'—'}</b>${d?`<span style="color:var(--${n<0?'bad':n<=30?'due':'text-3'})">${rel(n)}</span>`:''}</div><div>Versione<b>${esc(r.version)||'—'}</b></div><div>Elenco<b>${isCurrent(r)?'Corrente':'Storico'}</b></div><div>Rilasciata<b>${esc((r.released||'—').slice(0,10))}</b></div><div>Aggiornata<b>${esc((r.updated||'—').slice(0,10))}</b></div><div>Blocco<b>${esc(r.blocked)||'—'}</b></div></div></div>`;}).join('')||'<p class="sub">Nessuna licenza negli elenchi letti.</p>'}</div>
  <div class="d-section"><h3>Ordini <span>${c.orders.length}</span></h3>${c.orders.slice(0,20).map(o=>`<div class="list-row" style="cursor:default"><div class="grow"><strong class="mono">${esc(o.number)} <span class="muted">· ${esc(o.serial||'')}</span></strong><small>${o.d?dShort(o.d):esc(o.date)} · ${esc(famLabel(o.family))}</small></div><span class="badge ${orderCls(o.status)}">${esc(o.status)}</span></div>`).join('')||'<p class="sub">Nessun ordine collegato.</p>'}</div>
@@ -582,7 +585,7 @@ function openClient(code,keep){const c=D.byCode.get(code);if(!c)return;if(!keep)
  if(keep)d.scrollTop=scroll;else d.querySelector('[data-close]').focus({preventScroll:true});
 }
 function closeDrawer(){const d=$('#drawer');if(d.hidden)return;d.classList.add('out');$('#drawer-backdrop').classList.add('out');setTimeout(()=>{d.hidden=true;d.classList.remove('out');$('#drawer-backdrop').hidden=true;$('#drawer-backdrop').classList.remove('out');},280);drawerCode=null;}
-function saveMeta(code,patch){const old=state.metadata[code]||{favorite:false,nextContact:'',followupState:''};const meta={favorite:!!old.favorite,nextContact:old.nextContact||'',followupState:old.followupState||'',...patch};state.metadata[code]=meta;derive();send('meta',{code,meta});render(false);openClient(code,true);}
+function saveMeta(code,patch){const old=state.metadata[code]||{favorite:false,nextContact:'',followupState:''};const meta={favorite:!!old.favorite,nextContact:old.nextContact||'',followupState:old.followupState||'',...patch};state.metadata[code]=meta;derive();if(typeof deriveDtr==='function')deriveDtr();send('meta',{code,meta});render(false);openClient(code,true);}
 
 // ───────────────────────── command palette
 const MAIN_TABS=['overview','clients','interventions','warehouse'];
@@ -618,7 +621,7 @@ function render(animate){
  if(!D)return;const main=$('#main');const scroll=main.scrollTop;const focus=document.activeElement?.id;const caret=document.activeElement?.selectionStart;
  if(page==='team'&&!(WEB&&me?.role==='admin'))page='overview';
  if(page==='warehouse'&&!isAdmin())page='overview';
- const html={overview,clients:clientsPage,licenses:licensesPage,expiry:expiryPage,orders:ordersPage,tasks:tasksPage,sync:syncPage,settings:settingsPage,team:teamPage,interventions:interventionsPage,machines:machinesPage,warehouse:typeof warehousePage==='function'?warehousePage:overview,accounting:typeof accountingPage==='function'?accountingPage:overview}[page]||overview;
+ const html={overview,clients:clientsPage,licenses:licensesPage,expiry:expiryPage,orders:ordersPage,tasks:tasksPage,sync:syncPage,settings:settingsPage,team:teamPage,interventions:interventionsPage,machines:machinesPage,dtr:typeof dtrPage==='function'?dtrPage:overview,warehouse:typeof warehousePage==='function'?warehousePage:overview,accounting:typeof accountingPage==='function'?accountingPage:overview}[page]||overview;
  document.body.classList.toggle('anim',!!animate&&!reduced);
  // live update on the same page: remember the numbers shown, to roll only the ones that change
  const before=!animate&&lastRendered===page?$$('#main [data-count]').map(el=>+el.dataset.count):null;
@@ -626,7 +629,7 @@ function render(animate){
  main.innerHTML=`<div class="page">${html()}</div>`;lastRendered=page;
  $('#crumb').textContent=PAGES[page];
  $$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.page===page));$('#nav-more')?.classList.toggle('active',!MAIN_TABS.includes(page));moveIndicator();
- $('#nav-clients').textContent=fmt(D.clients.length);$('#nav-licenses').textContent=fmt(D.current.length);$('#nav-orders').textContent=D.orders.length?fmt(D.orders.length):'';$('#nav-interventions').textContent=D.openInterventions.length||'';$('#nav-machines').textContent=D.machines.length?fmt(D.machines.length):'';if(typeof W!=='undefined'&&W)$('#nav-warehouse').textContent=W.below.length||'';if(typeof A!=='undefined'&&A)$('#nav-accounting').textContent=A.overdue.length?fmt(A.overdue.length):'';
+ $('#nav-clients').textContent=fmt(D.clients.length);$('#nav-licenses').textContent=fmt(D.current.length);$('#nav-orders').textContent=D.orders.length?fmt(D.orders.length):'';$('#nav-interventions').textContent=D.openInterventions.length||'';$('#nav-machines').textContent=D.machines.length?fmt(D.machines.length):'';if(typeof DT!=='undefined'&&DT&&$('#nav-dtr'))$('#nav-dtr').textContent=DT.status?.error?'!':DT.silent.length?fmt(DT.silent.length):'';if(typeof W!=='undefined'&&W)$('#nav-warehouse').textContent=W.below.length||'';if(typeof A!=='undefined'&&A)$('#nav-accounting').textContent=A.overdue.length?fmt(A.overdue.length):'';
  $('#nav-due').textContent=D.due30.length||'';const late=D.tasks.filter(c=>c.meta.followupState!=='Completato'&&c.meta.nextContact&&days(c.meta.nextContact)<=0).length;$('#nav-tasks').textContent=late||'';
  $('#alerts-dot').classList.toggle('on',D.due30.length>0);$('#nav-more-dot').textContent=($('#nav-due').textContent||$('#nav-tasks').textContent)?'•':'';
  $('#nav-sync-dot').className='sync-dot '+(state.syncRunning?'run':state.portalConnected?'on':'');
@@ -802,7 +805,7 @@ function receive(v){
  if(v.type==='mastro'){mastroState=v;if(v.stage==='preview'){mastroState=null;mastroPreview(v);}if(page==='settings')render(false);if(v.ok===false)toast(v.error,'alert');return;}
  if(v.type==='host'){hostInfo=v;if(v.syncStation)document.documentElement.dataset.station='1';else delete document.documentElement.dataset.station;if(page==='settings'||page==='team'||page==='sync')render(false);return;}
  if(v.type!=='state')return;
- state={...state,...v,clients:v.clients||[],orders:v.orders||[],mastroClients:v.mastroClients||[],machines:v.machines||[],interventions:v.interventions||[],warehouses:v.warehouses||[],articles:v.articles||[],stockLevels:v.stockLevels||[],stock:v.stock||[],movements:v.movements||[],invoices:v.invoices||[],dues:v.dues||[],balances:v.balances||[],dueNotes:v.dueNotes||{},metadata:v.metadata||{},notes:v.notes||{}};derive();
+ state={...state,...v,clients:v.clients||[],orders:v.orders||[],mastroClients:v.mastroClients||[],machines:v.machines||[],interventions:v.interventions||[],warehouses:v.warehouses||[],articles:v.articles||[],stockLevels:v.stockLevels||[],stock:v.stock||[],movements:v.movements||[],invoices:v.invoices||[],dues:v.dues||[],balances:v.balances||[],dueNotes:v.dueNotes||{},metadata:v.metadata||{},notes:v.notes||{}};derive();if(typeof deriveDtr==='function')deriveDtr();
  render(firstState);firstState=false;if(drawerCode)openClient(drawerCode,true);
  $('#splash').classList.add('gone');
 }

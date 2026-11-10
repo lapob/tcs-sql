@@ -1,0 +1,82 @@
+using Microsoft.Data.Sqlite;
+using System.Globalization;
+using System.Text.Json;
+
+namespace TopCash.Licenze;
+
+/// One telematic cash register (RT) as shown in DTR-Service → RT-Utility → Registratori telematici. Read-only copy.
+public sealed record DtrRegister(string Serial, string Tags, string Client, string Alias, string Firmware,
+    int GeNumber, string GeDue, int LastZ, string LastSync, string CapturedAt);
+
+/// Connection state of the DTR-Service session kept by the sync station (shown in Studio).
+public sealed record DtrStatus(bool Connected = false, string Message = "", string LastSync = "", int Count = 0,
+    int PortalTotal = 0, string CheckedAt = "", string Error = "", string ErrorAt = "");
+
+public sealed partial class Store
+{
+    /// Fixed column order sent by the DTR portal window (headers travel with the rows and are checked).
+    public static readonly string[] DtrHeaders = ["Matricola", "Tag", "Cliente", "Insegna", "Firmware", "GE", "Scadenza GE", "Numero Z", "Ultima comunicazione"];
+
+    void InitDtr(SqliteConnection c)
+    {
+        using var q = c.CreateCommand();
+        q.CommandText = "CREATE TABLE IF NOT EXISTS dtr_registers(serial TEXT PRIMARY KEY, data TEXT NOT NULL)";
+        q.ExecuteNonQuery();
+    }
+
+    public List<DtrRegister> DtrRegisters()
+    {
+        using var c = Open(); using var q = c.CreateCommand(); q.CommandText = "SELECT data FROM dtr_registers ORDER BY serial";
+        using var r = q.ExecuteReader(); var list = new List<DtrRegister>();
+        while (r.Read()) { var d = JsonSerializer.Deserialize<DtrRegister>(r.GetString(0)); if (d != null) list.Add(d); }
+        return list;
+    }
+
+    public DtrStatus DtrState() => Setting<DtrStatus>("dtr.status") ?? new DtrStatus();
+
+    /// Session heartbeat from the sync station: connected / signed out, with a short message.
+    public void DtrHeartbeat(bool connected, string message, int portalTotal = 0)
+    {
+        var s = DtrState(); var now = DateTimeOffset.Now.ToString("O");
+        var wasConnected = s.Connected;
+        s = s with { Connected = connected, Message = Trim(message, 300), CheckedAt = now, PortalTotal = portalTotal > 0 ? portalTotal : s.PortalTotal };
+        if (connected && s.Error.StartsWith("Accesso", StringComparison.Ordinal)) s = s with { Error = "", ErrorAt = "" };
+        if (!connected) s = s with { Error = "Accesso a DTR-Service richiesto: apri Studio sulla postazione di sincronizzazione e accedi di nuovo.", ErrorAt = now };
+        SetSetting("dtr.status", s);
+        if (wasConnected && !connected) Log("error", "DTR-Service: sessione scaduta, serve un nuovo accesso sulla postazione di sincronizzazione.");
+    }
+
+    /// Replaces the whole register list atomically. Only a complete read reaches this point (the portal window checks the total).
+    public string ApplyDtr(List<string> headers, List<List<string>> rows, string capturedAt, string source)
+    {
+        if (!headers.SequenceEqual(DtrHeaders)) throw new InvalidDataException("Colonne DTR inattese: aggiorna Top Cash Studio.");
+        if (rows.Count == 0) throw new InvalidDataException("Elenco DTR vuoto: dati precedenti conservati.");
+        var list = new Dictionary<string, DtrRegister>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in rows)
+        {
+            if (row.Count != DtrHeaders.Length) throw new InvalidDataException("Riga DTR incompleta.");
+            var serial = row[0].Trim();
+            if (serial.Length is < 6 or > 40) continue;
+            if (!list.ContainsKey(serial)) list[serial] = new DtrRegister(serial, Trim(row[1], 200), Trim(row[2], 200), Trim(row[3], 200), Trim(row[4], 30),
+                Int(row[5]), IsoDate(row[6]), Int(row[7]), IsoDateTime(row[8]), capturedAt);
+        }
+        if (list.Count == 0) throw new InvalidDataException("Nessuna matricola valida nell'elenco DTR.");
+        using var c = Open(); using var tx = c.BeginTransaction();
+        using (var del = c.CreateCommand()) { del.Transaction = tx; del.CommandText = "DELETE FROM dtr_registers"; del.ExecuteNonQuery(); }
+        using (var ins = c.CreateCommand())
+        {
+            ins.Transaction = tx; ins.CommandText = "INSERT INTO dtr_registers(serial,data) VALUES($s,$d)";
+            var ps = ins.Parameters.Add("$s", SqliteType.Text); var pd = ins.Parameters.Add("$d", SqliteType.Text);
+            foreach (var r in list.Values) { ps.Value = r.Serial; pd.Value = JsonSerializer.Serialize(r); ins.ExecuteNonQuery(); }
+        }
+        LogTx(c, tx, "portal", $"DTR-Service: {list.Count} registratori telematici aggiornati ({source}).");
+        tx.Commit();
+        SetSetting("dtr.status", DtrState() with { Connected = true, LastSync = capturedAt, Count = list.Count, Error = "", ErrorAt = "" });
+        return $"DTR-Service: {list.Count} registratori";
+    }
+
+    static string Trim(string? s, int max) { s = (s ?? "").Replace('\n', ' ').Trim(); while (s.Contains("  ")) s = s.Replace("  ", " "); return s.Length > max ? s[..max] : s; }
+    static int Int(string? s) => int.TryParse(new string((s ?? "").Where(char.IsDigit).ToArray()), out var n) ? n : 0;
+    static string IsoDate(string? s) => DateTime.TryParseExact((s ?? "").Trim(), "dd/MM/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d.ToString("yyyy-MM-dd") : "";
+    static string IsoDateTime(string? s) => DateTime.TryParseExact((s ?? "").Trim(), "dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d.ToString("yyyy-MM-ddTHH:mm") : "";
+}

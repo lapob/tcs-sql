@@ -26,6 +26,7 @@
     <Compile Include="..\src\Rapportino.cs" Link="Shared\Rapportino.cs" />
     <Compile Include="..\src\Contabilita.cs" Link="Shared\Contabilita.cs" />
     <Compile Include="..\src\Email.cs" Link="Shared\Email.cs" />
+    <Compile Include="..\src\Dtr.cs" Link="Shared\Dtr.cs" />
     <Compile Include="..\src\Backup.cs" Link="Shared\Backup.cs" />
     <Content Include="..\src\ui\**\*" LinkBase="ui" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

@@ -28,6 +28,7 @@ public sealed partial class Store
   InitRapportini(c);
   InitContabilita(c);
   InitSettings(c);
+  InitDtr(c);
  }
  public List<ClientRecord> Clients(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM clients";using var r=q.ExecuteReader();var list=new List<ClientRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<ClientRecord>(r.GetString(0))!);return list;}
  public List<OrderRecord> Orders(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM orders";using var r=q.ExecuteReader();var list=new List<OrderRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<OrderRecord>(r.GetString(0))!);return list;}
@@ -74,6 +75,10 @@ public sealed partial class Store
     return $"{scope}: {ImportClients(product,PortalMapper.Clients(product,headers,rows,capturedAt))} clienti";
    case "orders":
     return $"{scope}: {ReplaceOrders(product,PortalMapper.Orders(product,headers,rows,capturedAt))} ordini";
+   case "dtr":return ApplyDtr(headers,rows,capturedAt,source.Replace("Zucchetti","DTR-Service"));
+   case "dtrstatus": // session heartbeat: headers = [connected, message, portal total]
+    if(headers.Count<2)throw new InvalidDataException("Stato DTR incompleto.");
+    DtrHeartbeat(headers[0]=="1",headers[1],headers.Count>2&&int.TryParse(headers[2],out var tot)?tot:0);return "DTR-Service: stato aggiornato";
    default:throw new InvalidDataException("Tipo di elenco sconosciuto: "+kind);
   }
  }
@@ -226,6 +231,15 @@ public sealed partial class Store
   if(store.Invoices().Count!=2||store.Balances().Count!=1||store.Dues().Count!=1||store.DueNotes()["C15-1-2026-01-31-1"].Status!="Sollecitato")throw new Exception("Note o dati contabili persi al re-import");
   if(!AccountingReports.DuesCsv(store).Contains("Sollecitato")||AccountingReports.InvoicesCsv(store).Split('\n').Length<3)throw new Exception("Export contabilità");
   store.SaveDueNote("C15-1-2026-01-31-1","","","test");if(store.DueNotes().Count!=0)throw new Exception("Cancellazione nota scadenza");
-  store.Backup(Path.Combine(folder,"backup.sqlite"));Console.WriteLine("PASS: upsert, deduplicazione, validazione atomica, note, magazzino, rapportini, email, contabilità, backup esterni.");
+  // DTR-Service: whole-list replace, dates parsed, wrong columns rejected, session state tracked
+  var dh=Store.DtrHeaders.ToList();
+  store.ApplyPortalList("dtr","DTR","Registratori DTR-Service",dh,[["4CEDL000385","DPALM","PUZZOLI GINO","","10.70","3","05/11/2034","2255","07/11/2026 13:48"],["4CEDL000403","DPALM DCASH+","Stockeria di Ciatti","Stockeria S.n.c.","10.49","5","07/11/2026","1808","09/11/2026 12:11"],["4CEDL000403","x","dup","","","","","",""]],"2026-11-10T10:00:00+01:00","test");
+  var dl=store.DtrRegisters();if(dl.Count!=2||dl[0].GeDue!="2034-11-05"||dl[0].LastSync!="2026-11-07T13:48"||dl[1].Alias!="Stockeria S.n.c."||dl[1].LastZ!=1808)throw new Exception("DTR: elenco");
+  try{store.ApplyPortalList("dtr","DTR","x",["Matricola","Cliente"],[["4CEDL000999","a"]],"t","test");throw new Exception("DTR: colonne errate accettate");}catch(InvalidDataException){}
+  try{store.ApplyPortalList("dtr","DTR","x",dh,[],"t","test");throw new Exception("DTR: elenco vuoto accettato");}catch(InvalidDataException){}
+  if(store.DtrRegisters().Count!=2)throw new Exception("DTR: dati persi dopo un errore");
+  store.ApplyPortalList("dtrstatus","DTR","Stato",["0","Accesso richiesto"],[],"t","test");if(store.DtrState().Connected||store.DtrState().Error.Length==0)throw new Exception("DTR: sessione scaduta non segnalata");
+  store.ApplyPortalList("dtrstatus","DTR","Stato",["1","Collegato","782"],[],"t","test");if(!store.DtrState().Connected||store.DtrState().Error.Length>0||store.DtrState().PortalTotal!=782)throw new Exception("DTR: ripresa sessione");
+  store.Backup(Path.Combine(folder,"backup.sqlite"));Console.WriteLine("PASS: upsert, deduplicazione, validazione atomica, note, magazzino, rapportini, email, contabilità, backup esterni, DTR-Service.");
  }
 }

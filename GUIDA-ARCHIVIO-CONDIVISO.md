@@ -126,6 +126,18 @@ Un rapportino firmato **non è più modificabile**; solo ufficio e amministrator
 
 La password è salvata **cifrata** sul server (Windows DPAPI): non è più visibile, non viaggia verso i dispositivi e non si può leggere da una copia del database. Finché l'invio non è attivo, i pulsanti email non compaiono.
 
+## 7-bis. Registratori telematici DTR-Service
+
+Studio copia in **sola lettura** l'elenco dei registratori di DTR-Service (RT-Utility): matricola, cliente, giornale elettronico (GE) e scadenza, firmware, ultima chiusura Z e ultima comunicazione.
+
+1. Sulla **postazione di sincronizzazione** (o in archivio locale) apri **Registratori DTR → Collega DTR-Service**.
+2. Nella finestra che si apre accedi tu con email e password DTR (Studio non le vede e non le salva; se Edge propone di ricordare la password, puoi accettare: il prossimo accesso sarà un clic).
+3. La lettura parte da sola. Poi puoi **nascondere** la finestra: resta collegata.
+
+Da quel momento, a ogni avvio dell'app Windows la sessione riprende in background: viene controllata ogni **15 minuti** (così DTR la rinnova) e i dati si aggiornano ogni **2 ore**. Se DTR chiede di nuovo l'accesso, la finestra si apre da sola e in Panoramica compare un avviso per tutti. L'elenco viene sostituito solo se la lettura è completa: un errore non cancella mai i dati precedenti.
+
+Nella pagina: casse **silenziose** (nessuna comunicazione da oltre 7 giorni), **GE in scadenza** entro 60 giorni, **firmware** da aggiornare, filtro per tag. Le righe collegate a un cliente aprono la sua scheda, dove compare la sezione *Registratori DTR*.
+
 ## 8. App Android
 
 App **nativa** (Kotlin + Jetpack Compose, Material 3) — File: `D:\TopCashSQL\android\TopCash-Studio.apk`.

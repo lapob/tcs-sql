@@ -663,3 +663,17 @@ tbody tr[data-client]:active,tbody tr[data-int]:active,.card[data-go]:active{tra
 .print-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.print-head h3{margin:0}
 .print-view{flex:1;min-height:0;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:var(--bg-2);display:grid;place-items:center}
 .print-view iframe{width:100%;height:100%;border:0;background:#fff}
+/* ── DTR-Service: connection card and tag filters */
+.dtr-status{display:flex;align-items:center;gap:14px;padding:14px 18px;margin-bottom:16px;border-radius:18px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--hl),var(--shadow-sm)}
+.dtr-status strong{display:block;font-size:14px}.dtr-status small{display:block;color:var(--text-3);font-size:12.5px;margin-top:2px}
+.dtr-status .dot{width:10px;height:10px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px var(--ok-soft);flex:none}
+.dtr-status.ok .dot{animation:dtrpulse 2.4s var(--ease) 3}
+.dtr-status.bad{border-color:color-mix(in srgb,var(--bad) 35%,var(--line))}
+.dtr-status.bad .dot{background:var(--bad);box-shadow:0 0 0 4px var(--bad-soft)}
+.dtr-status .dot.off{background:var(--text-3);box-shadow:0 0 0 4px var(--muted-soft)}
+@keyframes dtrpulse{50%{box-shadow:0 0 0 9px transparent}}
+.dtr-tags{display:flex;flex-wrap:wrap;gap:6px}
+.dtr-tag{height:30px;padding:0 12px;border-radius:99px;border:1px solid var(--line);background:var(--surface);color:var(--text-2);font:600 12px var(--font);cursor:pointer;transition:background-color .2s,color .2s,border-color .2s}
+.dtr-tag:hover{border-color:var(--accent)}
+.dtr-tag.on{background:var(--accent);border-color:var(--accent);color:#fff}
+@media (max-width:760px){.dtr-status{flex-wrap:wrap}.dtr-status .btn-row{width:100%}}
