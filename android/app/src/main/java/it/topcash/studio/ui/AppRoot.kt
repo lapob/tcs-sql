@@ -14,7 +14,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.ui.unit.dp
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -148,12 +147,13 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
         SharedTransitionLayout(Modifier.fillMaxSize().hazeSourceCompat(haze)) {
             CompositionLocalProvider(LocalShared provides this, LocalAppHaze provides haze, LocalBottomBar provides if (topLevel) androidx.compose.ui.unit.Dp(80f) else androidx.compose.ui.unit.Dp(0f)) {
                 NavHost(nav, startDestination = "home",
-                    // Material 3 motion. Tabs: "fade through" (old fades out fast, new fades in with a hint of scale).
+                    // Material 3 motion. Tabs: "fade through" (old fades out fast, new fades in). The system "predictive back"
+                    // (page shrinking under the finger, app shrinking to home) is off in the manifest: back plays only this.
                     // Details: "shared axis X" — the new page slides in a short distance while fading, the old one drifts
                     // the other way and fades. Back is the exact mirror. Nothing shrinks, no rounded card, no bounce.
-                    enterTransition = { if (isTabSwitch()) fadeIn(tween(220, 60, EmphasizedDecelerate)) + scaleIn(tween(220, 60, EmphasizedDecelerate), 0.98f) else slideInHorizontally(tween(320, easing = EmphasizedDecelerate)) { (it * 0.10f).toInt() } + fadeIn(tween(200, 60)) },
+                    enterTransition = { if (isTabSwitch()) fadeIn(tween(220, 60, EmphasizedDecelerate)) else slideInHorizontally(tween(320, easing = EmphasizedDecelerate)) { (it * 0.10f).toInt() } + fadeIn(tween(200, 60)) },
                     exitTransition = { if (isTabSwitch()) fadeOut(tween(80)) else slideOutHorizontally(tween(320, easing = EmphasizedDecelerate)) { -(it * 0.10f).toInt() } + fadeOut(tween(110)) },
-                    popEnterTransition = { if (isTabSwitch()) fadeIn(tween(220, 60, EmphasizedDecelerate)) + scaleIn(tween(220, 60, EmphasizedDecelerate), 0.98f) else slideInHorizontally(tween(320, easing = EmphasizedDecelerate)) { -(it * 0.10f).toInt() } + fadeIn(tween(200, 60)) },
+                    popEnterTransition = { if (isTabSwitch()) fadeIn(tween(220, 60, EmphasizedDecelerate)) else slideInHorizontally(tween(320, easing = EmphasizedDecelerate)) { -(it * 0.10f).toInt() } + fadeIn(tween(200, 60)) },
                     popExitTransition = { if (isTabSwitch()) fadeOut(tween(80)) else slideOutHorizontally(tween(320, easing = EmphasizedDecelerate)) { (it * 0.10f).toInt() } + fadeOut(tween(110)) },
                 ) {
                     fun screen(r: String, body: @Composable (Archive) -> Unit) = composable(r) {

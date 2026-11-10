@@ -20,7 +20,7 @@
         android:dataExtractionRules="@xml/backup_rules"
         android:usesCleartextTraffic="true"
         android:networkSecurityConfig="@xml/network_security"
-        android:enableOnBackInvokedCallback="true"
+        android:enableOnBackInvokedCallback="false"
         android:theme="@style/Theme.TopCash.Splash">
         <!-- barcode model delivered by Google Play services at install time (keeps the APK small) -->
         <meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" android:value="barcode" />

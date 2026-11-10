@@ -959,9 +959,9 @@ function startWeb(){$('#auth').hidden=true;applyRole();etag='';loadState();openS
 async function logout(){try{await post('/api/logout');}catch{}try{await caches.delete('tcs-api');}catch{}me=null;location.reload();}
 async function bootWeb(){
  if('serviceWorker' in navigator&&isSecureContext)navigator.serviceWorker.register('sw.js').catch(()=>{});
- try{try{const h=await post('/api/device/hello',{name:deviceName(),platform:devicePlatform()});if(h.remote&&h.status!=='approved')return showDevice(h.status,h.code);}catch(x){if(/fetch|network/i.test(x.message))throw x;}
+ try{try{const h=await post('/api/device/hello',{name:deviceName(),platform:devicePlatform()});if(h.remote&&h.status!=='approved')return showDevice(h.status,h.code);}catch{} // server down or no network: go on with the saved copy, the offline bar says so
   const s=await api('/api/session');if(s.setupNeeded)return showAuth('setup');if(!s.user)return showAuth('login');me=s.user;startWeb();}
- catch{$('#splash').classList.add('gone');$('#main').innerHTML=`<div class="error-box"><img src="assets/tcs-app@2x.png" alt="Top Cash Service" class="tile"><h2>Server non raggiungibile</h2><p>Controlla la connessione alla rete dell’ufficio e riprova.</p><p style="margin-top:16px"><button class="btn accent" data-action-local="reload">Riprova</button></p></div>`;}
+ catch{$('#splash').classList.add('gone');$('#main').innerHTML=`<div class="error-box"><img src="assets/tcs-app@2x.png" alt="Top Cash Service" class="tile"><h2>Server non raggiungibile</h2><p>Il server dell’ufficio non risponde: può essere spento o senza connessione. Controlla anche la tua rete.</p><p class="muted" style="font-size:13px;margin-top:6px">Riprovo da solo ogni 20 secondi.</p><p style="margin-top:16px"><button class="btn accent" data-action-local="reload">Riprova ora</button></p></div>`;setTimeout(()=>location.reload(),20000);}
 }
 
 {const h=location.hash.slice(1);if(PAGES[h])page=h;} // PWA shortcuts (#clients, #expiry)
