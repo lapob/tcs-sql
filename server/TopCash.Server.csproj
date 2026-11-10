@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TopCash.Server</RootNamespace>
     <AssemblyName>TopCash.Server</AssemblyName>
-    <Version>2.7.2</Version>
+    <Version>2.7.3</Version>
     <Product>Top Cash Studio Server</Product>
     <Company>Top Cash Service S.r.l.</Company>
     <ApplicationIcon>..\src\topcash.ico</ApplicationIcon>
