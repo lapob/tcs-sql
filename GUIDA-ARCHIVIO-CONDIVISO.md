@@ -253,6 +253,12 @@ Le app scelgono da sole: in ufficio usano l'IP, fuori passano a `https://tcsql.i
    - attiva **HTTPS obbligatorio**, **TLS 1.2 minimo** e **TLS 1.3**;
    - installa il connettore come servizio Windows e registra l'indirizzo pubblico sul server, così **tutte le app lo imparano da sole** al prossimo accesso in ufficio.
 
+### Se il server è spento
+
+Quando il PC server è spento, in riavvio o senza Internet, `https://tcsql.it` mostra una **pagina dedicata** ("Il server dell'ufficio non risponde") che riprova da sola ogni 20 secondi; le app ricevono un errore chiaro e, se le hai già aperte, mostrano gli ultimi dati salvati.
+La pagina è il Worker Cloudflare `topcash-offline` (codice in `cloudflare\offline-worker.js`), sulla rotta `*tcsql.it/*` con **Fail open**: se il Worker avesse un problema, il traffico passa comunque al server. Non legge e non salva nessun dato (log disattivati).
+Per modificarla: Cloudflare → *Workers & Pages → topcash-offline → Edit code*, incolla il file aggiornato e premi *Deploy*.
+
 Altro dominio: `collega-esterno.ps1 -Dominio altro.it`. Se preferisci creare il tunnel a mano dal sito Cloudflare: `collega-esterno.ps1 -Manuale` e incolli il token del connettore.
 
 ### Autorizzare i dispositivi
