@@ -145,6 +145,62 @@ public sealed class DtrWindow : Window
   }
   throw new TimeoutException("DTR-Service non ha caricato la pagina "+page+" dell'elenco.");
  }
+ const int DetailBudget=150;
+ Dictionary<string,DateTime> ages=new(StringComparer.OrdinalIgnoreCase);
+ static string AgesFile=>Path.Combine(Profile,"details-read.json");
+ static Dictionary<string,DateTime> LoadAges(){try{return new(JsonSerializer.Deserialize<Dictionary<string,DateTime>>(File.ReadAllText(AgesFile))??[],StringComparer.OrdinalIgnoreCase);}catch{return new(StringComparer.OrdinalIgnoreCase);}}
+ void SaveAges(){try{File.WriteAllText(AgesFile,JsonSerializer.Serialize(ages));}catch{}}
+ /// Parses the open detail dialog; null while it is still loading. Reads the "Estensioni GE" tab too.
+ const string DetailScript="""
+ ((serial)=>{const d=document.querySelector('[role=dialog]');if(!d)return null;const L=d.innerText.split(String.fromCharCode(10)).map(s=>s.trim()).filter(Boolean);
+  if(!L.includes(serial)||!L.includes('Ultimi interventi')||!L.includes('Scadenza cert.'))return null;
+  const val=l=>{const i=L.indexOf(l);return i>=0?(L[i+1]||''):'';};const ci=L.indexOf('Scadenza cert.');
+  const cert=/^\d{2}\/\d{2}\/\d{4}$/.test(L[ci+1]||'')?L[ci+1]:'';const li=L.indexOf('LICENZE',ci);const blk=L.slice(ci+(cert?2:1),li>ci?li:ci+7).filter(x=>!/^Attenzione/i.test(x));const warn=L.filter(x=>/^Attenzione/i.test(x)).join(' ');
+  const vi=blk.findIndex(x=>/^(IT)?\d{11}$|^[A-Z0-9]{16}$/i.test(x));const vat=vi>=0?blk[vi]:'';const hi=vi>=0?vi-1:blk.length-1;const holder=hi>=0?blk[hi]:'';const address=blk.slice(0,Math.max(0,hi)).join(' ').replace(/^[,\s]+/,'').trim();
+  const ev=(a,b)=>{const i=L.indexOf(a),j=b?L.indexOf(b,i+1):-1;if(i<0)return[];const seg=L.slice(i+1,j>i?j:undefined);const out=[];
+   for(let k=0;k<seg.length;k++){if(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}(:\d{2})?$/.test(seg[k])){out.push({At:seg[k],Text:seg[k+1]||''});k++;}}return out;};
+  const lic=[...d.querySelectorAll('table tbody tr')].map(tr=>[...tr.cells].map(c=>c.innerText.trim())).filter(c=>c.length>=6&&c.some(Boolean)).map(c=>{const [f,t]=(c[1]||'').split(' - ');return{Client:c[0],From:f||'',To:t||'',Status:c[2],Name:c[3],Type:c[4],AutoRenew:c[5]};});
+  const ge=val('GE');
+  return JSON.stringify({Serial:serial,Holder:holder,Vat:vat,CertDue:cert,LastVp:val('Ultima VP'),GeInit:(ge.match(/iniz\.\s*(\d{2}\/\d{2}\/\d{4})/)||[])[1]||'',
+   Licenses:lic,Errors:ev('Ultimi errori','Ultimi interventi'),Works:ev('Ultimi interventi','Chiudi'),Extensions:'',Warning:warn,Address:address});})
+ """;
+ async Task<string?> ReadDetail(string serial,CancellationToken ct)
+ {
+  var arg=JsonSerializer.Serialize(serial);
+  var opened=await browser.ExecuteScriptAsync("(()=>{const r=[...document.querySelectorAll('tbody tr')].find(r=>(r.querySelector('h6')?.innerText||'').trim()==="+arg+");const i=r?.querySelector('.fa-info-circle');if(i){i.click();return true;}return false;})()");
+  if(opened!="true")return null;
+  string? json=null;
+  // the licence table appears under its tab
+  await Task.Delay(600,ct);
+  await browser.ExecuteScriptAsync("(()=>{const b=[...document.querySelectorAll('[role=dialog] button,[role=dialog] [role=tab]')].find(x=>x.innerText.trim()==='LICENZE');b?.click();})()");
+  // sections load one after another: accept the content once two reads 700 ms apart are identical
+  string? prev=null;
+  for(int i=0;i<30&&json==null;i++)
+  {
+   await Task.Delay(i==0?1200:700,ct);
+   var cur=JsonSerializer.Deserialize<string?>(await browser.ExecuteScriptAsync("("+DetailScript+")("+arg+")"));
+   if(cur!=null&&cur==prev)json=cur;prev=cur;
+  }
+  if(json==null){await CloseDetail(ct);throw new TimeoutException("scheda non caricata");}
+  // "Estensioni GE" tab: requests for electronic journal extensions (text as shown)
+  var ext="";
+  if(await browser.ExecuteScriptAsync("(()=>{const b=[...document.querySelectorAll('[role=dialog] button,[role=dialog] [role=tab]')].find(x=>x.innerText.trim()==='ESTENSIONI GE');if(b){b.click();return true;}return false;})()")=="true")
+  {
+   await Task.Delay(900,ct);
+   ext=JsonSerializer.Deserialize<string>(await browser.ExecuteScriptAsync("(()=>{const t=document.querySelector('[role=dialog]')?.innerText||'';const i=t.indexOf('ESTENSIONI GE'),j=t.indexOf('Ultimi errori');return i>=0&&j>i?t.slice(i+13,j).replace(/\\s+/g,' ').trim():'';})()"))??"";
+  }
+  await CloseDetail(ct);
+  var d=JsonSerializer.Deserialize<Dictionary<string,JsonElement>>(json)!;var m=d.ToDictionary(k=>k.Key,v=>(object)v.Value);m["Extensions"]=ext.StartsWith("Non sono state trovate",StringComparison.OrdinalIgnoreCase)?"":ext;
+  return JsonSerializer.Serialize(m);
+ }
+ async Task CloseDetail(CancellationToken ct)
+ {
+  for(int i=0;i<20;i++)
+  {
+   var open=await browser.ExecuteScriptAsync("(()=>{const d=document.querySelector('[role=dialog]');if(!d)return false;[...d.querySelectorAll('button')].find(b=>b.innerText.trim()==='Chiudi')?.click();return true;})()");
+   if(open=="false")return;await Task.Delay(250,ct);
+  }
+ }
  public async Task StartSync()
  {
   if(running)return;
@@ -155,12 +211,23 @@ public sealed class DtrWindow : Window
   {
    var done=new TaskCompletionSource<bool>();void Nav(object? s,CoreWebView2NavigationCompletedEventArgs e)=>done.TrySetResult(e.IsSuccess);
    browser.CoreWebView2.NavigationCompleted+=Nav;try{browser.CoreWebView2.Navigate(ListUrl);await done.Task.WaitAsync(TimeSpan.FromSeconds(40),ct);}finally{browser.CoreWebView2.NavigationCompleted-=Nav;}
+   var details=new List<List<string>>();ages=LoadAges();
    var all=new List<List<string>>();var seen=new HashSet<string>(StringComparer.OrdinalIgnoreCase);string last="";int total=0;
    for(int page=1;page<=1000;page++)
    {
     var p=await WaitPage(page,last,ct);last=JsonSerializer.Serialize(p.Rows);if(p.Total>0)total=p.Total;
     foreach(var r in p.Rows)if(r.Count==9&&r[0].Length>0&&seen.Add(r[0]))all.Add(r);
     SetStatus($"Lettura registratori: {all.Count}{(total>0?" di "+total:"")}…");
+    // detail pages, oldest first, within this run's budget (the list stays on the same page after "Chiudi")
+    foreach(var r in p.Rows)
+    {
+     if(details.Count>=DetailBudget)break;var serial=r[0];
+     if(ages.TryGetValue(serial,out var at)&&DateTime.Now-at<TimeSpan.FromHours(20))continue;
+     try{var d=await ReadDetail(serial,ct);if(d!=null){details.Add([serial,d]);ages[serial]=DateTime.Now;}}
+     catch(OperationCanceledException){throw;}
+     catch(Exception ex){await target.Log("error","DTR-Service, dettaglio "+serial+": "+ex.Message);await CloseDetail(ct);}
+     SetStatus($"Lettura registratori: {all.Count}{(total>0?" di "+total:"")} · schede di dettaglio {details.Count}…");
+    }
     if(!p.Next)break;
     var clicked=await browser.ExecuteScriptAsync("(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.querySelector('i.ki-bold-arrow-next'));if(b&&!b.disabled){b.click();return true;}return false;})()");
     if(clicked!="true")break;
@@ -170,6 +237,7 @@ public sealed class DtrWindow : Window
    if(total>0&&all.Count<total*0.97)throw new InvalidDataException($"Letti {all.Count} registratori su {total}: lettura incompleta, dati precedenti conservati.");
    var now=DateTimeOffset.Now.ToString("O");
    var msg=await target.Apply("dtr","DTR","Registratori DTR-Service",[..Store.DtrHeaders],all,now);
+   if(details.Count>0){msg+=" · "+await target.Apply("dtrdetail","DTR","Dettagli DTR-Service",["Matricola","Dettaglio"],details,now);SaveAges();}
    await Heartbeat(true,"Aggiornato",total);lastSync=DateTime.Now.ToString("O");
    SetStatus($"{msg} · prossimo aggiornamento tra 2 ore. Puoi nascondere questa finestra: resta collegata.");
   }

@@ -136,7 +136,9 @@ Studio copia in **sola lettura** l'elenco dei registratori di DTR-Service (RT-Ut
 
 Da quel momento, a ogni avvio dell'app Windows la sessione riprende in background: viene controllata ogni **15 minuti** (così DTR la rinnova) e i dati si aggiornano ogni **2 ore**. Se DTR chiede di nuovo l'accesso, la finestra si apre da sola e in Panoramica compare un avviso per tutti. L'elenco viene sostituito solo se la lettura è completa: un errore non cancella mai i dati precedenti.
 
-Nella pagina: casse **silenziose** (nessuna comunicazione da oltre 7 giorni), **GE in scadenza** entro 60 giorni, **firmware** da aggiornare, filtro per tag. Le righe collegate a un cliente aprono la sua scheda, dove compare la sezione *Registratori DTR*.
+Oltre all'elenco, Studio legge la **scheda di dettaglio** di ogni registratore (fino a 150 per giro, le più vecchie per prime: tutte si aggiornano più volte al giorno): intestatario e **partita IVA**, indirizzo di installazione, scadenza del **certificato**, ultima **verificazione periodica**, inizio del giornale elettronico, **chiusure rimanenti**, licenze RT-Utility, estensioni GE, ultimi **errori** e **interventi**, avvisi del portale.
+
+Ogni cassa è collegata al cliente di Studio per **matricola** (macchina importata da Mastro), poi per **partita IVA**, infine per nome. Nella pagina: GE da rinnovare, casse con errori, casse **silenziose** (nessuna comunicazione da oltre 7 giorni), certificati e licenze RT-Utility in scadenza, firmware da aggiornare, casse non presenti in Mastro e macchine di Mastro che DTR non conosce. Clic su una riga: scheda completa del registratore, con *Apri cliente* e *Nuovo intervento*. I dati DTR compaiono anche in **Macchine** e nella scheda cliente.
 
 ## 8. App Android
 

@@ -76,6 +76,7 @@ public sealed partial class Store
    case "orders":
     return $"{scope}: {ReplaceOrders(product,PortalMapper.Orders(product,headers,rows,capturedAt))} ordini";
    case "dtr":return ApplyDtr(headers,rows,capturedAt,source.Replace("Zucchetti","DTR-Service"));
+   case "dtrdetail":return ApplyDtrDetails(headers,rows,capturedAt);
    case "dtrstatus": // session heartbeat: headers = [connected, message, portal total]
     if(headers.Count<2)throw new InvalidDataException("Stato DTR incompleto.");
     DtrHeartbeat(headers[0]=="1",headers[1],headers.Count>2&&int.TryParse(headers[2],out var tot)?tot:0);return "DTR-Service: stato aggiornato";
@@ -238,6 +239,11 @@ public sealed partial class Store
   try{store.ApplyPortalList("dtr","DTR","x",["Matricola","Cliente"],[["4CEDL000999","a"]],"t","test");throw new Exception("DTR: colonne errate accettate");}catch(InvalidDataException){}
   try{store.ApplyPortalList("dtr","DTR","x",dh,[],"t","test");throw new Exception("DTR: elenco vuoto accettato");}catch(InvalidDataException){}
   if(store.DtrRegisters().Count!=2)throw new Exception("DTR: dati persi dopo un errore");
+  var det=System.Text.Json.JsonSerializer.Serialize(new{Serial="4CEDL000385",Holder="PUZZOLI GINO",Vat="04989200482",CertDue="17/07/2028",LastVp="2026-07-25T09:00:13.163Z",GeInit="25/06/2026",Licenses=new[]{new{Client="PUZZOLI GINO",From="24/07/2026",To="19/07/2027",Status="Valida",Name="RT-Utility",Type="A pagamento",AutoRenew=""}},Errors=new[]{new{At="09/11/2026 18:30:50",Text="31 - CHIUSURE RIMANENTI:157"}},Works=Array.Empty<object>(),Extensions="",Warning="Attenzione!",Address="VIA ROMA 1 FIRENZE"});
+  store.ApplyPortalList("dtrdetail","DTR","Dettagli",["Matricola","Dettaglio"],[["4CEDL000385",det],["ALTRA",det]],"2026-11-10T10:00:00+01:00","test");
+  store.ApplyPortalList("dtr","DTR","Registratori DTR-Service",dh,[["4CEDL000385","DPALM","PUZZOLI GINO","","10.70","3","05/11/2034","2256","10/11/2026 13:48"]],"2026-11-10T12:00:00+01:00","test");
+  var dd=store.DtrRegisters().Single().Detail;
+  if(dd==null||dd.Vat!="04989200482"||dd.CertDue!="2028-07-17"||dd.LastVp!="2026-07-25"||dd.GeInit!="2026-06-25"||dd.Licenses![0].To!="2027-07-19"||dd.Errors![0].At!="2026-11-09T18:30"||dd.Address!="VIA ROMA 1 FIRENZE")throw new Exception("DTR: dettaglio");
   store.ApplyPortalList("dtrstatus","DTR","Stato",["0","Accesso richiesto"],[],"t","test");if(store.DtrState().Connected||store.DtrState().Error.Length==0)throw new Exception("DTR: sessione scaduta non segnalata");
   store.ApplyPortalList("dtrstatus","DTR","Stato",["1","Collegato","782"],[],"t","test");if(!store.DtrState().Connected||store.DtrState().Error.Length>0||store.DtrState().PortalTotal!=782)throw new Exception("DTR: ripresa sessione");
   store.Backup(Path.Combine(folder,"backup.sqlite"));Console.WriteLine("PASS: upsert, deduplicazione, validazione atomica, note, magazzino, rapportini, email, contabilità, backup esterni, DTR-Service.");
