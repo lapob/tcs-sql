@@ -26,19 +26,13 @@ builder.Host.UseWindowsService(o=>o.ServiceName="TopCashStudio");
 // Two doors: the office network (LAN, default 8470) and the private tunnel (Cloudflare → 127.0.0.1 only, default LAN+2).
 // Everything that arrives on the tunnel door is "outside the office" and needs an approved device.
 var lanUrl=new Uri((args.FirstOrDefault(a=>a.StartsWith("--urls="))?[7..]??Environment.GetEnvironmentVariable("ASPNETCORE_URLS")??"http://0.0.0.0:8470").Split(';')[0].Replace("://*","://0.0.0.0").Replace("://+","://0.0.0.0"));
-// short office address: an internal DNS name (router record, e.g. tcssql.it → this PC) served on port 80 too, so people type just the name
-var lanName=(args.FirstOrDefault(a=>a.StartsWith("--nome="))?[7..]??"").Trim().ToLowerInvariant();
-var shortPort=int.TryParse(args.FirstOrDefault(a=>a.StartsWith("--porta-breve="))?[14..],out var sp)?sp:0;
 // the short port is a convenience: if something else already owns it (IIS, another web server) skip it instead of failing the whole server
-if(shortPort>0&&!PortFree(shortPort)){Console.Error.WriteLine($"Porta {shortPort} occupata da un altro programma: indirizzo breve disattivato, il server resta sulla {lanUrl.Port}.");shortPort=0;}
-static bool PortFree(int port){try{var l=new System.Net.Sockets.TcpListener(System.Net.IPAddress.IPv6Any,port);l.Server.DualMode=true;l.Start();l.Stop();return true;}catch(System.Net.Sockets.SocketException){return false;}}
 var tunnelPort=int.TryParse(args.FirstOrDefault(a=>a.StartsWith("--tunnel-port="))?[14..],out var tp)?tp:lanUrl.Port+2;
 builder.WebHost.UseSetting("urls","");
 builder.WebHost.ConfigureKestrel(k=>
 {
  if(lanUrl.Host is "0.0.0.0")k.ListenAnyIP(lanUrl.Port);else k.Listen(System.Net.IPAddress.Parse(lanUrl.Host is "localhost"?"127.0.0.1":lanUrl.Host),lanUrl.Port);
  k.ListenLocalhost(tunnelPort);
- if(shortPort>0&&shortPort!=lanUrl.Port&&shortPort!=tunnelPort)k.ListenAnyIP(shortPort); // LAN door as well (only the tunnel port counts as "outside")
 });
 builder.Services.AddSingleton(store).AddSingleton(users).AddSingleton(hub).AddSingleton(devices);
 // the tunnel (cloudflared on this PC) forwards the real client IP and https: trusted only from loopback
@@ -398,8 +392,7 @@ app.MapGet("/api/lan",()=>{
   .SelectMany(n=>n.GetIPProperties().UnicastAddresses).Where(a=>a.Address.AddressFamily==System.Net.Sockets.AddressFamily.InterNetwork&&!System.Net.IPAddress.IsLoopback(a.Address)&&!a.Address.ToString().StartsWith("169.254."))
   .Select(a=>a.Address.ToString()).Distinct().ToList();
  var urls=ips.Select(i=>$"http://{i}:{port}").Append($"http://{host}:{port}").ToList();
- if(lanName.Length>0)urls.Insert(0,shortPort==80?$"http://{lanName}":$"http://{lanName}:{port}");
- return Results.Ok(new{host,port,name=lanName,urls});
+ return Results.Ok(new{host,port,urls});
 }).RequireAuthorization();
 app.MapGet("/api/health",()=>Results.Ok(new{ok=true,version=hub.Version,server=typeof(Hub).Assembly.GetName().Version?.ToString(3)}));
 
