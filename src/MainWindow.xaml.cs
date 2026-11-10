@@ -1,4 +1,4 @@
-using Microsoft.Web.WebView2.Core;
+﻿using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 using System.Diagnostics;
 using System.Security.Cryptography;
@@ -220,7 +220,8 @@ public partial class MainWindow : Window
       if(!raw.Contains("://"))raw="https://"+raw;
       if(!Uri.TryCreate(raw,UriKind.Absolute,out var eu)||eu.Scheme!="https"||!eu.Host.Contains('.')){await Notify("Indirizzo esterno non valido: usa il nome del dominio, es. topcash.tuodominio.it");break;}
       serverExternal=eu.GetLeftPart(UriPartial.Authority)+"/";SaveSettings();
-      Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,serverExternal,activeServer=Active,portalOpen=portal!=null});await Notify("Indirizzo esterno salvato: fuori ufficio verrà usato in automatico.");break;
+      Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,serverExternal,activeServer=Active,portalOpen=portal!=null});// auto: the address came from the office server itself, no message needed
+      if(!(root.TryGetProperty("auto",out var au)&&au.ValueKind==JsonValueKind.True))await Notify("Indirizzo esterno salvato: fuori ufficio verrà usato in automatico.");break;
      }
     case "connectServer":
      var url=NormalizeServer(root.GetProperty("url").GetString()??"");if(url==null){await Notify("Indirizzo del server non valido.");break;}

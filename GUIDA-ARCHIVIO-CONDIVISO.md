@@ -223,16 +223,37 @@ Top Cash funziona anche fuori ufficio **senza installare altre app** su telefoni
 La connessione passa da un **tunnel Cloudflare** cifrato (`https://`): sul router **non si apre nessuna porta** e il PC server non è visibile su Internet.
 Da fuori entrano **solo i dispositivi che hai autorizzato** e, in più, serve sempre nome utente e password. In ufficio non cambia nulla.
 
-### Una volta sola (circa 20 minuti)
+### Due indirizzi
 
-1. **Dominio**: crea un account gratuito su [dash.cloudflare.com](https://dash.cloudflare.com) e registra un dominio (es. `topcash-app.it`, circa 10 €/anno, menu *Domain Registration*). Se ne hai già uno, aggiungilo a Cloudflare.
-2. **Tunnel**: in Cloudflare apri *Zero Trust → Networks → Tunnels → Create a tunnel* → tipo **Cloudflared** → nome `topcash` → scegli *Windows* e **copia il comando** mostrato (contiene il token: non condividerlo).
-3. **Indirizzo pubblico**: sempre nel tunnel, *Public Hostname → Add*: sottodominio `app`, il tuo dominio, *Service* **HTTP** e URL **`localhost:8472`**. Salva.
-4. Sul **PC server**, come amministratore: prima `aggiorna-server.ps1`, poi
+| Dove | Indirizzo | Come |
+|---|---|---|
+| In ufficio | `http://192.168.1.220:8470` (IP del server + porta) | rete locale, il più veloce |
+| Fuori ufficio | `https://tcsql.it` | tunnel Cloudflare cifrato, solo dispositivi autorizzati |
+
+Le app scelgono da sole: in ufficio usano l'IP, fuori passano a `https://tcsql.it`.
+
+### Una volta sola (circa 10 minuti)
+
+1. **Dominio su Cloudflare**: acquista `tcsql.it` (anche direttamente su [dash.cloudflare.com](https://dash.cloudflare.com) → *Domain Registration*). Se lo compri da un altro registrar, aggiungilo a Cloudflare (*Add a domain*, piano Free) e dal registrar imposta i **due nameserver** che Cloudflare ti indica.
+2. **API token** (serve solo per la configurazione automatica): Cloudflare → icona profilo → *My Profile → API Tokens → Create Token → Custom token*, con i permessi
+   - *Account* → **Cloudflare Tunnel** → **Edit**
+   - *Zone* → **DNS** → **Edit**
+   - *Zone* → **Zone Settings** → **Edit**
+   - *Zone* → **Zone** → **Read**
+
+   e in *Zone Resources* scegli *Include → Specific zone → tcsql.it*. Copia il token (lo vedi una volta sola). Finita la configurazione puoi eliminarlo.
+3. Sul **PC server**, PowerShell *Esegui come amministratore*: prima `aggiorna-server.ps1`, poi
    ```
    powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\collega-esterno.ps1
    ```
-   incolla il comando/token copiato e scrivi l'indirizzo (es. `app.topcash-app.it`). Lo script scarica `cloudflared` (verificato) in `D:\TopCashSQL\.tools\cloudflared` e lo avvia come servizio.
+   incolla l'API token quando lo chiede (non viene salvato). Lo script, da solo:
+   - scarica `cloudflared` dal sito ufficiale e ne verifica la firma (`D:\TopCashSQL\.tools\cloudflared`);
+   - crea (o riusa) il tunnel `topcash` e instrada `tcsql.it` e `www.tcsql.it` verso il server (porta del tunnel `8472`, raggiungibile solo da questo PC);
+   - crea i record DNS (se ce ne sono già, ad esempio la pagina di parcheggio del registrar, chiede prima di sostituirli);
+   - attiva **HTTPS obbligatorio**, **TLS 1.2 minimo** e **TLS 1.3**;
+   - installa il connettore come servizio Windows e registra l'indirizzo pubblico sul server, così **tutte le app lo imparano da sole** al prossimo accesso in ufficio.
+
+Altro dominio: `collega-esterno.ps1 -Dominio altro.it`. Se preferisci creare il tunnel a mano dal sito Cloudflare: `collega-esterno.ps1 -Manuale` e incolli il token del connettore.
 
 ### Autorizzare i dispositivi
 
@@ -243,9 +264,8 @@ Da fuori entrano **solo i dispositivi che hai autorizzato** e, in più, serve se
 
 ### Sui dispositivi
 
-- **Android**: *Altro → Account e impostazioni → Cambia server* e compila **Indirizzo esterno** (es. `app.topcash-app.it`). In ufficio l'app usa il Wi-Fi, fuori passa da sola all'indirizzo esterno.
-- **App Windows** (portatili): *Impostazioni → Questo PC → Indirizzo esterno*, stesso comportamento automatico.
-- **Browser / iPhone**: apri `https://app.topcash-app.it` e, se vuoi, *Aggiungi a schermata Home*.
+- **Android e app Windows**: non serve fare nulla. Al primo accesso in ufficio dopo la configurazione imparano `https://tcsql.it` dal server; fuori ufficio passano da sole all'indirizzo pubblico. (Resta possibile scriverlo a mano: Android *Altro → Account e impostazioni → Cambia server → Indirizzo esterno*, Windows *Impostazioni → Questo PC → Indirizzo esterno*.)
+- **Browser / iPhone**: apri `https://tcsql.it` e, se vuoi, *Aggiungi a schermata Home*. In *Impostazioni → Accesso dalla rete* trovi sia l'indirizzo dell'ufficio sia quello pubblico.
 
 Per spegnere l'accesso da fuori: `collega-esterno.ps1 -Rimuovi`. Non esporre mai la porta 8470 direttamente su Internet.
 

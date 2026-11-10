@@ -86,7 +86,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class DtrEvent(val at: String = "", val text: String = "")
 @Serializable data class DtrStatus(val connected: Boolean = false, val lastSync: String = "", val checkedAt: String = "", val error: String = "")
 @Serializable data class Me(val username: String = "", val name: String = "", val role: String = "", val roleLabel: String = "")
-@Serializable data class Session(val setupNeeded: Boolean = false, val user: Me? = null, val version: Long = 0)
+@Serializable data class Session(val setupNeeded: Boolean = false, val user: Me? = null, val version: Long = 0, val publicUrl: String = "")
 @Serializable data class ServerError(val error: String = "", val device: String = "", val code: String = "")
 @Serializable data class DeviceHello(val name: String, val platform: String)
 @Serializable data class DeviceStatus(val status: String = "", val code: String = "", val remote: Boolean = false, val name: String = "")

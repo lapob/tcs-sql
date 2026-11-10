@@ -72,6 +72,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val s = api.session()
             if (s.user == null) { _screen.value = Screen.Login; return@launch }
             _me.value = s.user; prefs.edit().putString("me", json.encodeToString(Me.serializer(), s.user)).apply()
+            learnPublic(s.publicUrl)
             _screen.value = Screen.Main; refresh(); connect()
         } catch (e: ApiException) {
             if (e.device.isNotEmpty()) { _device.value = DeviceStatus(e.device, e.code, true); _screen.value = Screen.Device; return@launch }
@@ -150,6 +151,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         foreground = value
         if (value) { if (_screen.value == Screen.Main) { refresh(); connect() }; startHeartbeat() }
         else { stream?.cancel(); stream = null; reconnect?.cancel(); heartbeat?.cancel() }
+    }
+
+    /** The office server hands out its public address (Cloudflare tunnel): stored once, so outside the office the app switches by itself. */
+    private fun learnPublic(url: String) {
+        if (serverExternal.isNotBlank() || url.isBlank()) return
+        val ext = Api.normalizeExternal(url) ?: return
+        prefs.edit().putString("server_ext", ext).apply()
+        api.bases = listOf(server, ext)
     }
 
     fun setServer(input: String, external: String = ""): String? {

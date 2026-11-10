@@ -590,14 +590,18 @@ document.addEventListener('click',async e=>{
  if(bn){bn.disabled=true;bn.classList.add('busy');try{backupInfo=await post('/api/backup/now');toast(backupInfo.status.error?'Backup creato sul server, copia esterna non riuscita':'Backup creato e copiato',backupInfo.status.error?'alert':'shield');render(false);}catch(x){toast(x.message,'alert');bn.disabled=false;bn.classList.remove('busy');}}
 });
 // "Accesso dalla rete": the addresses the other PCs, tablets and phones of the office type in the browser (login required)
-let LAN=null;
+let LAN=null,PUBLIC='';
+// the server tells logged-in apps its public address (Cloudflare tunnel): the Windows app stores it once, so outside the office it switches by itself
+function learnPublic(){if(!WEB)return;api('/api/session').then(s=>{PUBLIC=s.publicUrl||'';offerPublic();}).catch(()=>{});}
+function offerPublic(){if(host&&PUBLIC&&hostInfo&&!hostInfo.serverExternal&&!offerPublic.done){offerPublic.done=1;host.postMessage({action:'setExternal',url:PUBLIC,auto:true});}}
 function lanCard(i){
  if(!WEB)return'';
  if(LAN===null){LAN=false;fetch('api/lan',{headers:{'X-Requested-With':'topcash'},credentials:'same-origin'}).then(r=>r.ok?r.json():null).then(j=>{LAN=j||false;if(page==='settings')render(false);}).catch(()=>{});}
- const urls=(LAN&&LAN.urls)||[location.origin];
+ const urls=(LAN&&LAN.urls)||[location.origin];const pub=LAN&&LAN.publicUrl;
  return`<div class="card reveal" style="--i:${i}"><h2>Accesso dalla rete</h2><p class="sub">Dagli altri PC, tablet e telefoni dell’ufficio apri uno di questi indirizzi nel browser e accedi con il tuo utente. Sul telefono puoi poi scegliere «Aggiungi a schermata Home».</p>
   <div class="lan-list">${urls.map((u,k)=>`<div class="lan-row"><code>${esc(u)}</code>${k===0?'<span class="badge ok">consigliato</span>':''}<button class="btn sm ghost" data-copy="${esc(u)}">${icon('copy')}Copia</button></div>`).join('')}</div>
-  <p class="muted" style="font-size:12px;margin-top:8px">Perché l’indirizzo non cambi, nel router riserva l’IP a questo PC (prenotazione DHCP). Fuori ufficio usa l’indirizzo esterno o la VPN.</p></div>`;
+  ${pub?`<p class="sub" style="margin-top:14px">Da fuori ufficio (connessione cifrata, solo dispositivi autorizzati):</p><div class="lan-list"><div class="lan-row"><code>${esc(pub)}</code><span class="badge acc">pubblico</span><button class="btn sm ghost" data-copy="${esc(pub)}">${icon('copy')}Copia</button></div></div>`:''}
+  <p class="muted" style="font-size:12px;margin-top:8px">Perché l’indirizzo non cambi, nel router riserva l’IP a questo PC (prenotazione DHCP).${pub?'':' Fuori ufficio usa l’indirizzo esterno o la VPN.'}</p></div>`;
 }
 function serverCard(i){
  if(!WEB&&host)return`<div class="card reveal" style="--i:${i}"><h2>Archivio condiviso</h2><p class="sub">Collega questo PC al server Top Cash per lavorare tutti sugli stessi dati, da PC, tablet e telefono. L’archivio locale resta sul PC e puoi tornarci quando vuoi.</p>
@@ -882,7 +886,7 @@ function receive(v){
  if(v.type==='clientSaved'){if(typeof pendingOpen!=='undefined'&&!D.byCode.has(v.code))pendingOpen=v.code;return;}
  if(v.type==='progress')return progress(v);
  if(v.type==='mastro'){mastroState=v;if(v.stage==='preview'){mastroState=null;mastroPreview(v);}if(page==='settings')render(false);if(v.ok===false)toast(v.error,'alert');return;}
- if(v.type==='host'){hostInfo={...hostInfo,...v};if(v.syncStation)document.documentElement.dataset.station='1';else delete document.documentElement.dataset.station;if(page==='settings'||page==='team'||page==='sync')render(false);return;}
+ if(v.type==='host'){hostInfo={...hostInfo,...v};offerPublic();if(v.syncStation)document.documentElement.dataset.station='1';else delete document.documentElement.dataset.station;if(page==='settings'||page==='team'||page==='sync')render(false);return;}
  if(v.type!=='state')return;
  state={...state,...v,clients:v.clients||[],orders:v.orders||[],mastroClients:v.mastroClients||[],machines:v.machines||[],interventions:v.interventions||[],warehouses:v.warehouses||[],articles:v.articles||[],stockLevels:v.stockLevels||[],stock:v.stock||[],movements:v.movements||[],invoices:v.invoices||[],dues:v.dues||[],balances:v.balances||[],dueNotes:v.dueNotes||{},metadata:v.metadata||{},notes:v.notes||{}};derive();if(typeof applyEdits==='function')applyEdits();if(typeof deriveDtr==='function')deriveDtr();if(typeof deriveItal==='function')deriveItal();if(typeof deriveWork==='function')deriveWork();
  render(firstState);firstState=false;if(typeof pendingOpen!=='undefined'&&pendingOpen&&D.byCode.has(pendingOpen)){const pc=pendingOpen;pendingOpen='';openClient(pc);}else if(drawerCode){if(D.byCode.has(drawerCode)&&!D.deleted?.some(x=>x.code===drawerCode))openClient(drawerCode,true);else closeDrawer();}
@@ -951,7 +955,7 @@ function showDevice(status,code){
  $('#dev-retry').addEventListener('click',()=>{clearTimeout(devTimer);check();});
  if(!blocked)devTimer=setTimeout(check,8000);
 }
-function startWeb(){$('#auth').hidden=true;applyRole();etag='';loadState();openStream();if(host)host.postMessage({action:'hostInfo'});}
+function startWeb(){$('#auth').hidden=true;applyRole();etag='';loadState();openStream();if(host)host.postMessage({action:'hostInfo'});learnPublic();}
 async function logout(){try{await post('/api/logout');}catch{}try{await caches.delete('tcs-api');}catch{}me=null;location.reload();}
 async function bootWeb(){
  if('serviceWorker' in navigator&&isSecureContext)navigator.serviceWorker.register('sw.js').catch(()=>{});

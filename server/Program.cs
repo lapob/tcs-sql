@@ -27,6 +27,10 @@ builder.Host.UseWindowsService(o=>o.ServiceName="TopCashStudio");
 // Everything that arrives on the tunnel door is "outside the office" and needs an approved device.
 var lanUrl=new Uri((args.FirstOrDefault(a=>a.StartsWith("--urls="))?[7..]??Environment.GetEnvironmentVariable("ASPNETCORE_URLS")??"http://0.0.0.0:8470").Split(';')[0].Replace("://*","://0.0.0.0").Replace("://+","://0.0.0.0"));
 // the short port is a convenience: if something else already owns it (IIS, another web server) skip it instead of failing the whole server
+// public address (Cloudflare tunnel, e.g. https://tcsql.it): written by collega-esterno.ps1 in the data folder and handed to the apps,
+// so every PC and phone learns it while in the office and switches to it by itself outside
+string PublicUrl(){try{var f=Path.Combine(dataDir,"indirizzo-pubblico.txt");if(!File.Exists(f))return "";var h=File.ReadAllText(f).Trim().ToLowerInvariant();h=System.Text.RegularExpressions.Regex.Replace(h,"^https?://","").TrimEnd('/');
+ return System.Text.RegularExpressions.Regex.IsMatch(h,@"^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")?"https://"+h:"";}catch{return "";}}
 var tunnelPort=int.TryParse(args.FirstOrDefault(a=>a.StartsWith("--tunnel-port="))?[14..],out var tp)?tp:lanUrl.Port+2;
 builder.WebHost.UseSetting("urls","");
 builder.WebHost.ConfigureKestrel(k=>
@@ -130,7 +134,7 @@ IResult Bad(string m)=>Results.BadRequest(new{error=m});
 app.MapGet("/api/session",(HttpContext ctx)=>
 {
  var name=ctx.User.Identity?.IsAuthenticated==true?ctx.User.Identity.Name:null;var u=name==null?null:users.Get(name);
- return Results.Ok(new{setupNeeded=!users.Any(),user=u==null?null:Me(u.Value.User),version=hub.Version});
+ return Results.Ok(new{setupNeeded=!users.Any(),user=u==null?null:Me(u.Value.User),version=hub.Version,publicUrl=u==null?"":PublicUrl()});
 });
 app.MapPost("/api/setup",async(HttpContext ctx,SetupRequest r)=>
 {
@@ -392,7 +396,7 @@ app.MapGet("/api/lan",()=>{
   .SelectMany(n=>n.GetIPProperties().UnicastAddresses).Where(a=>a.Address.AddressFamily==System.Net.Sockets.AddressFamily.InterNetwork&&!System.Net.IPAddress.IsLoopback(a.Address)&&!a.Address.ToString().StartsWith("169.254."))
   .Select(a=>a.Address.ToString()).Distinct().ToList();
  var urls=ips.Select(i=>$"http://{i}:{port}").Append($"http://{host}:{port}").ToList();
- return Results.Ok(new{host,port,urls});
+ return Results.Ok(new{host,port,urls,publicUrl=PublicUrl()});
 }).RequireAuthorization();
 app.MapGet("/api/health",()=>Results.Ok(new{ok=true,version=hub.Version,server=typeof(Hub).Assembly.GetName().Version?.ToString(3)}));
 
