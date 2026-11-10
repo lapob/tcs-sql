@@ -25,6 +25,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val api = Api(app)
     private val cacheFile = File(app.filesDir, "archive.json")
     private val etagFile = File(app.filesDir, "archive.etag")
+    /** Fingerprints of the saved sections ("name=hash,…"): sent to the server to download only what changed. */
+    private val hashFile = File(app.filesDir, "archive.hashes")
 
     private val _screen = MutableStateFlow(Screen.Loading); val screen = _screen.asStateFlow()
     /** Pending launcher shortcut ("new", "load", "search"), consumed by the UI once the archive is ready. */
@@ -50,6 +52,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private var etag: String? = null
+    /** The saved archive as JSON sections, read from disk when a partial update needs it. */
+    private suspend fun rawArchive(): kotlinx.serialization.json.JsonObject? = withContext(Dispatchers.Default) {
+        runCatching { json.parseToJsonElement(cacheFile.readText()) as kotlinx.serialization.json.JsonObject }.getOrNull()
+    }
     private var stream: EventSource? = null
     private var reconnect: Job? = null
     private var refreshJob: Job? = null
@@ -103,12 +109,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val t0 = System.currentTimeMillis()
             if (userInitiated) _refreshing.value = true
             try {
-                val r = api.state(if (_archive.value == null) null else etag)
+                val have = if (_archive.value == null) null else withContext(Dispatchers.IO) { hashFile.takeIf { it.exists() }?.readText()?.ifBlank { null } }
+                val r = try { api.state(if (_archive.value == null) null else etag, have) }
+                        catch (e: ApiException) { if (e.status == 404 && have != null) api.state(null) else throw e } // older server: full archive
                 if (r != null) {
-                    val (body, tag) = r
-                    val parsed = withContext(Dispatchers.Default) { Archive(json.decodeFromString<ArchiveState>(body)) }
+                    var (body, tag) = r; var hashes = ""
+                    val parsed = withContext(Dispatchers.Default) {
+                        val o = json.parseToJsonElement(body) as kotlinx.serialization.json.JsonObject
+                        // partial answer: only the sections that changed, merged into the saved copy
+                        var o2 = o
+                        if (o["partial"] != null) {
+                            val saved = rawArchive()
+                            if (saved != null) body = kotlinx.serialization.json.JsonObject(saved + o.filterKeys { it != "partial" }).toString()
+                            else { val full = api.state(null)!!; body = full.first; tag = full.second; o2 = json.parseToJsonElement(body) as kotlinx.serialization.json.JsonObject } // saved copy unreadable: whole archive
+                        }
+                        hashes = (o2["hashes"] as? kotlinx.serialization.json.JsonObject)?.entries?.joinToString(",") { (k, v) -> k + "=" + (v as kotlinx.serialization.json.JsonPrimitive).content }.orEmpty()
+                        Archive(json.decodeFromString<ArchiveState>(body))
+                    }
                     _archive.value = parsed; etag = tag
-                    withContext(Dispatchers.IO) { cacheFile.writeText(body); tag?.let { etagFile.writeText(it) } }
+                    withContext(Dispatchers.IO) { cacheFile.writeText(body); tag?.let { etagFile.writeText(it) }; hashFile.writeText(hashes) }
                 }
                 _online.value = true
             } catch (e: ApiException) {
@@ -182,7 +201,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun logout() = viewModelScope.launch {
         stream?.cancel(); stream = null; api.logout(); signedOut()
-        withContext(Dispatchers.IO) { cacheFile.delete(); etagFile.delete() }; _archive.value = null
+        withContext(Dispatchers.IO) { cacheFile.delete(); etagFile.delete(); hashFile.delete() }; _archive.value = null
     }
     private fun signedOut() { _me.value = null; prefs.edit().remove("me").apply(); _screen.value = Screen.Login }
 

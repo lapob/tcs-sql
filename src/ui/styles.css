@@ -454,6 +454,7 @@ main{view-transition-name:main-content}
 
 /* Roles & modes */
 :root:not([data-mode="web"]) .web-only{display:none!important}
+:root:not([data-browser]) .browser-only{display:none!important}
 :root:not([data-role="admin"]) .need-admin{display:none!important}
 [data-role="tecnico"] .need-export,[data-role="tecnico"] [data-action="exportClients"],[data-role="tecnico"] [data-action="export"],[data-role="tecnico"] [data-action="calendar"],[data-role="tecnico"] [data-action="import"]{display:none!important}
 :root[data-mode="web"]:not([data-role="admin"]) [data-action="backup"]{display:none!important}
@@ -804,3 +805,34 @@ a.btn,a.btn:hover{text-decoration:none}
 .lan-list{display:grid;gap:8px;margin-top:12px}
 .lan-row{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 14px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line)}
 .lan-row code{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 13px var(--mono)}
+/* ───────── Scarica le app (website only) */
+.apps-hero{position:relative;overflow:hidden;isolation:isolate;display:flex;align-items:center;gap:18px;padding:28px;border-radius:var(--r-lg);margin-bottom:18px;
+ background:linear-gradient(135deg,color-mix(in oklab,var(--accent) 16%,var(--surface)),var(--surface) 70%);border:1px solid var(--line);box-shadow:var(--shadow)}
+.apps-hero h1{font-family:var(--font-display);font-size:clamp(24px,3.2vw,32px);font-weight:700;letter-spacing:-.02em;margin:0 0 4px}
+.apps-hero p{color:var(--text-2);margin:0;max-width:62ch;text-wrap:pretty}
+.apps-hero-ic{display:grid;place-items:center;flex:none;width:58px;height:58px;border-radius:18px;color:#fff;background:linear-gradient(140deg,var(--accent),var(--accent-2));box-shadow:0 12px 28px -10px var(--accent-ring)}
+.apps-hero-ic svg{width:28px;height:28px}
+.apps-hero-glow{position:absolute;z-index:-1;inset:-40% -10% auto auto;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,var(--accent-soft),transparent 65%);animation:apps-float 9s ease-in-out infinite alternate}
+@keyframes apps-float{to{transform:translate(-60px,40px) scale(1.12)}}
+.apps-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.app-card{display:flex;flex-direction:column;gap:6px;transition:transform .35s var(--spring),box-shadow .3s var(--ease),border-color .3s var(--ease)}
+.app-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg)}
+.app-card.mine{border-color:color-mix(in oklab,var(--accent) 40%,var(--line));box-shadow:0 0 0 4px var(--accent-soft),var(--shadow)}
+.app-card h2{margin:6px 0 0;font-size:19px}
+.app-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.app-ic{display:grid;place-items:center;width:52px;height:52px;border-radius:16px;transition:transform .5s var(--spring)}
+.app-card:hover .app-ic{transform:rotate(-6deg) scale(1.06)}
+.app-ic svg{width:27px;height:27px}
+.app-ic.t-ok{background:var(--ok-soft);color:var(--ok)}.app-ic.t-info{background:var(--info-soft);color:var(--info)}.app-ic.t-due{background:var(--due-soft);color:var(--due)}
+.app-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.app-meta span{font-size:12px;padding:3px 9px;border-radius:99px;background:var(--muted-soft);color:var(--text-2)}
+.app-cta{margin:12px 0 4px}
+.app-dl{width:100%;justify-content:center;min-height:44px;font-size:14.5px;border-radius:14px;text-decoration:none}
+.app-dl:active{transform:scale(.98)}
+.app-steps{margin:8px 0 0;padding:0;list-style:none;counter-reset:s;display:grid;gap:8px}
+.app-steps li{counter-increment:s;display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--text-2)}
+.app-steps li::before{content:counter(s);flex:none;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;font-size:11px;font-weight:700;background:var(--accent-soft);color:var(--accent)}
+.apps-foot{display:flex;align-items:center;gap:8px;margin-top:16px;font-size:12.5px}
+.apps-foot svg{width:16px;height:16px;flex:none}
+@media (max-width:640px){.apps-hero{flex-direction:column;align-items:flex-start;padding:22px 18px}}
+@media (prefers-reduced-motion:reduce){.apps-hero-glow{animation:none}.app-card,.app-ic{transition:none}}

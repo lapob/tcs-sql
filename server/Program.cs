@@ -253,6 +253,14 @@ app.MapGet("/api/state",(HttpContext ctx)=>
  if(enc!=null){ctx.Response.Headers.ContentEncoding=enc;ctx.Response.Headers.Vary="Accept-Encoding";}
  return Results.Bytes(body,"application/json");
 }).RequireAuthorization("read");
+// Partial update: the device sends the fingerprints of its sections (X-Have) and gets only what changed.
+app.MapGet("/api/state/delta",(HttpContext ctx)=>
+{
+ var etag=$"\"v{hub.Version}-{hub.Boot}\"";ctx.Response.Headers.ETag=etag;ctx.Response.Headers.CacheControl="no-store";
+ if(ctx.Request.Headers.IfNoneMatch.ToString()==etag)return Results.StatusCode(304);
+ var have=ctx.Request.Headers["X-Have"].ToString();
+ return Results.Bytes(have.Length is >0 and <8000?hub.Delta(have):hub.Snapshot(),"application/json");
+}).RequireAuthorization("read");
 app.MapGet("/api/stream",(HttpContext ctx)=>hub.Stream(ctx)).RequireAuthorization("read");
 app.MapPost("/api/note",(HttpContext ctx,NoteRequest r)=>
 {

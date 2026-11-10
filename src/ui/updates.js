@@ -5,7 +5,7 @@
 let UPD={info:null,host:null,busy:'',loaded:false,serverVersion:''};
 function updLoad(force){
  if(!WEB||(UPD.loaded&&!force))return;UPD.loaded=true;
- fetch('api/update/info',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{UPD.info=j;if(page==='settings')render(false);}).catch(()=>{});
+ fetch('api/update/info',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{UPD.info=j;if(page==='settings'||page==='apps')render(false);}).catch(()=>{});
  fetch('api/health',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{UPD.serverVersion=j?.server||'';if(page==='settings')render(false);}).catch(()=>{});
 }
 const updSize=n=>n>1048576?(n/1048576).toFixed(1).replace('.',',')+' MB':Math.round(n/1024)+' KB';
@@ -52,3 +52,38 @@ function updBanner(){
  el.querySelector('[data-upd-later]').onclick=()=>{el.classList.add('out');setTimeout(()=>el.remove(),260);};
  document.body.appendChild(el);
 }
+// ───────────────────────── "Scarica le app": only on the website (not inside the Windows app, not in the Android app)
+// Same files the PCs and phones get as automatic updates; the device in use is recognised and its app comes first.
+let installPrompt=null;
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;if(page==='apps')render(false);});
+addEventListener('appinstalled',()=>{installPrompt=null;toast('Top Cash Studio installato','check');if(page==='apps')render(false);});
+function appsPage(){
+ updLoad();const inf=UPD.info||{},ua=navigator.userAgent;
+ const ios=/iPhone|iPad/i.test(ua)||(navigator.maxTouchPoints>1&&/Macintosh/.test(ua));
+ const mine=/Android/i.test(ua)?'android':ios?'web':/Windows/i.test(ua)?'windows':'web';
+ const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+ const meta=b=>b?.version?`<div class="app-meta"><span>Versione <b>${esc(b.version)}</b></span><span>${updSize(b.size)}</span><span>${esc(relDate(b.uploadedAt))}</span></div>`:'<div class="app-meta"><span>Non ancora pubblicata</span></div>';
+ const steps=l=>`<ol class="app-steps">${l.map(s=>`<li>${s}</li>`).join('')}</ol>`;
+ const cards={
+  android:{ic:'android',tone:'t-ok',title:'Android',sub:'App nativa per telefoni e tablet: veloce, con scanner, firma e uso offline.',b:inf.android,
+   btn:inf.android?.version?`<a class="btn accent app-dl" href="api/update/android" download>${icon('download')}Scarica per Android</a>`:'',
+   steps:steps(['Scarica il file e aprilo dalle notifiche','Se richiesto, consenti l’installazione da questa fonte','Accedi con il tuo utente: gli aggiornamenti arrivano da soli'])},
+  windows:{ic:'windows',tone:'t-info',title:'Windows',sub:'Studio per PC Windows 10 e 11, collegato al server dell’ufficio, con notifiche e sincronizzazione.',b:inf.windows,
+   btn:inf.windows?.version?`<a class="btn accent app-dl" href="api/update/windows" download>${icon('download')}Scarica per Windows</a>`:'',
+   steps:steps(['Scarica ed estrai la cartella (tasto destro → Estrai tutto)','Avvia <b>TopCash.Licenze.exe</b>','Si aggiorna da solo quando esce una nuova versione'])},
+  web:{ic:'globe',tone:'t-due',title:'iPhone, iPad e browser',sub:'Nessun download: Top Cash Studio si installa come app direttamente dal browser.',b:null,
+   btn:standalone?`<span class="badge ok">Già installata su questo dispositivo</span>`:installPrompt?`<button class="btn accent app-dl" data-install-pwa>${icon('plus')}Installa come app</button>`:'',
+   steps:steps(ios?['Tocca <b>Condividi</b> in Safari','Scegli <b>Aggiungi a schermata Home</b>','Apri l’icona Top Cash dalla Home']:['Apri il menu del browser (⋮ o …)','Scegli <b>Installa app</b> o <b>Aggiungi a schermata Home</b>','Apri Top Cash come una normale app'])}
+ };
+ const order=[mine,...['android','windows','web'].filter(k=>k!==mine)];
+ return`<section class="apps-hero reveal" style="--i:0"><div class="apps-hero-glow" aria-hidden="true"></div>
+   <span class="apps-hero-ic">${icon('download')}</span>
+   <div><h1>Scarica le app</h1><p>Top Cash Studio su ogni dispositivo, sempre aggiornato. Accedi con lo stesso utente ovunque: i dati sono quelli del server dell’ufficio.</p></div></section>
+  <div class="apps-grid">${order.map((k,i)=>{const c=cards[k];return`<article class="card app-card reveal${k===mine?' mine':''}" style="--i:${i+1}">
+   <div class="app-top"><span class="app-ic ${c.tone}">${icon(c.ic)}</span>${k===mine?'<span class="badge acc">Consigliata per questo dispositivo</span>':''}</div>
+   <h2>${c.title}</h2><p class="sub">${c.sub}</p>${k==='web'?'':meta(c.b)}
+   <div class="app-cta">${c.btn}</div>${c.steps}</article>`;}).join('')}</div>
+  <p class="muted apps-foot">${icon('shield')}Gli stessi file della Release ufficiale. Fuori ufficio le app usano la connessione cifrata.</p>`;
+}
+document.addEventListener('click',async e=>{const b=e.target.closest?.('[data-install-pwa]');if(!b||!installPrompt)return;e.preventDefault();
+ installPrompt.prompt();const r=await installPrompt.userChoice.catch(()=>null);installPrompt=null;if(r?.outcome!=='accepted')render(false);});

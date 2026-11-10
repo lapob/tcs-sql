@@ -101,6 +101,7 @@ const host=window.chrome?.webview;
 const WEB=location.hostname!=='topcash.local'&&!window.__PREVIEW_STATE;
 let me=null,hostInfo=null,usersData=null,etag='',offline=false;
 document.documentElement.dataset.mode=WEB?'web':'local';
+if(WEB&&!host)document.documentElement.dataset.browser='1'; // the plain website (not inside the Windows app): the download page lives here
 async function api(path,opt={}){
  const headers={'X-Requested-With':'topcash',...(opt.body&&!(opt.body instanceof FormData)?{'Content-Type':'application/json'}:{}),...(opt.headers||{})};
  const r=await fetch(path,{credentials:'same-origin',...opt,headers});
@@ -161,7 +162,7 @@ function ask({title,text='',ok='Conferma',danger=false,html='',cancel=true}){ret
 async function copy(text){try{await navigator.clipboard.writeText(text);toast('Copiato negli appunti');}catch{toast('Copia non riuscita','alert');}}
 
 // ───────────────────────── shared UI pieces
-const PAGES={overview:'Panoramica',clients:'Clienti',interventions:'Interventi',route:'Giro di oggi',renewals:'Rinnovi',inventory:'PC e sistemi',check:'Controllo dati',machines:'Macchine',dtr:'Registratori DTR',ital:'Casse Ital Retail',warehouse:'Magazzino',accounting:'Contabilità',licenses:'Licenze',expiry:'Scadenze',orders:'Ordini',tasks:'Attività',sync:'Sincronizzazione',settings:'Impostazioni',team:'Utenti'};
+const PAGES={overview:'Panoramica',clients:'Clienti',interventions:'Interventi',route:'Giro di oggi',renewals:'Rinnovi',inventory:'PC e sistemi',check:'Controllo dati',machines:'Macchine',dtr:'Registratori DTR',ital:'Casse Ital Retail',warehouse:'Magazzino',accounting:'Contabilità',licenses:'Licenze',expiry:'Scadenze',orders:'Ordini',tasks:'Attività',sync:'Sincronizzazione',settings:'Impostazioni',team:'Utenti',apps:'Scarica le app'};
 function hero(title,text,actions=''){return`<section class="hero reveal"><div><h1>${title}</h1><p>${text}</p></div><div class="btn-row">${actions}</div></section>`;}
 function explain(id,html){if(store.get('hide.'+id,false))return'';return`<div class="explain reveal" style="--i:1"><span class="orb">${icon('sparkle')}</span><div>${html}</div><button class="x" data-hide-explain="${id}" aria-label="Nascondi spiegazione" data-tip="Nascondi questa spiegazione">${icon('close')}</button></div>`;}
 function kpi(label,value,note,ic,tone,go,i,tip){return`<div class="card kpi ${tone} reveal" style="--i:${i}" data-go="${go}" tabindex="0" ${tip?`data-tip="${esc(tip)}"`:''}><div class="kpi-top"><span>${label}</span><span class="kpi-icon">${icon(ic)}</span></div><div class="kpi-value" data-count="${value}">${fmt(value)}</div><div class="kpi-note">${note}</div></div>`;}
@@ -706,7 +707,8 @@ function render(animate){
  if(!D)return;const main=$('#main');const scroll=main.scrollTop;const focus=document.activeElement?.id;const caret=document.activeElement?.selectionStart;
  if(page==='team'&&!(WEB&&me?.role==='admin'))page='overview';
  if(page==='warehouse'&&!isAdmin())page='overview';
- const html={overview,clients:clientsPage,licenses:licensesPage,expiry:expiryPage,orders:ordersPage,tasks:tasksPage,sync:syncPage,settings:settingsPage,team:teamPage,interventions:interventionsPage,machines:machinesPage,route:typeof routePage==='function'?routePage:overview,renewals:typeof renewalsPage==='function'?renewalsPage:overview,inventory:typeof inventoryPage==='function'?inventoryPage:overview,check:typeof checkPage==='function'?checkPage:overview,dtr:typeof dtrPage==='function'?dtrPage:overview,ital:typeof italPage==='function'?italPage:overview,warehouse:typeof warehousePage==='function'?warehousePage:overview,accounting:typeof accountingPage==='function'?accountingPage:overview}[page]||overview;
+ if(page==='apps'&&!(WEB&&!host))page='overview';
+ const html={overview,clients:clientsPage,licenses:licensesPage,expiry:expiryPage,orders:ordersPage,tasks:tasksPage,sync:syncPage,settings:settingsPage,team:teamPage,apps:typeof appsPage==='function'?appsPage:overview,interventions:interventionsPage,machines:machinesPage,route:typeof routePage==='function'?routePage:overview,renewals:typeof renewalsPage==='function'?renewalsPage:overview,inventory:typeof inventoryPage==='function'?inventoryPage:overview,check:typeof checkPage==='function'?checkPage:overview,dtr:typeof dtrPage==='function'?dtrPage:overview,ital:typeof italPage==='function'?italPage:overview,warehouse:typeof warehousePage==='function'?warehousePage:overview,accounting:typeof accountingPage==='function'?accountingPage:overview}[page]||overview;
  document.body.classList.toggle('anim',!!animate&&!reduced);
  // live update on the same page: remember the numbers shown, to roll only the ones that change
  const before=!animate&&lastRendered===page?$$('#main [data-count]').map(el=>+el.dataset.count):null;
@@ -854,7 +856,7 @@ $('#drawer-backdrop').addEventListener('click',closeDrawer);
 // phone: 4 main sections in the bottom bar, the rest in the "Altro" sheet
 $('#nav-more').addEventListener('click',openMoreSheet);
 function openMoreSheet(){if(document.querySelector('.more-sheet'))return;
- const items=$$('.nav-item[data-page]').filter(b=>!MAIN_TABS.includes(b.dataset.page)&&!(b.dataset.page==='team'&&!(WEB&&me?.role==='admin'))&&!(b.dataset.page==='warehouse'&&!isAdmin())&&!(b.dataset.page==='check'&&!isAdmin()));
+ const items=$$('.nav-item[data-page]').filter(b=>!MAIN_TABS.includes(b.dataset.page)&&!(b.dataset.page==='team'&&!(WEB&&me?.role==='admin'))&&!(b.dataset.page==='warehouse'&&!isAdmin())&&!(b.dataset.page==='check'&&!isAdmin())&&!(b.dataset.page==='apps'&&!(WEB&&!host)));
  const m=document.createElement('div');m.className='modal more-sheet';
  m.innerHTML=`<div class="sheet-box" role="dialog" aria-label="Altre sezioni"><i class="grip"></i><div class="more-grid">${items.map((b,i)=>{const em=b.querySelector('em.hot')?.textContent||'';return`<button class="more-item${b.dataset.page===page?' on':''}" data-more="${b.dataset.page}" style="--i:${i}">${b.querySelector('svg').outerHTML}<span>${b.querySelector('span').textContent}</span>${em?`<em>${esc(em)}</em>`:''}</button>`;}).join('')}</div></div>`;
  document.body.append(m);
@@ -905,13 +907,27 @@ function applyRole(){document.documentElement.dataset.role=WEB?(me?.role||'none'
  const foot=$('.company');if(WEB&&me){foot.innerHTML=`<span class="avatar">${esc(initials(me.name))}</span><div><strong>${esc(me.name)}</strong><small id="side-status">${esc(me.roleLabel)}</small></div>`;}}
 let loadTimer=0,loading=false,again=false;
 function scheduleLoad(){clearTimeout(loadTimer);loadTimer=setTimeout(loadState,250);}
+// raw: the last complete archive as received (pristine sections + their fingerprints). With it, only the sections that changed are downloaded.
+let raw=null,saveTimer=0,earlyState=null;
+const haveHeader=()=>Object.entries(raw.hashes).map(([k,h])=>k+'='+h).join(',');
+// the merged copy replaces the saved one used when the server cannot be reached (written when the page is idle)
+function saveRaw(){if(!('caches' in window)||!isSecureContext)return;clearTimeout(saveTimer);saveTimer=setTimeout(()=>{const body=JSON.stringify(raw);
+ caches.open('tcs-api').then(c=>c.put('/api/state',new Response(body,{headers:{'Content-Type':'application/json'}}))).catch(()=>{});},3000);}
 async function loadState(){if(loading){again=true;return;}loading=true;
- try{const r=await fetch('/api/state',{credentials:'same-origin',headers:etag?{'If-None-Match':etag}:{}});
+ try{const partial=!!raw?.hashes;const h={};if(etag)h['If-None-Match']=etag;if(partial)h['X-Have']=haveHeader();
+  const early=!partial&&!etag?await earlyState:null;earlyState=null; // started together with the session check
+  const r=early&&early.status!==401?early:await fetch(partial?'/api/state/delta':'/api/state',{credentials:'same-origin',cache:'no-store',headers:h});
   if(r.status===401){showAuth('login');return;}
   if(r.status===304){setOffline(false);return;}
+  if(partial&&r.status===404){raw=null;again=true;return;} // older server without partial updates
   if(!r.ok)throw new Error('HTTP '+r.status);
   const s=await r.json();etag=r.headers.get('ETag')||'';setOffline(r.headers.get('X-From-Cache')==='1');
-  receive({type:'state',...s,syncRunning:state.syncRunning,syncProgress:state.syncProgress,portalConnected:state.portalConnected});
+  let v;
+  if(s.partial){delete s.partial;const fresh=Object.keys(s);raw={...raw,...s};
+   // unchanged sections are handed over as copies: the views may decorate the objects they receive, the pristine copy stays clean
+   v={...s};for(const k of Object.keys(raw))if(!fresh.includes(k))v[k]=structuredClone(raw[k]);saveRaw();}
+  else{raw=s;v=structuredClone(s);}
+  receive({type:'state',...v,syncRunning:state.syncRunning,syncProgress:state.syncProgress,portalConnected:state.portalConnected});
  }catch{setOffline(true);if(firstState)$('#splash').classList.add('gone');}
  finally{loading=false;if(again){again=false;scheduleLoad();}}}
 let es=null;
@@ -963,12 +979,15 @@ function showDevice(status,code){
  $('#dev-retry').addEventListener('click',()=>{clearTimeout(devTimer);check();});
  if(!blocked)devTimer=setTimeout(check,8000);
 }
-function startWeb(){$('#auth').hidden=true;applyRole();etag='';loadState();openStream();if(host)host.postMessage({action:'hostInfo'});learnPublic();}
+function startWeb(){$('#auth').hidden=true;applyRole();etag='';raw=null;loadState();openStream();if(host)host.postMessage({action:'hostInfo'});learnPublic();}
 async function logout(){try{await post('/api/logout');}catch{}try{await caches.delete('tcs-api');}catch{}me=null;location.reload();}
 async function bootWeb(){
  if('serviceWorker' in navigator&&isSecureContext)navigator.serviceWorker.register('sw.js').catch(()=>{});
- try{try{const h=await post('/api/device/hello',{name:deviceName(),platform:devicePlatform()});if(h.remote&&h.status==='revoked')return showDevice(h.status,h.code);}catch{} // server down or no network: go on with the saved copy, the offline bar says so
-  const s=await api('/api/session');if(s.setupNeeded)return showAuth('setup');if(!s.user)return showAuth('login');me=s.user;startWeb();}
+ // the three first requests leave together: one round trip instead of three (it counts outside the office, through the tunnel)
+ earlyState=fetch('/api/state',{credentials:'same-origin',cache:'no-store'}).catch(()=>null);
+ const hello=post('/api/device/hello',{name:deviceName(),platform:devicePlatform()}).catch(()=>null),session=api('/api/session');session.catch(()=>{});
+ try{const h=await hello;if(h?.remote&&h.status==='revoked'){earlyState=null;return showDevice(h.status,h.code);} // no answer (server down, no network): go on with the saved copy, the offline bar says so
+  const s=await session;if(s.setupNeeded)return showAuth('setup');if(!s.user)return showAuth('login');me=s.user;startWeb();}
  catch{$('#splash').classList.add('gone');$('#main').innerHTML=`<div class="error-box"><img src="assets/tcs-app@2x.png" alt="Top Cash Service" class="tile"><h2>Server non raggiungibile</h2><p>Il server dell’ufficio non risponde: può essere spento o senza connessione. Controlla anche la tua rete.</p><p class="muted" style="font-size:13px;margin-top:6px">Riprovo da solo ogni 20 secondi.</p><p style="margin-top:16px"><button class="btn accent" data-action-local="reload">Riprova ora</button></p></div>`;setTimeout(()=>location.reload(),20000);}
 }
 

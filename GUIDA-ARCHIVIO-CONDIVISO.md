@@ -270,6 +270,9 @@ Altro dominio: `collega-esterno.ps1 -Dominio altro.it`. Se preferisci creare il 
 
 ### Sui dispositivi
 
+- **Scarica le app** (solo sul sito, ad esempio `https://tcsql.it`): pagina con l'app Android, Studio per Windows e le istruzioni per installare il sito come app su iPhone e browser; il dispositivo in uso viene riconosciuto e la sua app è proposta per prima.
+- **Aggiornamenti più leggeri**: dalla 2.7.6 sito e app Android scaricano solo le parti dell'archivio cambiate (di solito pochi KB), non tutto l'archivio a ogni modifica.
+
 - **Android e app Windows**: non serve fare nulla. Al primo accesso in ufficio dopo la configurazione imparano `https://tcsql.it` dal server; fuori ufficio passano da sole all'indirizzo pubblico. (Resta possibile scriverlo a mano: Android *Altro → Account e impostazioni → Cambia server → Indirizzo esterno*, Windows *Impostazioni → Questo PC → Indirizzo esterno*.)
 - **Browser / iPhone**: apri `https://tcsql.it` e, se vuoi, *Aggiungi a schermata Home*. In *Impostazioni → Accesso dalla rete* trovi sia l'indirizzo dell'ufficio sia quello pubblico.
 

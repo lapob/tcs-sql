@@ -162,10 +162,12 @@ class Api(context: Context) {
     suspend fun changePassword(current: String, password: String) { post("/api/password", json.encodeToString(PasswordChange(current, password))) }
     suspend fun deleteIntervention(id: String) { post("/api/interventions/" + java.net.URLEncoder.encode(id, "UTF-8") + "/delete") }
 
-    /** Returns null when the archive did not change (HTTP 304). */
-    suspend fun state(etag: String?): Pair<String, String?>? = withContext(Dispatchers.IO) {
-        val b = Request.Builder().url(url("/api/state")).get()
+    /** Returns null when the archive did not change (HTTP 304). With [have] (the fingerprints of the saved sections)
+     *  only the sections that changed are downloaded ("partial": true in the answer). */
+    suspend fun state(etag: String?, have: String? = null): Pair<String, String?>? = withContext(Dispatchers.IO) {
+        val b = Request.Builder().url(url(if (have.isNullOrEmpty()) "/api/state" else "/api/state/delta")).get()
         if (!etag.isNullOrEmpty()) b.header("If-None-Match", etag)
+        if (!have.isNullOrEmpty()) b.header("X-Have", have)
         try {
             http.newCall(b.build()).apply { timeout().timeout(25, TimeUnit.SECONDS) }.execute().use { r ->
                 if (r.code == 304) return@withContext null

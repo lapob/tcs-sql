@@ -12,7 +12,7 @@ public sealed class Hub(Store store)
  static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
  readonly ConcurrentDictionary<Guid,Channel<string>> clients=new();
  readonly Lock gate=new();
- long version=1;byte[]? snapshot;long snapshotVersion;
+ long version=1;
  public long Version=>Interlocked.Read(ref version);
  /// Changes at every start: a client that cached "v1" before a restart (or an update with new data) must not get a 304.
  public readonly string Boot=DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString("x");
@@ -24,25 +24,57 @@ public sealed class Hub(Store store)
  public void SetProgress(bool running,bool connected,string text){Progress=new("progress",running,connected,text);LastStationContact=DateTimeOffset.Now;Broadcast(Progress);}
  public void StationSeen()=>LastStationContact=DateTimeOffset.Now;
 
- /// Serialized once per version and shared by every request (also cheap for many devices).
- public byte[] Snapshot()
+ /// The archive is split into named sections, each serialized once per version with a short fingerprint.
+ /// A device that already has a copy sends its fingerprints and downloads only the sections that changed
+ /// (usually a few KB instead of the whole archive); the full snapshot is assembled from the same bytes.
+ sealed record Snap(long Version,byte[] Full,Dictionary<string,(byte[] Json,string Hash)> Sections);
+ Snap? snap;
+ Snap Current()
  {
   lock(gate)
   {
-   if(snapshot!=null&&snapshotVersion==Version)return snapshot;
+   if(snap!=null&&snap.Version==Version)return snap;
    var v=Version;
    var mv=store.Mastro();
-   snapshot=JsonSerializer.SerializeToUtf8Bytes(new{records=store.Licenses(),licenseEdits=store.LicenseEdits(),licenseCleanup=store.LicenseCleanup(),clientEdits=store.ClientEdits(),clients=store.Clients(),orders=store.Orders(),mastroClients=mv.Clients,machines=mv.Machines,interventions=mv.Interventions,brandRule=mv.Excluded,assets=store.Assets(),renewals=store.Renewals(),deviceLinks=store.DeviceLinks(),
-    warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),dtr=store.DtrRegisters(),dtrStatus=store.DtrState(),ital=store.ItalDevices(),italOrders=store.ItalOrders(),italStatus=store.ItalState(),features=new{mail=store.MailReady(),backupError=Backups.Status(store).Error},version=v},Json);
-   snapshotVersion=v;encoded.Clear();return snapshot;
+   var parts=new (string,object)[]{("records",store.Licenses()),("licenseEdits",store.LicenseEdits()),("licenseCleanup",store.LicenseCleanup()),("clientEdits",store.ClientEdits()),("clients",store.Clients()),("orders",store.Orders()),
+    ("mastroClients",mv.Clients),("machines",mv.Machines),("interventions",mv.Interventions),("brandRule",mv.Excluded),("assets",store.Assets()),("renewals",store.Renewals()),("deviceLinks",store.DeviceLinks()),
+    ("warehouses",store.Warehouses()),("articles",store.Articles()),("stockLevels",store.StockLevels()),("stock",store.Stock()),("movements",store.Movements()),("invoices",store.Invoices()),("dues",store.Dues()),("balances",store.Balances()),("dueNotes",store.DueNotes()),
+    ("sources",store.Sources()),("events",store.Events()),("notes",store.Notes()),("metadata",store.Metadata()),("dtr",store.DtrRegisters()),("dtrStatus",store.DtrState()),("ital",store.ItalDevices()),("italOrders",store.ItalOrders()),("italStatus",store.ItalState()),
+    ("features",new{mail=store.MailReady(),backupError=Backups.Status(store).Error})};
+   var sections=new Dictionary<string,(byte[],string)>(parts.Length);
+   foreach(var(name,value) in parts){var b=JsonSerializer.SerializeToUtf8Bytes(value,value.GetType(),Json);sections[name]=(b,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(b),0,8));}
+   snap=new Snap(v,Compose(v,sections,null),sections);encoded.Clear();return snap;
   }
+ }
+ /// Writes {"section":…, …, "hashes":{…}, "version":n}; with [only] just those sections plus "partial":true.
+ static byte[] Compose(long v,Dictionary<string,(byte[] Json,string Hash)> sections,HashSet<string>? only)
+ {
+  using var ms=new MemoryStream(only==null?sections.Values.Sum(x=>x.Json.Length)+4096:4096);
+  using(var w=new Utf8JsonWriter(ms))
+  {
+   w.WriteStartObject();
+   foreach(var(name,(json,_)) in sections)if(only==null||only.Contains(name)){w.WritePropertyName(name);w.WriteRawValue(json,skipInputValidation:true);}
+   w.WriteStartObject("hashes");foreach(var(name,(_,hash)) in sections)w.WriteString(name,hash);w.WriteEndObject();
+   w.WriteNumber("version",v);if(only!=null)w.WriteBoolean("partial",true);
+   w.WriteEndObject();
+  }
+  return ms.ToArray();
+ }
+ public byte[] Snapshot()=>Current().Full;
+ /// Only the sections whose fingerprint differs from [have] ("name=hash,name=hash"); unknown names count as changed.
+ public byte[] Delta(string have)
+ {
+  var s=Current();var known=new Dictionary<string,string>();
+  foreach(var pair in have.Split(',',StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries)){var i=pair.IndexOf('=');if(i>0)known[pair[..i]]=pair[(i+1)..];}
+  var changed=s.Sections.Where(kv=>!known.TryGetValue(kv.Key,out var h)||h!=kv.Value.Hash).Select(kv=>kv.Key).ToHashSet();
+  return Compose(s.Version,s.Sections,changed);
  }
  /// The snapshot compressed once per version (Brotli for browsers and phones, gzip as fallback): many MB of archive
  /// become a few, and the server does not recompress them for every device that asks.
  readonly ConcurrentDictionary<string,(long v,byte[] b)> encoded=new();
  public (byte[] body,string? encoding) SnapshotFor(string acceptEncoding)
  {
-  var raw=Snapshot();long v;lock(gate){raw=snapshot??raw;v=snapshotVersion;}
+  var cur=Current();var raw=cur.Full;var v=cur.Version;
   string? enc=acceptEncoding.Contains("br",StringComparison.OrdinalIgnoreCase)?"br":acceptEncoding.Contains("gzip",StringComparison.OrdinalIgnoreCase)?"gzip":null;
   if(enc==null)return(raw,null);
   if(encoded.TryGetValue(enc,out var e)&&e.v==v)return(e.b,enc);

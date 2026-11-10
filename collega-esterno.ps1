@@ -127,7 +127,7 @@ if ($Manuale) {
   }
 
   # sicurezza del dominio come fanno le aziende: solo HTTPS, TLS 1.2 minimo, TLS 1.3, riscrittura automatica dei link http
-  foreach ($s in @(@('always_use_https', 'on'), @('min_tls_version', '1.2'), @('tls_1_3', 'on'), @('automatic_https_rewrites', 'on'))) {
+  foreach ($s in @(@('always_use_https', 'on'), @('min_tls_version', '1.2'), @('tls_1_3', 'on'), @('automatic_https_rewrites', 'on'), @('http3', 'on'), @('0rtt', 'on'))) {
     try { CF PATCH "/zones/$($zone.id)/settings/$($s[0])" @{ value = $s[1] } | Out-Null; Write-Host "Impostazione $($s[0]) = $($s[1])" }
     catch { Write-Host "Impostazione $($s[0]) non applicata ($($_.Exception.Message)): non e' indispensabile." -ForegroundColor Yellow }
   }
