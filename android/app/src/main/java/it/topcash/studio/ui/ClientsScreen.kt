@@ -42,15 +42,16 @@ import it.topcash.studio.data.Catalog
 import it.topcash.studio.data.UClient
 import it.topcash.studio.data.norm
 
-private val filters = listOf("Tutti", "Preferiti", "In scadenza", "Con macchine", "Interventi aperti", "Solo Mastro")
+private val filters = listOf("Attivi", "Preferiti", "In scadenza", "Con macchine", "Interventi aperti", "Solo Mastro", "Archiviati")
 
 @Composable fun ClientsScreen(vm: AppViewModel, a: Archive, nav: NavHostController) {
     var q by rememberSaveable { mutableStateOf("") }
-    var filter by rememberSaveable { mutableStateOf("Tutti") }
+    var filter by rememberSaveable { mutableStateOf("Attivi") }
     val list = remember(a, q, filter) {
         val n = norm(q.trim())
         a.clients.filter { c ->
-            (n.isEmpty() || c.search.contains(n)) && when (filter) {
+            (n.isEmpty() || c.search.contains(n) || norm(c.tech).contains(n)) && (n.isNotEmpty() || filter == "Archiviati" || !c.dormant) && when (filter) {
+                "Archiviati" -> c.dormant
                 "Preferiti" -> c.meta.favorite; "In scadenza" -> c.status == "In scadenza"; "Con macchine" -> c.machines.isNotEmpty()
                 "Interventi aperti" -> c.interventions.any { it.i.status != "Chiuso" }; "Solo Mastro" -> c.mastroOnly; else -> true
             }
@@ -59,7 +60,7 @@ private val filters = listOf("Tutti", "Preferiti", "In scadenza", "Con macchine"
     val me by vm.me.collectAsStateWithLifecycle()
     var creating by rememberSaveable { mutableStateOf(false) }
     if (creating) ClientEditSheet(vm, null, { creating = false }) { code -> nav.openClient(code) }
-    Page(vm, "Clienti", "${list.size} di ${a.clients.size}", actions = {
+    Page(vm, "Clienti", if (filter == "Archiviati") "${list.size} archiviati · senza macchine, licenze, tecnico o attività" else "${list.size} di ${a.clients.count { !it.dormant }} attivi", actions = {
         if (me != null) androidx.compose.material3.IconButton({ creating = true }) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.PersonAdd, "Nuovo cliente") }
     }) {
         item(key = "search") {
@@ -85,7 +86,7 @@ private val filters = listOf("Tutti", "Preferiti", "In scadenza", "Con macchine"
                     Text(c.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, false).sharedBox("name-${c.code}"))
                     if (c.meta.favorite) { Spacer(Modifier.width(4.dp)); Icon(Icons.Rounded.Star, null, tint = LocalStatus.current.due, modifier = Modifier.size(15.dp)) }
                 }
-                Text(listOf(c.city, c.phone, c.families.firstOrNull()?.let(Catalog::family)).filter { !it.isNullOrBlank() }.joinToString(" · ").ifBlank { "Cod. " + c.code.trimStart('0') },
+                Text(listOf(c.city, c.tech.takeIf { it.isNotBlank() }?.let { "Tecnico $it" }, c.services.firstOrNull()?.first, c.phone, c.families.firstOrNull()?.let(Catalog::family)).filter { !it.isNullOrBlank() }.joinToString(" · ").ifBlank { "Cod. " + c.code.trimStart('0') },
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             // "Senza licenze" is the normal case for most customers: showing it everywhere is noise and squeezes the name

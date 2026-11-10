@@ -21,12 +21,14 @@ import kotlinx.serialization.Serializable
     val code: String = "", val name: String = "", val vat: String = "", val taxCode: String = "", val address: String = "",
     val cap: String = "", val city: String = "", val prov: String = "", val zone: String = "", val phones: List<String> = emptyList(),
     val emails: List<String> = emptyList(), val pec: String = "", val notes: String = "", val extra: Map<String, String> = emptyMap(),
+    val agent: String = "",
 )
 @Serializable data class Machine(
     val id: String = "", val clientCode: String = "", val model: String = "", val type: String = "", val serial: String = "",
     val fiscalSerial: String = "", val logo: String = "", val installed: String = "", val firstInstall: String = "", val verification: String = "",
     val active: Boolean = true, val subscribed: Boolean = false, val contractStart: String = "", val contractEnd: String = "",
     val amount: String = "", val branch: String = "", val notes: String = "",
+    val service: String = "", val technician: String = "", val warrantyEnd: String = "", val months: String = "", val contractUntil: String = "",
 )
 @Serializable data class Intervention(
     val id: String = "", val clientCode: String = "", val clientName: String = "", val date: String = "", val machine: String = "",

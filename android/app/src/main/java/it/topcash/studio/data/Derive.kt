@@ -98,6 +98,23 @@ class UClient(
     val interventions = mutableListOf<UIntervention>()
     val orders = mutableListOf<UOrder>()
     val active get() = licenses.filter { it.current }
+    /** Technician: the one on most active machines, else the customer's referent in Mastro, else the latest intervention. */
+    val tech: String by lazy {
+        machines.filter { it.m.active && it.m.technician.isNotBlank() }.groupingBy { it.m.technician }.eachCount().maxByOrNull { it.value }?.key
+            ?: mastro?.agent?.takeIf { it.isNotBlank() }
+            ?: interventions.firstOrNull { it.i.technician.isNotBlank() && !it.i.technician.all(Char::isDigit) }?.i?.technician ?: ""
+    }
+    /** Service conditions of the active machines: "Noleggio", "Abbonamento", "Garanzia", "A chiamata"… with how many. */
+    val services: List<Pair<String, Int>> by lazy {
+        machines.filter { it.m.active }.mapNotNull { serviceKind(it.m) }.groupingBy { it }.eachCount().toList().sortedBy { serviceOrder.indexOf(it.first) }
+    }
+    /** Nothing to work on (no active device, licence, technician, recent activity…): kept out of the list, found by search. */
+    val dormant: Boolean by lazy {
+        val since = LocalDate.now().minusYears(3)
+        machines.none { it.m.active } && active.isEmpty() && tech.isBlank() && registers.isEmpty() && italDevices.isEmpty() && assets.isEmpty() &&
+            interventions.none { (it.i.source == "app" && it.i.status != "Chiuso") || it.date?.isAfter(since) == true } &&
+            orders.none { it.date?.isAfter(LocalDate.now().minusYears(2)) == true } && edit?.created != true && !meta.favorite && note.isBlank()
+    }
     var search = ""
     val status: String get() {
         val pool = active.ifEmpty { licenses }; val st = pool.map { it.status }
@@ -306,5 +323,18 @@ class Archive(val state: ArchiveState) {
             status == "Pianificato" -> Tone.Accent
             else -> Tone.Neutral
         }
+    }
+}
+
+val serviceOrder = listOf("Noleggio", "Abbonamento", "Garanzia", "Ore prepagate", "Installazione", "A chiamata")
+/** Mastro service of a machine (lis_macc.SERVIZIO): an open warranty wins, "Pagamento" means paid per call. */
+fun serviceKind(m: Machine): String? {
+    val w = runCatching { LocalDate.parse(m.warrantyEnd.take(10)) }.getOrNull()
+    if (w != null && !w.isBefore(LocalDate.now())) return "Garanzia"
+    val s = m.service.uppercase()
+    return when {
+        "NOLEGG" in s -> "Noleggio"; "ABBON" in s || "CANONE" in s -> "Abbonamento"; "PREPAGAT" in s -> "Ore prepagate"
+        "INSTALLAZ" in s -> "Installazione"; "PAGAMENTO" in s || "CHIAMATA" in s || "GARANZ" in s -> "A chiamata"
+        m.subscribed -> "Abbonamento"; s.isNotBlank() -> "A chiamata"; else -> null
     }
 }

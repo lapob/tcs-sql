@@ -48,6 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import androidx.compose.foundation.clickable
 import it.topcash.studio.data.AppViewModel
 import it.topcash.studio.data.Archive
 import it.topcash.studio.data.Catalog
@@ -89,7 +90,29 @@ import java.time.ZoneOffset
                     Text("Cod. ${c.code.trimStart('0')}${if (c.mastro != null) " · Mastro ${c.mastro!!.code}" else ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
                     Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Pill(c.status, Archive.toneOf(c.status)); if (c.mastroOnly) Pill("Mastro", Tone.Info); c.edit?.let { e -> Pill(if (e.created) "Creato a mano" else "Modificato", Tone.Accent) }
+                        if (c.dormant) Pill("Archiviato", Tone.Neutral)
                     }
+                }
+            }
+        }
+        item(key = "who") {
+            // who follows the customer, under which conditions, and (only for who sees accounting) what they still owe
+            CardBox(Modifier.padding(bottom = 14.dp).appear(1)) {
+                Text(if (c.tech.isNotBlank()) "Tecnico: ${c.tech}" else "Nessun tecnico assegnato", style = MaterialTheme.typography.titleSmall,
+                    color = if (c.tech.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                if (c.services.isNotEmpty()) FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    c.services.forEach { (k, n) ->
+                        Pill(if (n > 1) "$k · $n macchine" else k, when (k) { "Noleggio", "Abbonamento" -> Tone.Info; "Garanzia" -> Tone.Ok; "A chiamata" -> Tone.Neutral; else -> Tone.Accent })
+                    }
+                }
+                if (me?.seesAccounting == true) a.acc.of(c)?.takeIf { it.dues.isNotEmpty() }?.let { p ->
+                    val (txt, tone) = when {
+                        p.overdue > 0.005 -> (if (p.overdue >= p.open - 0.005) "Deve pagare ${it.topcash.studio.data.AccountingView.money(p.open)}, tutto scaduto"
+                            else "Deve pagare ${it.topcash.studio.data.AccountingView.money(p.open)}, di cui ${it.topcash.studio.data.AccountingView.money(p.overdue)} scaduti") to Tone.Bad
+                        p.open > 0.005 -> "Da pagare ${it.topcash.studio.data.AccountingView.money(p.open)}, nulla di scaduto" to Tone.Due
+                        else -> "In regola con i pagamenti" to Tone.Ok
+                    }
+                    androidx.compose.foundation.layout.Box(Modifier.padding(top = 8.dp).clickable { tab = "Contabilità" }) { Pill(txt, tone) }
                 }
             }
         }

@@ -59,6 +59,18 @@ public static class MastroReader
   string? Tab(params string[] names)=>tables.FirstOrDefault(x=>names.Any(n=>x.Equals(n,StringComparison.OrdinalIgnoreCase)));
   var tClienti=Tab("clienti")??throw new InvalidDataException("Nel database Mastro non trovo la tabella 'clienti'.");
   var tMacc=Tab("lis_macc");var tTipi=Tab("macc_ti");
+  // technician names (operai) and service kinds (servizi): only the two columns needed, never the rest of the staff table
+  var techNames=new Dictionary<string,string>();var services=new Dictionary<string,string>();
+  async Task Pairs(string? table,string k,string v,Dictionary<string,string> into)
+  {
+   if(table==null)return;
+   try{await using var q=new MySqlCommand($"SELECT `{k}`,`{v}` FROM `{table.Replace("`","")}`",c);await using var r=await q.ExecuteReaderAsync(ct);
+    while(await r.ReadAsync(ct)){var key=S(r.GetValue(0)).Trim();var val=S(r.GetValue(1)).Trim();if(key.Length>0&&key!="0"&&val.Length>0)into[key]=Nice(val);}}
+   catch(Exception ex){warnings.Add($"Tabella '{table}' non leggibile: {ex.Message}");}
+  }
+  static string Nice(string s)=>s.Any(char.IsLower)?s:System.Globalization.CultureInfo.GetCultureInfo("it-IT").TextInfo.ToTitleCase(s.ToLowerInvariant());
+  await Pairs(Tab("operai"),"CODI","NOME",techNames);await Pairs(Tab("servizi"),"NUME","DESCRI",services);
+  string Tech(string code)=>code.Length==0||code=="0"?"":techNames.TryGetValue(code,out var n)?n:code.All(char.IsDigit)?"":code;
   async Task<List<Dictionary<string,string>>> All(string table,int max)
   {
    var rows=new List<Dictionary<string,string>>();
@@ -74,7 +86,7 @@ public static class MastroReader
   var cols=raw.FirstOrDefault()?.Keys.ToList()??[];
   bool IsPhone(string k)=>System.Text.RegularExpressions.Regex.IsMatch(k,@"(^|_)(TEL|TELE|TELEF|TELEFONO|TELEFONI|TEL\d|TELE\d|CELL|CELLU|CELLULARE|FAX|PHONE|RECAPITO|RECA_TEL|MOBILE)\d*($|_)",System.Text.RegularExpressions.RegexOptions.IgnoreCase)&&!k.Contains("TELEMAT",StringComparison.OrdinalIgnoreCase);
   bool IsMail(string k)=>System.Text.RegularExpressions.Regex.IsMatch(k,@"(E_?MAIL|^MAIL)",System.Text.RegularExpressions.RegexOptions.IgnoreCase)&&!k.Contains("PEC",StringComparison.OrdinalIgnoreCase);
-  var known=new HashSet<string>(["CODI","DESCRI","DESCRI2","PIVA","COD_FIS","VIA","CAP","CITTA","PROV","ZONA","PEC","NOTE","NOTE1"],StringComparer.OrdinalIgnoreCase);
+  var known=new HashSet<string>(["CODI","DESCRI","DESCRI2","PIVA","COD_FIS","VIA","CAP","CITTA","PROV","ZONA","PEC","NOTE","NOTE1","AGENTE","AGENTE_2","AGENTE_PR","AGENTE_PR_2"],StringComparer.OrdinalIgnoreCase);
   var clients=new List<MastroClient>();
   foreach(var d in raw)
   {
@@ -87,7 +99,7 @@ public static class MastroReader
    // every other filled field is kept, so no information is lost
    var extra=d.Where(kv=>!known.Contains(kv.Key)&&!IsPhone(kv.Key)&&!IsMail(kv.Key)&&!kv.Key.Contains("PEC",StringComparison.OrdinalIgnoreCase)&&!kv.Key.StartsWith("NOTE",StringComparison.OrdinalIgnoreCase)
     &&kv.Value.Length is >0 and <400&&kv.Value!="0"&&kv.Value!="0.00").Take(60).ToDictionary(kv=>kv.Key,kv=>kv.Value);
-   clients.Add(new(code,name,F(d,"PIVA","P_IVA","PARTITA_IVA"),F(d,"COD_FIS","CODFIS","CODICE_FISCALE"),F(d,"VIA","INDIRIZZO"),F(d,"CAP"),F(d,"CITTA","LOCALITA"),F(d,"PROV","PROVINCIA"),F(d,"ZONA"),phones,mails,pec,notes,extra));
+   clients.Add(new(code,name,F(d,"PIVA","P_IVA","PARTITA_IVA"),F(d,"COD_FIS","CODFIS","CODICE_FISCALE"),F(d,"VIA","INDIRIZZO"),F(d,"CAP"),F(d,"CITTA","LOCALITA"),F(d,"PROV","PROVINCIA"),F(d,"ZONA"),phones,mails,pec,notes,extra,Tech(F(d,"AGENTE"))));
   }
   clients=clients.DistinctBy(x=>x.Code).ToList();
   // phones often live in a separate address book table (one row per number): read every table that has a customer code and phone columns
@@ -142,7 +154,8 @@ public static class MastroReader
     var typeKey=F(d,"TIPO","TIPO_MACC","MACC_TI");if(typeKey.Length==0&&typeCol!=null)typeKey=F(d,typeCol);
     machines.Add(new("m"+id,client,F(d,"DESCRI","MODELLO"),types.TryGetValue(typeKey,out var tn)?tn:typeKey,F(d,"MATRICOLA"),F(d,"FISCALE","MATR_FISC"),F(d,"LOGOTIPO"),
      F(d,"DATA_INS"),F(d,"PRIMA_INS"),F(d,"VERIF_DATA","DATA_VERI"),!d.TryGetValue("ATTIVA",out var at)||at.Length==0||True(at),True(F(d,"ABBONATO")),
-     F(d,"INIZIO"),F(d,"FINE"),F(d,"FAT_IMP","IMPORTO"),F(d,"FILIALE","FILI_GEN"),string.Join("\n",new[]{F(d,"NOTE1"),F(d,"NOTE"),F(d,"NOTE2")}.Where(x=>x.Length>0))));
+     F(d,"INIZIO"),F(d,"FINE"),F(d,"FAT_IMP","IMPORTO"),F(d,"FILIALE","FILI_GEN"),string.Join("\n",new[]{F(d,"NOTE1"),F(d,"NOTE"),F(d,"NOTE2")}.Where(x=>x.Length>0)),
+     services.TryGetValue(F(d,"SERVIZIO"),out var sv)?sv:"",Tech(F(d,"TECNICO")),F(d,"FINE_GAR"),F(d,"MESI") is "0"?"":F(d,"MESI"),F(d,"FINE_CONTRATTO")));
    }
   }
   else warnings.Add("Tabella 'lis_macc' (parco macchine) non trovata.");
@@ -155,7 +168,7 @@ public static class MastroReader
     ("TELE_ATTIVA","Trasmissione attiva dal"),("TELE_QRCODE","QR code"),("FIRMWARE","Firmware"),("FIRMWARE_DATA","Data firmware"),("FIRMWARE_2","Firmware secondario"),("DGFE_DATA","Giornale elettronico (DGFE) dal"),("DGFE_GG","DGFE: giorni"),
     ("DATA_ULT_ZETA","Ultima chiusura Z"),("AZZ_NUME","Azzeramenti"),("AZZ_DATA","Ultimo azzeramento"),("ANNO_VER","Anno verificazione"),("IMPO_VERIFICA","Importo verificazione"),("LOTTERIA_CODICE","Lotteria scontrini"),("XML2_CODICE","Tracciato XML 7.0"),
     ("CENSIMENTO_DATA","Censimento"),("FINE_GAR","Fine garanzia"),("FINE_CONTRATTO","Fine contratto"),("MESI","Mesi abbonamento"),("COSTO","Costo"),("MESE_FATTURA","Mese fatturazione"),("UBICAZIONE","Ubicazione"),
-    ("MODE_NUM","Modello (numero)"),("VENDITO","Venditore"),("TECNICO","Tecnico"),("AGENTE","Agente"),("SERVIZIO","Servizio"),("BILANCIA","Bilancia collegata"),("PRODU_ZETA","Produttore: chiusure"),("PRODU_FIRMWARE","Produttore: firmware"),("PRODU_ABB","Produttore: abbonamento"),("PRODU_ABB_DATA","Produttore: abbonamento fino al"),("TELE_12MESI","Trasmissioni 12 mesi"),("RT_AUTO","RT automatico")];
+    ("MODE_NUM","Modello (numero)"),("VENDITO","Venditore"),("BILANCIA","Bilancia collegata"),("PRODU_ZETA","Produttore: chiusure"),("PRODU_FIRMWARE","Produttore: firmware"),("PRODU_ABB","Produttore: abbonamento"),("PRODU_ABB_DATA","Produttore: abbonamento fino al"),("TELE_12MESI","Trasmissioni 12 mesi"),("RT_AUTO","RT automatico")];
    static bool Empty(string v)=>v.Length==0||v is "0" or "0.00" or "0,00" or "N" or "n";
    var byId=new Dictionary<string,RtInfo>();var bySerial=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
    foreach(var d in await All(tMacc,300_000))
@@ -240,7 +253,7 @@ public static class MastroReader
     var n=F(d,interNum,"NUME_INTE");var client=F(d,interClient,"CODICE","CODI");if(n.Length==0||n=="0"||client.Length==0)continue;
     var work=F(d,"LAVORO","DESCRI","NOTE");
     interventions.Add(new("mi"+n,client,F(d,"CLIENTE","RAGI_SOCI","DESCRI_CLI"),F(d,interDate,"DATA_INTE"),F(d,"NUME_MACC"),work.Split('\n')[0] is var first&&first.Length>0?(first.Length>90?first[..90]+"…":first):"Intervento n. "+n,
-     work,"Chiuso",F(d,"TECNICO","OPERAIO","OPERATORE"),"Normale",F(d,"TOT_DOC"),"mastro","","","",""));
+     work,"Chiuso",Tech(F(d,"TECNICO","OPERAIO","OPERATORE")),"Normale",F(d,"TOT_DOC"),"mastro","","","",""));
    }
   }
   else warnings.Add("Archivio interventi di Mastro non trovato: verranno usati solo quelli creati nell'app.");

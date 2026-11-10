@@ -123,7 +123,7 @@ function inventoryTab(canManage){
 
 function locationsTab(canManage){
  return`<div class="card reveal" style="--i:7"><div class="card-head"><div><h2>Magazzini e furgoni</h2><p>Ogni furgone è un magazzino assegnato a un tecnico: i ricambi dei suoi interventi si scaricano da qui.</p></div>${canManage?`<button class="btn sm accent need-export" data-wnew="warehouse">${icon('plus')}Nuovo furgone / magazzino</button>`:''}</div>
- ${W.whs.map(w=>{let n=0,v=0;for(const i of W.items){const q=i.per.get(w.id)||0;if(q){n++;v+=Math.max(0,q)*i.cost;}}return`<div class="list-row" ${canManage?`data-wedit="${esc(w.id)}"`:''}><span class="mark" style="--h:${w.kind==='sede'?'#0a6bda':hue(w.id)}">${icon(w.kind==='sede'?'home':'register')}</span><div class="grow"><strong>${esc(w.name)} ${w.active?'':'<span class="badge">disattivato</span>'}</strong><small>${w.kind==='sede'?'Magazzino':'Furgone'}${w.technician?' · '+esc(w.technician):''} · ${fmt(n)} articoli · ${eur(v)}</small></div>${canManage?icon('chevron'):''}</div>`;}).join('')}</div>`;
+ ${W.whs.map(w=>{let n=0,v=0;for(const i of W.items){const q=i.per.get(w.id)||0;if(q){n++;v+=Math.max(0,q)*i.cost;}}return`<div class="list-row" ${canManage?`data-wedit="${esc(w.id)}"`:''}><span class="mark" style="--h:${w.kind==='sede'?'#0a6bda':hue(w.id)}">${icon(w.kind==='sede'?'home':'register')}</span><div class="grow"><strong>${esc(w.name)} ${w.active?'':'<span class="badge">disattivato</span>'}</strong><small>${w.kind==='sede'?'Magazzino':'Furgone'}${w.technician?' · '+esc(w.technician):''} · ${plur(n,'articolo','articoli')} · ${eur(v)}</small></div>${canManage?icon('chevron'):''}</div>`;}).join('')}</div>`;
 }
 
 // ── article sheet

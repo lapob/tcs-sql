@@ -228,6 +228,20 @@ La scheda cliente (PC, browser e Android) si apre con i **contatti rapidi** (Chi
 
 Nella pagina Interventi le viste **I miei** (assegnati a te) e **Oggi e in ritardo** mostrano subito cosa c'è da fare.
 
+## Tecnico, condizioni e pagamenti di ogni cliente
+
+Sotto il nome di ogni cliente c'è una riga che dice subito **chi lo segue, a che condizioni e se è in regola**:
+
+- **Tecnico**: quello indicato in MastroSQL sulle macchine attive (se sono più tecnici vince quello con più macchine; gli altri si vedono passando sopra col mouse), altrimenti l'agente dell'anagrafica Mastro, altrimenti chi ha fatto l'ultimo intervento. In *Clienti* c'è il filtro **Tutti i tecnici** e il nome del tecnico si può cercare.
+- **Condizioni** (dal campo *Servizio* delle macchine in MastroSQL): **Noleggio**, **Abbonamento** (anche canoni e abbonamenti telefonici), **Garanzia** (finché la garanzia della macchina è aperta), **Ore prepagate**, **Installazione**, **A chiamata** (assistenza a pagamento). Con più macchine scrive quante: *Noleggio · 3 macchine*; se c'è una scadenza la mostra.
+- **Pagamenti** (solo per chi vede la contabilità): *Deve pagare € X, tutto scaduto* oppure *di cui € Y scaduti* (con le RiBa insolute), *Da pagare € X · scade tra 12 giorni*, *In regola · ultimo pagamento …*. Compare solo quando lo scadenziario del cliente è stato importato: senza dati non afferma nulla. Un tocco apre la scheda *Contabilità*.
+
+Le scritte seguono i numeri: *1 licenza* / *3 licenze*, *scaduta 132 giorni fa* se è una sola, *tutte scadute*, *2 scadute, la prossima scade tra 40 giorni*, *Dispositivo attivo* / *Dispositivi attivi*.
+
+### Clienti archiviati (automatico, nessuna cancellazione)
+
+I clienti **senza** dispositivi attivi, licenze in corso, tecnico, pagamenti aperti, interventi negli ultimi 3 anni, ordini negli ultimi 2, note, preferito o dati dei portali vengono tolti dalla lista **Attivi** e messi in **Archiviati · N**. Non viene cancellato nulla: la ricerca li trova sempre, e appena ricevono una macchina, una licenza, un intervento o una nota tornano da soli tra gli attivi.
+
 ## Fluidità automatica
 
 Studio sceglie da solo il profilo grafico per ogni dispositivo (*Impostazioni → Prestazioni → Automatico*): misura la fluidità all'avvio e **continua a controllarla durante l'uso**. Passa da solo alla modalità leggera se lo schermo scatta, con il risparmio dati attivo, con la batteria sotto il 20% (finché non lo metti in carica) o se il sistema chiede trasparenze ridotte; rispetta "riduci movimento" e il contrasto elevato. Su touch i tocchi sono immediati e i pulsanti più grandi.

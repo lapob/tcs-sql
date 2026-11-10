@@ -332,7 +332,7 @@ tbody tr:last-child td{border-bottom:0}
 @keyframes fade{from{opacity:0}}
 .d-head{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:color-mix(in srgb,var(--surface) 85%,transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
 .d-head .tag{font-size:12px;font-weight:600;color:var(--text-3)}
-.d-body{padding:22px 26px 34px}
+.d-body{--dbp:26px;padding:22px var(--dbp) 34px}
 .d-profile{display:flex;align-items:center;gap:16px;margin-bottom:18px}
 .d-profile .mark{width:56px;height:56px;border-radius:18px;font-size:18px}
 .d-profile h2{font:650 21px/1.2 var(--font-display);letter-spacing:-.025em}
@@ -550,7 +550,7 @@ main{view-transition-name:main-content}
  td:empty,td:has(.row-go){display:none}
  .who strong{max-width:calc(100vw - 120px)}
  .drawer{inset:0;width:100%;border-radius:0;border:0}
- .d-body{padding:18px 16px calc(30px + env(safe-area-inset-bottom))}
+ .d-body{--dbp:16px;padding:18px var(--dbp) calc(30px + env(safe-area-inset-bottom))}
  .quick{grid-template-columns:repeat(4,1fr);gap:6px}
  .facts{grid-template-columns:1fr}
  .fact:nth-child(odd){border-right:0}
@@ -904,7 +904,7 @@ a,button,input,select,textarea,label,summary,[role="button"],.chip,.brand-card,.
 .gl em{font-style:normal;font-size:11.5px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gl.t-ok .gl-ic{background:var(--ok-soft);color:var(--ok)}.gl.t-due .gl-ic{background:var(--due-soft);color:var(--due)}.gl.t-bad .gl-ic{background:var(--bad-soft);color:var(--bad)}
 .gl.t-due em{color:var(--due)}.gl.t-bad em{color:var(--bad)}
-.ctabs{position:sticky;top:calc(var(--dhead,67px) - 1px);z-index:1;display:flex;gap:4px;margin:14px -18px 4px;padding:8px 18px;overflow-x:auto;scrollbar-width:none;background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.ctabs{position:sticky;top:calc(var(--dhead,67px) - 1px);z-index:1;display:flex;gap:4px;margin:14px calc(-1*var(--dbp,18px)) 4px;padding:8px var(--dbp,18px);overflow-x:auto;scrollbar-width:none;background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
 .ctabs::-webkit-scrollbar{display:none}
 .ctabs button{all:unset;box-sizing:border-box;cursor:pointer;flex:none;display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:99px;font-size:13px;font-weight:600;color:var(--text-2);transition:background .25s var(--ease),color .25s var(--ease)}
 .ctabs button svg{width:15px;height:15px}.ctabs button:hover{color:var(--text);background:var(--muted-soft)}
@@ -964,3 +964,15 @@ td.t-acts{white-space:nowrap;text-align:right}td.t-acts .icon-btn{opacity:.55;tr
 .quick:has(>button:nth-child(5)){grid-template-columns:repeat(5,1fr)}.quick:has(>button:nth-child(5)) button{padding:11px 2px;font-size:11.5px}
 @media (max-width:520px){.glance{grid-template-columns:repeat(2,1fr)}.gl{padding:9px 11px}.gl .gl-ic{width:22px;height:22px;margin-bottom:2px}.gl strong{font-size:17px}}
 .offline-bar{max-width:calc(100vw - 32px);width:max-content;font-size:12.5px;line-height:1.35;text-wrap:balance;border-radius:16px}.offline-bar svg{flex:none}
+/* ───────── customer status strip: technician, service conditions, payments */
+.cstrip{display:flex;flex-wrap:wrap;gap:6px;margin:-6px 0 16px}
+.cs-item,.svc,.cs-pay{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:99px;font-size:12px;font-weight:600;background:var(--surface-2);border:1px solid var(--line);color:var(--text-2);white-space:nowrap}
+.cs-item svg,.svc svg,.cs-pay svg{width:13px;height:13px;flex:none}.cs-item b{color:var(--text);font-weight:700}
+.svc em{font-style:normal;font-size:10.5px;padding:0 5px;border-radius:99px;background:color-mix(in srgb,currentColor 14%,transparent)}
+.svc.t-ok{background:var(--ok-soft);color:var(--ok);border-color:transparent}.svc.t-info{background:var(--info-soft);color:var(--info);border-color:transparent}
+.svc.t-acc{background:var(--accent-soft);color:var(--accent);border-color:transparent}.svc.t-due{background:var(--due-soft);color:var(--due);border-color:transparent}
+td .svc{padding:3px 8px;font-size:11px;margin:0 4px 4px 0}td small svg{width:12px;height:12px;vertical-align:-2px}
+.cs-pay{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:99px;font-size:12px;font-weight:650;white-space:normal;transition:transform .3s var(--spring),filter .2s}
+.cs-pay:hover{transform:translateY(-1px);filter:brightness(1.05)}.cs-pay:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.cs-pay svg{width:13px;height:13px}
+.cs-pay.t-late{background:var(--bad-soft);color:var(--bad)}.cs-pay.t-due{background:var(--due-soft);color:var(--due)}.cs-pay.t-ok{background:var(--ok-soft);color:var(--ok)}
+@media (prefers-reduced-motion:reduce){.cs-pay{transition:none}}

@@ -176,7 +176,7 @@ function checkPage(){
  <div class="kpis">${tabs.map(([k,l,v],i)=>`<div class="card kpi ${v?'due':'ok'} reveal" style="--i:${i+1}" data-w-check="${k}" tabindex="0"><div class="kpi-top"><span>${l}</span><span class="kpi-icon">${icon(v?'alert':'check')}</span></div><div class="kpi-value">${fmt(v)}</div><div class="kpi-note">${v?'da controllare':'tutto a posto'}</div></div>`).join('')}</div>
  <div class="card reveal" style="--i:5"><div class="card-head"><div><h2>${tabs.find(t=>t[0]===WK.check)[1]}</h2></div><div class="seg">${tabs.map(([k,l,v])=>`<button class="${WK.check===k?'active':''}" data-w-check="${k}">${l} <small>${fmt(v)}</small></button>`).join('')}</div></div>
  ${body||`<div class="empty"><span class="orb">${icon('check')}</span><h3>Tutto a posto</h3><p>Niente da sistemare in questo elenco.</p></div>`}
- ${WK.check==='dup'&&D.merged?.length?`<p class="sub" style="margin-top:12px">${fmt(D.merged.length)} clienti già uniti: per separarli apri il cliente principale → <em>Separa</em>.</p>`:''}</div>`;
+ ${WK.check==='dup'&&D.merged?.length?`<p class="sub" style="margin-top:12px">${plur(D.merged.length,'cliente già unito','clienti già uniti')}: per separarli apri il cliente principale → <em>Separa</em>.</p>`:''}</div>`;
 }
 async function mergeDialog(codes){
  const list=codes.map(c=>D.byCode.get(c)).filter(Boolean);if(list.length<2)return;

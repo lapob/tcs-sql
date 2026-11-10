@@ -5,10 +5,11 @@ namespace TopCash.Licenze;
 
 /// Customer master data imported (read-only) from MastroSQL.
 public sealed record MastroClient(string Code,string Name,string Vat,string TaxCode,string Address,string Cap,string City,string Prov,string Zone,
- List<string> Phones,List<string> Emails,string Pec,string Notes,Dictionary<string,string> Extra);
+ List<string> Phones,List<string> Emails,string Pec,string Notes,Dictionary<string,string> Extra,string Agent="");
 /// A cash register / device installed at a customer (Mastro "lis_macc"), with periodic verification and service contract.
 public sealed record Machine(string Id,string ClientCode,string Model,string Type,string Serial,string FiscalSerial,string Logo,string Installed,string FirstInstall,
- string Verification,bool Active,bool Subscribed,string ContractStart,string ContractEnd,string Amount,string Branch,string Notes);
+ string Verification,bool Active,bool Subscribed,string ContractStart,string ContractEnd,string Amount,string Branch,string Notes,
+ string Service="",string Technician="",string WarrantyEnd="",string Months="",string ContractUntil="");
 /// Technical intervention / ticket. Source "mastro" = history imported from Mastro, "app" = created in Top Cash Studio.
 public sealed record Intervention(string Id,string ClientCode,string ClientName,string Date,string Machine,string Title,string Work,string Status,
  string Technician,string Priority,string Total,string Source,string Created,string CreatedBy,string Updated,string UpdatedBy,List<PartUse>? Parts=null,

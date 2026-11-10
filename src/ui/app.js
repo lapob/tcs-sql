@@ -209,22 +209,22 @@ function todayCard(){
  const st=state.dtrStatus||{};const stale=WEB&&st.lastSync&&st.checkedAt&&(Date.now()-new Date(st.checkedAt))>3*3600e3;
  const rows=[
   [stale,'alert','bad','La postazione di sincronizzazione non si vede da '+(stale?Math.round((Date.now()-new Date(st.checkedAt))/3600e3):0)+' ore','Zucchetti, DTR e Ital Retail non si aggiornano: controlla che il PC dell’ufficio sia acceso con Studio aperto.','sync'],
-  [D.openInterventions.length,'tool','info',`${fmt(D.openInterventions.length)} interventi aperti`,'Da completare o chiudere','interventions'],
+  [D.openInterventions.length,'tool','info',`${plur(D.openInterventions.length,'intervento aperto','interventi aperti')}`,'Da completare o chiudere','interventions'],
   [late,'task','due',`${fmt(late)} promemoria da fare`,'Contatti fissati per oggi o già passati','tasks'],
-  [week.length,'calendar','due',`${fmt(week.length)} scadenze entro 7 giorni`,'Licenze, verificazioni, abbonamenti, GE e certificati (comprese quelle già passate)','expiry'],
-  [dt?.errors.length,'alert','bad',`${fmt(dt?.errors.length||0)} casse con errori`,'Errori o avvisi inviati a DTR negli ultimi 7 giorni','dtr','errors'],
-  [dt?.silent.length,'clock','bad',`${fmt(dt?.silent.length||0)} casse silenziose`,'Nessuna comunicazione da oltre 7 giorni','dtr','silent'],
-  [it?.update.length,'download','due',`${fmt(it?.update.length||0)} casse Ital Retail da aggiornare`,'Nuovo firmware disponibile sul portale','ital','update'],
+  [week.length,'calendar','due',`${plur(week.length,'scadenza entro 7 giorni','scadenze entro 7 giorni')}`,'Licenze, verificazioni, abbonamenti, GE e certificati (comprese quelle già passate)','expiry'],
+  [dt?.errors.length,'alert','bad',`${plur(dt?.errors.length||0,'cassa con errori','casse con errori')}`,'Errori o avvisi inviati a DTR negli ultimi 7 giorni','dtr','errors'],
+  [dt?.silent.length,'clock','bad',`${plur(dt?.silent.length||0,'cassa silenziosa','casse silenziose')}`,'Nessuna comunicazione da oltre 7 giorni','dtr','silent'],
+  [it?.update.length,'download','due',`${plur(it?.update.length||0,'cassa Ital Retail da aggiornare','casse Ital Retail da aggiornare')}`,'Nuovo firmware disponibile sul portale','ital','update'],
   [it?.low.length,'box','bad',`${fmt(it?.low.length||0)} giornali elettronici quasi pieni`,'Casse Ital Retail con poco spazio nel DGFE','ital','dgfe'],
-  [typeof A!=='undefined'&&A?A.overdue.length:0,'euro','due',`${fmt(typeof A!=='undefined'&&A?A.overdue.length:0)} scadenze contabili passate`,'Incassi e pagamenti da sollecitare','accounting'],
-  [isAdmin()&&typeof W!=='undefined'&&W?W.below.length:0,'box','due',`${fmt(typeof W!=='undefined'&&W?W.below.length:0)} articoli sotto scorta`,'Da riordinare','warehouse'],
+  [typeof A!=='undefined'&&A?A.overdue.length:0,'euro','due',`${plur(typeof A!=='undefined'&&A?A.overdue.length:0,'scadenza contabile passata','scadenze contabili passate')}`,'Incassi e pagamenti da sollecitare','accounting'],
+  [isAdmin()&&typeof W!=='undefined'&&W?W.below.length:0,'box','due',`${plur(typeof W!=='undefined'&&W?W.below.length:0,'articolo sotto scorta','articoli sotto scorta')}`,'Da riordinare','warehouse'],
  ].filter(r=>r[0]);
  return`<div class="card reveal today" style="--i:5"><div class="card-head"><div><h2>Da fare oggi</h2><p>${rows.length?'Solo quello che richiede attenzione.':'Niente in sospeso: tutto in ordine.'}</p></div></div>
   ${rows.map(([,ic,tone,title,sub,pg,tab])=>`<div class="list-row" data-go="${pg}"${tab?` data-go-${pg==='ital'?'itab':'dtab'}="${tab}"`:''} tabindex="0"><span class="today-ic t-${tone}">${icon(ic)}</span><div class="grow"><strong>${title}</strong><small>${sub}</small></div><span class="row-go">${icon('chevron')}</span></div>`).join('')||empty('check','Tutto fatto','Nessuna scadenza, errore o promemoria in sospeso.')}</div>`;
 }
 function overview(){
  const h=new Date().getHours();const greet=h<13?'Buongiorno':h<18?'Buon pomeriggio':'Buonasera';
- const cs=D.clients,withMail=cs.filter(c=>c.email).length,withPhone=cs.filter(c=>telOk(c.phone)).length;
+ const cs=D.clients.filter(c=>!c.dormant),withMail=cs.filter(c=>c.email).length,withPhone=cs.filter(c=>telOk(c.phone)||c.phones?.some(telOk)).length;
  const upcoming=D.current.filter(r=>{const d=days(r.expiry);return d!==null&&d>=-7&&d<=60;}).sort((a,b)=>parseDate(a.expiry)-parseDate(b.expiry)).slice(0,7);
  const months=[...Array(12)].map((_,i)=>{const d=new Date(today.getFullYear(),today.getMonth()-11+i,1);return{d,n:D.orders.filter(o=>o.d&&o.d.getFullYear()===d.getFullYear()&&o.d.getMonth()===d.getMonth()).length};});const maxM=Math.max(1,...months.map(m=>m.n));
  const fams=Object.keys(FAMILY).map(f=>({f,n:D.current.filter(r=>famOfScope(r.scope)===f).length})).filter(x=>x.n);const maxF=Math.max(1,...fams.map(x=>x.n));
@@ -233,10 +233,10 @@ function overview(){
  return`${hero(`${greet}, <span class="grad">${esc(WEB&&me?.name?me.name.split(/\s+/)[0]:'Top Cash')}</span>.`,`Tutti i tuoi clienti, licenze e ordini Zucchetti in un unico posto · ${DF4.format(new Date())}`,`<button class="btn" data-action="exportClients">${icon('download')}Esporta anagrafica</button>`)}
  ${explain('overview','<strong>Questa è la tua plancia.</strong> In alto i numeri chiave (cliccali per aprire la sezione), poi le scadenze imminenti, l’andamento degli ordini e lo stato delle licenze. Usa <strong>Ctrl K</strong> in qualsiasi momento per trovare un cliente, una matricola o un ordine.')}
  <div class="kpis">
-  ${kpi('Clienti',cs.length,`${fmt(withPhone)} con telefono · ${fmt(withMail)} con email`,'users','','clients',2,'Clienti distinti da anagrafica e licenze Zucchetti')}
+  ${kpi(cs.length===1?'Cliente attivo':'Clienti attivi',cs.length,`${fmt(withPhone)} con telefono${D.dormant?' · '+plur(D.dormant,'archiviato','archiviati'):' · '+fmt(withMail)+' con email'}`,'users','','clients',2,'Clienti distinti da anagrafica e licenze Zucchetti')}
   ${kpi('Licenze attive',D.current.length,`${fmt(D.history.length)} nello storico scadute`,'key','t-ok','licenses',3,'Licenze presenti negli elenchi correnti del portale')}
   ${kpi('In scadenza · 30 gg',D.due30.length,D.overdue.length?`${fmt(D.overdue.length)} già scadute da gestire`:'Nessuna scaduta in sospeso','clock','t-due','expiry',4,'Licenze che scadono nei prossimi 30 giorni')}
-  ${kpi('Interventi aperti',D.openInterventions.length,D.verDue.length?`${fmt(D.verDue.length)} verificazioni entro 60 gg`:`${fmt(D.orders30.length)} ordini Zucchetti in 30 gg`,'tool','t-info','interventions',5,'Interventi tecnici non ancora chiusi')}
+  ${kpi('Interventi aperti',D.openInterventions.length,D.verDue.length?`${plur(D.verDue.length,'verificazione entro 60 gg','verificazioni entro 60 gg')}`:`${plur(D.orders30.length,'ordine Zucchetti in 30 gg','ordini Zucchetti in 30 gg')}`,'tool','t-info','interventions',5,'Interventi tecnici non ancora chiusi')}
  </div>
  <div class="layout-2"><div class="stack">
   ${todayCard()}
@@ -262,6 +262,8 @@ function donut(){const groups=[['Attiva','var(--ok)'],['In scadenza','var(--due)
 function clientsPage(){
  let list=D.clients;const q=norm(ui.q);
  if(q)list=list.filter(c=>c.search.includes(q));
+ else if(ui.clientView==='archived')list=list.filter(c=>c.dormant);else list=list.filter(c=>!c.dormant);
+ if(ui.ctech)list=list.filter(c=>c.tech===ui.ctech);
  if(ui.status)list=list.filter(c=>c.status===ui.status);
  if(ui.product)list=list.filter(c=>c.families.includes(ui.product));
  if(ui.city)list=list.filter(c=>c.city===ui.city);
@@ -274,10 +276,10 @@ function clientsPage(){
  return`${hero('I tuoi <span class="grad">clienti</span>.','Anagrafica completa dal portale Zucchetti, unita a licenze, ordini e alle tue note.',`${canEditClients()?`<button class="btn accent" data-new-client>${icon('plus')}Nuovo cliente</button>`:''}<button class="btn" data-action="exportClients">${icon('download')}Esporta CSV</button>`)}
  ${explain('clients','<strong>Clicca su un cliente</strong> per aprire la sua scheda: contatti, licenze, ordini, promemoria e note. Le icone nella colonna Contatti ti permettono di <strong>chiamare, scrivere o aprire la mappa</strong> con un clic. Clicca sull’intestazione di una colonna per ordinarla.')}
  <div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Anagrafica<span class="count">${fmt(list.length)}</span></h2><p>${fmt(D.clients.filter(c=>c.registry).length)} schede dal portale Zucchetti · ${fmt(D.clients.filter(c=>c.mastro).length)} da MastroSQL · ${fmt(D.clients.filter(c=>c.meta.favorite).length)} preferiti</p></div>
-  <div class="seg">${[['all','Tutti'],['fav','Preferiti'],['nocontact','Senza contatti'],...(isAdmin()&&D.deleted?.length?[['deleted',`Eliminati · ${D.deleted.length}`]]:[])].map(([k,l])=>`<button class="${ui.clientView===k?'active':''}" data-cview="${k}">${l}</button>`).join('')}</div></div>
-  <div class="toolbar">${search('Cerca per nome, P.IVA, città, telefono, email, matricola…')}${sel('f-status','Tutti gli stati',['Attiva','In scadenza','Scaduta','Bloccata','Da verificare','Senza licenze'],ui.status)}${sel('f-product','Tutti i prodotti',Object.keys(FAMILY),ui.product)}${sel('f-city','Tutte le località',cities,ui.city)}</div>
+  <div class="seg">${[['all','Attivi'],['fav','Preferiti'],['nocontact','Senza contatti'],...(D.dormant?[['archived',`Archiviati · ${fmt(D.dormant)}`]]:[]),...(isAdmin()&&D.deleted?.length?[['deleted',`Eliminati · ${D.deleted.length}`]]:[])].map(([k,l])=>`<button class="${ui.clientView===k?'active':''}" data-cview="${k}">${l}</button>`).join('')}</div></div>
+  <div class="toolbar">${search('Cerca per nome, P.IVA, città, telefono, email, matricola…')}${sel('f-status','Tutti gli stati',['Attiva','In scadenza','Scaduta','Bloccata','Da verificare','Senza licenze'],ui.status)}${sel('f-product','Tutti i prodotti',Object.keys(FAMILY),ui.product)}${sel('f-city','Tutte le località',cities,ui.city)}${D.techList?.length?sel('f-ctech','Tutti i tecnici',D.techList,ui.ctech):''}</div>
   <div class="table-wrap"><table><thead><tr>${th('Cliente','name')}${th('Località','city')}<th>Contatti</th><th>Prodotti</th>${th('Licenze','lic','Licenze negli elenchi correnti')}${th('Prossima scadenza','next')}<th>Stato</th><th></th></tr></thead><tbody>
-  ${rows.map((c,i)=>`<tr class="reveal" style="--i:${i}" data-client="${esc(c.code)}" tabindex="0"><td><div class="who">${markEl(c.name,c.code)}<div><strong>${hl(c.name,ui.q)}${c.meta.favorite?`<svg class="fav"><use href="#i-star"/></svg>`:''}</strong><small>Cod. ${esc(c.code.replace(/^0+/,''))}${c.vat?` · P.IVA ${esc(c.vat)}`:''}</small></div></div></td><td>${c.city?esc(c.city):'<span class="muted">—</span>'}</td><td>${contacts(c)}</td><td>${c.families.map(f=>`<span class="chip">${esc(famLabel(f))}</span>`).join('')}</td><td class="num">${c.active.length}${c.records.length>c.active.length?`<span class="muted"> +${c.records.length-c.active.length}</span>`:''}</td><td>${c.next?`${dShort(c.next)}<br><small class="muted">${rel(dayDiff(c.next))}</small>`:'<span class="muted">—</span>'}</td><td>${badge(c.status)}</td><td><span class="row-go">${icon('chevron')}</span></td></tr>`).join('')||`<tr><td colspan="8">${empty('search','Nessun cliente trovato','Prova con un altro nome, una partita IVA o una matricola.')}</td></tr>`}
+  ${rows.map((c,i)=>`<tr class="reveal" style="--i:${i}" data-client="${esc(c.code)}" tabindex="0"><td><div class="who">${markEl(c.name,c.code)}<div><strong>${hl(c.name,ui.q)}${c.meta.favorite?`<svg class="fav"><use href="#i-star"/></svg>`:''}</strong><small>Cod. ${esc(c.code.replace(/^0+/,''))}${c.vat?` · P.IVA ${esc(c.vat)}`:''}</small></div></div></td><td>${c.city?esc(c.city):'<span class="muted">—</span>'}${c.tech?`<br><small class="muted">${icon('tool')} ${esc(c.tech)}</small>`:''}</td><td>${contacts(c)}</td><td>${(c.kinds||[]).map(g=>svcChip(g,1)).join('')}${c.families.map(f=>`<span class="chip">${esc(famLabel(f))}</span>`).join('')}</td><td class="num">${c.active.length}${c.records.length>c.active.length?`<span class="muted"> +${c.records.length-c.active.length}</span>`:''}</td><td>${c.next?`${dShort(c.next)}<br><small class="muted">${rel(dayDiff(c.next))}</small>`:'<span class="muted">—</span>'}</td><td>${badge(c.status)}</td><td><span class="row-go">${icon('chevron')}</span></td></tr>`).join('')||`<tr><td colspan="8">${empty('search','Nessun cliente trovato','Prova con un altro nome, una partita IVA o una matricola.')}</td></tr>`}
   </tbody></table></div>${pager(list.length,size)}</div>`;
 }
 
@@ -363,7 +365,7 @@ function tasksPage(){
  </div><div class="card reveal" style="--i:3"><h2>Suggeriti</h2><p class="sub">Licenze in scadenza, nessun promemoria.</p><div style="margin-top:10px">${suggest.map(c=>`<div class="list-row" data-client="${esc(c.code)}">${markEl(c.name,c.code)}<div class="grow"><strong>${esc(c.name)}</strong><small>Scade ${rel(dayDiff(c.next))}</small></div>${icon('plus')}</div>`).join('')||'<p class="sub">Tutto pianificato.</p>'}</div></div></div>`;
 }
 function syncPage(){
- const famRows=Object.keys(FAMILY).map(f=>{const a=state.sources.find(s=>s.scope===f+'-attive'),s=state.sources.find(s=>s.scope===f+'-scadute');const cl=(state.clients||[]).filter(c=>c.families.includes(f)).length,or=(state.orders||[]).filter(o=>o.family===f).length;return`<div class="source-row"><div><strong>${esc(famLabel(f))}</strong><small>${fmt(a?.rowCount||0)} attive · ${fmt(s?.rowCount||0)} scadute · ${fmt(cl)} anagrafiche · ${fmt(or)} ordini</small></div>${a?.complete?'<span class="badge ok">Letto</span>':'<span class="badge">Da leggere</span>'}</div>`;}).join('');
+ const famRows=Object.keys(FAMILY).map(f=>{const a=state.sources.find(s=>s.scope===f+'-attive'),s=state.sources.find(s=>s.scope===f+'-scadute');const cl=(state.clients||[]).filter(c=>c.families.includes(f)).length,or=(state.orders||[]).filter(o=>o.family===f).length;return`<div class="source-row"><div><strong>${esc(famLabel(f))}</strong><small>${plur(a?.rowCount||0,'attiva','attive')} · ${fmt(s?.rowCount||0)} scadute · ${fmt(cl)} anagrafiche · ${plur(or,'ordine','ordini')}</small></div>${a?.complete?'<span class="badge ok">Letto</span>':'<span class="badge">Da leggere</span>'}</div>`;}).join('');
  const step1=state.portalConnected,step2=(state.clients||[]).length>0;
  return`${hero('<span class="grad">Sincronizzazione</span> Zucchetti.','Come arrivano i dati, cosa è stato letto e la cronologia di ogni aggiornamento.','')}
  ${explain('sync','La sincronizzazione apre MY Zucchetti in una finestra protetta: <strong>accedi tu</strong> con le tue credenziali (l’app non le salva). Poi l’app legge licenze, anagrafiche e ordini di tutte le famiglie, <strong>solo in lettura</strong>, e si ripete da sola ogni 6 ore finché la finestra resta aperta.')}
@@ -477,7 +479,7 @@ function mastroCard(i){
  ${s?.stage==='reading'?`<p class="sub" style="margin-top:12px"><span class="badge acc"><span class="spinner"></span>Lettura da ${esc(s.source)}…</span></p>`:''}
  ${s?.ok===false?`<p class="sub" style="margin-top:12px;color:var(--bad)">${esc(s.error)}</p>`:''}
  <div class="btn-row" style="margin-top:14px"><button class="btn accent sm" data-action-local="mastroRead"${s?.stage==='reading'?' disabled':''}>${icon('download')}Leggi da MastroSQL</button></div>
- ${(state.mastroClients||[]).length?`<p class="sub" style="margin-top:10px">In archivio: ${fmt(state.mastroClients.length)} clienti Mastro · ${fmt((state.machines||[]).length)} macchine · ${fmt((state.interventions||[]).filter(x=>x.source==='mastro').length)} interventi storici.</p>`:''}</div>`;
+ ${(state.mastroClients||[]).length?`<p class="sub" style="margin-top:10px">In archivio: ${plur(state.mastroClients.length,'cliente Mastro','clienti Mastro')} · ${plur((state.machines||[]).length,'macchina','macchine')} · ${plur((state.interventions||[]).filter(x=>x.source==='mastro').length,'intervento storico','interventi storici')}.</p>`:''}</div>`;
 }
 async function mastroPreview(v){
  const p=v.preview;
@@ -485,7 +487,7 @@ async function mastroPreview(v){
  const ok=await ask({title:'Anteprima importazione MastroSQL',text:`Origine: <strong>${esc(v.source)}</strong>. I dati Mastro già presenti verranno sostituiti con questa lettura; interventi creati nell’app, note e promemoria restano invariati.`,
   html:`<div class="stat-line"><span>Clienti</span><strong>${fmt(p.clients)}</strong></div><div class="stat-line"><span>con telefono / con email</span><strong>${fmt(p.withPhone)} / ${fmt(p.withEmail)}</strong></div><div class="stat-line"><span>Macchine</span><strong>${fmt(p.machines)}</strong></div><div class="stat-line"><span>Interventi storici</span><strong>${fmt(p.interventions)}</strong></div><div class="stat-line"><span>Articoli di magazzino</span><strong>${fmt(p.articles||0)}</strong></div><div class="stat-line"><span>Fatture / note di credito</span><strong>${fmt(p.invoices||0)}</strong></div><div class="stat-line"><span>Scadenze (incassi e pagamenti)</span><strong>${fmt(p.dues||0)}</strong></div>
    ${p.stockRows?`<label class="check" style="margin-top:8px"><input type="checkbox" id="mastro-align"> Allinea anche le giacenze a quelle di Mastro (${fmt(p.stockRows)} righe, ${fmt(p.warehouses)} magazzini)</label><p class="muted" style="font-size:12px">Senza spunta viene importato solo il catalogo: le quantità restano quelle registrate in Top Cash Studio. L’allineamento registra delle rettifiche, quindi resta tutto tracciato.</p>`:''}
-   ${p.warnings.map(w=>`<p class="muted" style="font-size:12px">⚠ ${esc(w)}</p>`).join('')}<details style="font-size:12.5px"><summary style="cursor:pointer;color:var(--accent)">Esempio dei primi clienti</summary>${sample}</details>`,ok:`Importa ${fmt(p.clients)} clienti`});
+   ${p.warnings.map(w=>`<p class="muted" style="font-size:12px">⚠ ${esc(w)}</p>`).join('')}<details style="font-size:12.5px"><summary style="cursor:pointer;color:var(--accent)">Esempio dei primi clienti</summary>${sample}</details>`,ok:`Importa ${plur(p.clients,'cliente','clienti')}`});
  const align=!!lastAskAlign;
  if(!ok){toast('Importazione annullata: nessun dato modificato');return;}
  if(WEB){try{const r=await post('/api/mastro/import',{...v.batch,alignStock:align});toast(r.message);}catch(x){toast(x.message,'alert');}}else send('mastroImport',{align});
@@ -756,7 +758,7 @@ function countUp(){if(reduced)return;$$('[data-count]').forEach(el=>{const to=+e
 function bind(){
  const q=$('#q');if(q)q.addEventListener('input',e=>{ui.q=e.target.value;ui.p=1;clearTimeout(searchTimer);searchTimer=setTimeout(()=>requestAnimationFrame(()=>render(false)),90);});
  const on=(id,key)=>{const el=$('#'+id);if(el)el.addEventListener('change',e=>{ui[key]=e.target.value;ui.p=1;render(false);});};
- on('f-status','status');on('f-product','product');on('f-city','city');on('f-ostatus','ostatus');on('f-ofam','ofam');on('f-tech','tech');
+ on('f-status','status');on('f-product','product');on('f-city','city');on('f-ctech','ctech');on('f-ostatus','ostatus');on('f-ofam','ofam');on('f-tech','tech');
 }
 
 // ───────────────────────── theme

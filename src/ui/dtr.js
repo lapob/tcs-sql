@@ -68,7 +68,7 @@ const viaBadge=r=>r.via==='serial'?`<span class="link-tag ok" data-tip="Abbinato
  :r.via==='name'?'<span class="link-tag" data-tip="Abbinato per nome: un collegamento certo arriva con la matricola in Mastro o con la partita IVA">per nome</span>':'<span class="link-tag bad">non collegato</span>';
 const fwLabel=n=>n?`${Math.floor(n/1000)}.${String(n%1000).padStart(2,'0')}`:'';
 function seenText(r){if(!r.lastSync)return'<span class="muted">mai</span>';return`${dtTime(r.lastSync)}<br><small style="color:var(--${r.silent?'bad':'text-3'})">${rel(r.seen)}</small>`;}
-function geText(r){if(!r.geDue)return'<span class="muted">—</span>';return`<span class="mono">GE ${r.geNumber||'—'}</span> · ${dShort(parseDate(r.geDue))}${dueSmall(r.ge,DTR_GE_SOON)}${r.remaining!==null?`<br><small style="color:var(--${r.lowZ?'bad':'text-3'})">${fmt(r.remaining)} chiusure rimanenti</small>`:''}`;}
+function geText(r){if(!r.geDue)return'<span class="muted">—</span>';return`<span class="mono">GE ${r.geNumber||'—'}</span> · ${dShort(parseDate(r.geDue))}${dueSmall(r.ge,DTR_GE_SOON)}${r.remaining!==null?`<br><small style="color:var(--${r.lowZ?'bad':'text-3'})">${plur(r.remaining,'chiusura rimanente','chiusure rimanenti')}</small>`:''}`;}
 function flags(r){return[r.warn?`<span class="badge bad" data-tip="${esc(r.d?.warning||r.recentErr[0]?.text||'')}">errori</span>`:'',r.silent?'<span class="badge bad">silenziosa</span>':'',r.lowZ?'<span class="badge due">GE quasi pieno</span>':'',r.cert!==null&&r.cert<=DTR_CERT_SOON?'<span class="badge due">certificato</span>':'',r.licDays!==null&&r.licDays<=DTR_LIC_SOON?'<span class="badge due">licenza</span>':'',r.old?'<span class="badge">firmware</span>':''].filter(Boolean).join(' ');}
 
 function dtrStatusCard(){
@@ -147,7 +147,7 @@ function openDtr(serial){
 function dtrClientSection(c){
  if(!c.dtr?.length)return'';
  return`<div class="d-section"><h3>Registratori DTR <span>${c.dtr.length}</span></h3>${c.dtr.map(r=>`<div class="lic" data-dtr="${esc(r.serial)}" style="cursor:pointer"><div class="lic-top"><strong class="mono">${esc(r.serial)}${r.m?` <small class="muted">${esc(r.m.model||'')}</small>`:''}</strong>${flags(r)||'<span class="badge ok">regolare</span>'}</div>
-  <small>GE ${r.geNumber||'—'} · scade ${dShort(parseDate(r.geDue))} (${rel(r.ge)||'—'})${r.remaining!==null?` · ${fmt(r.remaining)} chiusure rimanenti`:''} · firmware ${esc(r.firmware||'—')} · ultima comunicazione ${r.lastSync?dtTime(r.lastSync):'mai'}${r.d?.certDue?' · certificato '+dShort(parseDate(r.d.certDue)):''}${r.d?.lastVp?' · VP '+dShort(parseDate(r.d.lastVp)):''}${r.d?.address?' · '+esc(r.d.address.replace(/\s+IT$/,'')):''}</small></div>`).join('')}</div>`;
+  <small>GE ${r.geNumber||'—'} · scade ${dShort(parseDate(r.geDue))} (${rel(r.ge)||'—'})${r.remaining!==null?` · ${plur(r.remaining,'chiusura rimanente','chiusure rimanenti')}`:''} · firmware ${esc(r.firmware||'—')} · ultima comunicazione ${r.lastSync?dtTime(r.lastSync):'mai'}${r.d?.certDue?' · certificato '+dShort(parseDate(r.d.certDue)):''}${r.d?.lastVp?' · VP '+dShort(parseDate(r.d.lastVp)):''}${r.d?.address?' · '+esc(r.d.address.replace(/\s+IT$/,'')):''}</small></div>`).join('')}</div>`;
 }
 
 document.addEventListener('click',e=>{
