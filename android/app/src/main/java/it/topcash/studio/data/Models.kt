@@ -67,11 +67,21 @@ import kotlinx.serialization.Serializable
     val stock: List<StockRow> = emptyList(), val movements: List<Movement> = emptyList(),
     val invoices: List<Invoice> = emptyList(), val dues: List<Due> = emptyList(), val balances: List<Balance> = emptyList(), val dueNotes: Map<String, DueNote> = emptyMap(),
     val features: Features = Features(),
+    val dtr: List<DtrRegister> = emptyList(), val dtrStatus: DtrStatus = DtrStatus(),
     val version: Long = 0,
 )
 /** Server capabilities: [mail] = signed reports can be e-mailed to the customer from the server. */
 @Serializable data class Features(val mail: Boolean = false, val backupError: String = "")
 @Serializable data class SendReportRequest(val to: String)
+/** DTR-Service (telematic cash registers): read-only copy kept by the sync station. Dates are ISO. */
+@Serializable data class DtrRegister(val serial: String = "", val tags: String = "", val client: String = "", val alias: String = "", val firmware: String = "",
+    val geNumber: Int = 0, val geDue: String = "", val lastZ: Int = 0, val lastSync: String = "", val detail: DtrDetail? = null)
+@Serializable data class DtrDetail(val holder: String = "", val vat: String = "", val certDue: String = "", val lastVp: String = "", val geInit: String = "",
+    val licenses: List<DtrLicense>? = null, val errors: List<DtrEvent>? = null, val works: List<DtrEvent>? = null,
+    val extensions: String = "", val readAt: String = "", val warning: String = "", val address: String = "")
+@Serializable data class DtrLicense(val from: String = "", val to: String = "", val status: String = "", val name: String = "", val type: String = "")
+@Serializable data class DtrEvent(val at: String = "", val text: String = "")
+@Serializable data class DtrStatus(val connected: Boolean = false, val lastSync: String = "", val checkedAt: String = "", val error: String = "")
 @Serializable data class Me(val username: String = "", val name: String = "", val role: String = "", val roleLabel: String = "")
 @Serializable data class Session(val setupNeeded: Boolean = false, val user: Me? = null, val version: Long = 0)
 @Serializable data class ServerError(val error: String = "", val device: String = "", val code: String = "")

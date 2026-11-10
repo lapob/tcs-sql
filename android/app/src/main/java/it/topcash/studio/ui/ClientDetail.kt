@@ -120,6 +120,10 @@ import java.time.ZoneOffset
             item(key = "m-title") { SectionTitle("Macchine installate (${c.machines.size})") }
             c.machines.forEach { m -> item(key = "m" + m.m.id) { MachineCard(m, Modifier.padding(bottom = 8.dp)) } }
         }
+        if (c.registers.isNotEmpty()) {
+            item(key = "dtr-title") { SectionTitle("Registratori DTR (${c.registers.size})") }
+            c.registers.forEach { r -> item(key = "dtr" + r.r.serial) { RegisterCard(r, Modifier.padding(bottom = 8.dp), showClient = false) } }
+        }
         clientAccounting(a, c) { dueOpen = it }
         if (c.licenses.isNotEmpty()) {
             item(key = "l-title") { SectionTitle("Licenze Zucchetti (${c.licenses.size})") }

@@ -140,6 +140,18 @@ Oltre all'elenco, Studio legge la **scheda di dettaglio** di ogni registratore (
 
 Ogni cassa è collegata al cliente di Studio per **matricola** (macchina importata da Mastro), poi per **partita IVA**, infine per nome. Nella pagina: GE da rinnovare, casse con errori, casse **silenziose** (nessuna comunicazione da oltre 7 giorni), certificati e licenze RT-Utility in scadenza, firmware da aggiornare, casse non presenti in Mastro e macchine di Mastro che DTR non conosce. Clic su una riga: scheda completa del registratore, con *Apri cliente* e *Nuovo intervento*. I dati DTR compaiono anche in **Macchine** e nella scheda cliente.
 
+### Tenere sempre accesa la postazione
+
+In **Impostazioni → Avvio automatico** scegli *Avvia con Windows*: Studio parte da solo all'accesso, ridotto a icona, e riprende subito Zucchetti e DTR-Service. Se la postazione non si fa sentire da più di 3 ore, in **Panoramica → Da fare oggi** compare un avviso per tutti.
+
+## Come è organizzato Studio
+
+- **Panoramica**: la scheda *Da fare oggi* mostra solo ciò che richiede attenzione (interventi aperti, promemoria, scadenze entro 7 giorni, casse con errori o silenziose, rate scadute, articoli sotto scorta); ogni riga apre la pagina giusta.
+- **Clienti e lavoro**: Clienti, Interventi, Attività, Scadenze. **Scadenze** è un'agenda unica: licenze Zucchetti, verificazioni, abbonamenti, giornali elettronici, certificati RT e licenze RT-Utility, filtrabile per tipo e per periodo (7, 30, 90 giorni).
+- **Parco installato**: Macchine, Registratori DTR, Licenze, Ordini.
+- **Amministrazione**: Magazzino, Contabilità.
+- **Sistema**: Sincronizzazione, Impostazioni, Utenti.
+
 ## 8. App Android
 
 App **nativa** (Kotlin + Jetpack Compose, Material 3) — File: `D:\TopCashSQL\android\TopCash-Studio.apk`.
@@ -148,7 +160,7 @@ App **nativa** (Kotlin + Jetpack Compose, Material 3) — File: `D:\TopCashSQL\a
 2. Al primo avvio l'indirizzo `192.168.1.220` è già inserito: premi **Collega**.
 3. Accedi con il tuo utente (resta connesso).
 
-Home con indicatori, Clienti con ricerca e scheda completa (chiama, email, mappa, preferiti, promemoria, note), Interventi (crea, modifica, stati e priorità, ricambi, rapportino con firma e invio PDF), Magazzino con scanner, Macchine e verificazioni, Scadenziario, Licenze, Ordini, tema chiaro/scuro. Si aggiorna in tempo reale e mostra gli ultimi dati anche senza rete.
+**Registratori DTR** (in *Altro*: giornale elettronico, chiusure rimanenti, certificato, errori e interventi di ogni cassa, anche nella scheda cliente e nello scadenziario). Home con indicatori, Clienti con ricerca e scheda completa (chiama, email, mappa, preferiti, promemoria, note), Interventi (crea, modifica, stati e priorità, ricambi, rapportino con firma e invio PDF), Magazzino con scanner, Macchine e verificazioni, Scadenziario, Licenze, Ordini, tema chiaro/scuro. Si aggiorna in tempo reale e mostra gli ultimi dati anche senza rete.
 
 Per ricompilare: `powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\android\build.ps1` (aggiungi `-Install` per installarla sul telefono collegato).
 **Conserva** `android\topcash-release.keystore` e `android\keystore-password.txt`: servono per gli aggiornamenti dell'app.

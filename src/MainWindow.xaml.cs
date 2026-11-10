@@ -113,7 +113,7 @@ public partial class MainWindow : Window
   if(r==MessageBoxResult.No){serverUrl="";SaveSettings();}Navigate();
   }finally{serverErrorOpen=false;}
  }
- static readonly HashSet<string> RemoteActions=["external","portal","syncPortal","disconnectServer","setSyncToken","hostInfo","mastroRead","setExternal","dtr","dtrSync"];
+ static readonly HashSet<string> RemoteActions=["external","portal","syncPortal","disconnectServer","setSyncToken","hostInfo","mastroRead","setExternal","dtr","dtrSync","autostart"];
  MastroBatch? lastMastro;
  static readonly JsonSerializerOptions jsonIn=new(){PropertyNameCaseInsensitive=true};
  /// Reads Mastro (read-only) on this PC and hands a preview to the page. Local mode keeps the batch for "mastroImport";
@@ -185,7 +185,10 @@ public partial class MainWindow : Window
       Process.Start(new ProcessStartInfo(tmp){UseShellExecute=true});await Notify("PDF aperto: stampalo con Ctrl+P.");}break;
     case "interventionDelete":
      try{store.DeleteIntervention(root.GetProperty("id").GetString()??"");await Push();await Notify("Intervento eliminato.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
-    case "hostInfo":Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,serverExternal,activeServer=Active,portalOpen=portal!=null});break;
+    case "hostInfo":Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,serverExternal,activeServer=Active,portalOpen=portal!=null,autostart=Autostart});break;
+    case "autostart":
+     Autostart=root.GetProperty("on").GetBoolean();Post(new{type="host",autostart=Autostart});
+     await Notify(Autostart?"Studio partirà da solo all'accesso a Windows, ridotto a icona.":"Avvio automatico disattivato.");break;
     case "setExternal":
      {
       var raw=(root.GetProperty("url").GetString()??"").Trim();
@@ -242,6 +245,13 @@ public partial class MainWindow : Window
   _=Notify("La sincronizzazione con Zucchetti si avvia dalla postazione dell'ufficio. Un amministratore può attivarla da Impostazioni → Postazione di sincronizzazione.");return false;
  }
  void Post(object payload){try{Dashboard.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(payload,json));}catch{}}
+ /// Start with Windows (current user only, HKCU "Run"): keeps the sync station working after a restart.
+ const string RunKey=@"Software\Microsoft\Windows\CurrentVersion\Run",RunName="TopCashStudio";
+ static bool Autostart
+ {
+  get{try{using var k=Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKey);return k?.GetValue(RunName) is string v&&v.Contains(Environment.ProcessPath??"?",StringComparison.OrdinalIgnoreCase);}catch{return false;}}
+  set{using var k=Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RunKey);if(value)k.SetValue(RunName,$"\"{Environment.ProcessPath}\" --minimized");else k.DeleteValue(RunName,false);}
+ }
  DtrWindow? dtr;
  void OpenDtr(bool show)
  {

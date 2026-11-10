@@ -693,3 +693,9 @@ tbody tr[data-client]:active,tbody tr[data-int]:active,.card[data-go]:active{tra
 .dtr-warn svg{width:18px;height:18px;flex:none}
 .dtr-ev{display:grid;grid-template-columns:118px 1fr;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px}
 .dtr-ev:last-child{border-bottom:0}.dtr-ev time{color:var(--text-3);font-variant-numeric:tabular-nums}
+/* ── "Da fare oggi" */
+.today .list-row{cursor:pointer}
+.today-ic{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:var(--muted-soft);color:var(--text-2);flex:none}
+.today-ic svg{width:18px;height:18px}
+.today-ic.t-bad{background:var(--bad-soft);color:var(--bad)}.today-ic.t-due{background:var(--due-soft);color:var(--due)}.today-ic.t-info{background:var(--accent-soft);color:var(--accent)}
+.nav-caption{padding-top:12px}

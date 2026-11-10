@@ -41,6 +41,26 @@ enum class Tone { Ok, Due, Bad, Info, Accent, Neutral }
 
 data class ULicense(val r: LicenseRecord, val expiry: LocalDate?, val days: Long?, val status: String, val current: Boolean, val family: String)
 data class UMachine(val m: Machine, var client: UClient?, val clientName: String, val verification: LocalDate?, val nextVerification: LocalDate?, val verDays: Long?, val contractEnd: LocalDate?, val endDays: Long?)
+/** A DTR register linked to the app's customer: by Mastro machine serial, then VAT number, then name ([via]). */
+class URegister(val r: DtrRegister, val client: UClient?, val machine: UMachine?, val via: String) {
+    val d get() = r.detail
+    val geDue = Dates.parse(r.geDue); val geDays = Dates.daysFromToday(geDue)
+    val seen = Dates.parse(r.lastSync); val seenDays = Dates.daysFromToday(seen)
+    val certDue = Dates.parse(r.detail?.certDue); val certDays = Dates.daysFromToday(certDue)
+    val licence = r.detail?.licenses.orEmpty().filter { it.name.contains("RT-Utility", true) }.maxByOrNull { it.to }
+    val licDays = Dates.daysFromToday(Dates.parse(licence?.to))
+    /** Daily closings still available in the electronic journal (from the newest "CHIUSURE RIMANENTI:n" message). */
+    val remaining: Int? = r.detail?.errors.orEmpty().firstNotNullOfOrNull { remainingRe.find(it.text)?.groupValues?.get(1)?.toIntOrNull() }
+    val recentErrors = r.detail?.errors.orEmpty().filter { e -> !remainingRe.containsMatchIn(e.text) && (Dates.daysFromToday(Dates.parse(e.at)) ?: -99) >= -7 }
+    val silent = seenDays != null && seenDays < -7
+    val warn = !r.detail?.warning.isNullOrBlank() || recentErrors.isNotEmpty()
+    val lowZ = remaining != null && remaining <= 60
+    val geSoon = (geDays != null && geDays <= 60) || lowZ
+    val certSoon = certDays != null && certDays <= 90
+    val name get() = client?.name ?: r.detail?.holder?.takeIf { it.isNotBlank() } ?: r.client
+    val search = norm(listOf(r.serial, r.client, r.alias, r.tags, r.detail?.holder, r.detail?.vat, r.detail?.address, client?.name, machine?.m?.model).joinToString(" "))
+    companion object { private val remainingRe = Regex("CHIUSURE RIMANENTI\\s*:?\\s*(\\d+)", RegexOption.IGNORE_CASE) }
+}
 data class UIntervention(val i: Intervention, var client: UClient?, val clientName: String, val date: LocalDate?)
 data class UOrder(val o: Order, var client: UClient?, val date: LocalDate?)
 
@@ -53,6 +73,7 @@ class UClient(
     var mastroOnly = false
     val mastroCodes = mutableListOf<String>()
     val machines = mutableListOf<UMachine>()
+    val registers = mutableListOf<URegister>()
     val interventions = mutableListOf<UIntervention>()
     val orders = mutableListOf<UOrder>()
     val active get() = licenses.filter { it.current }
@@ -78,6 +99,7 @@ class Archive(val state: ArchiveState) {
     val byCode: Map<String, UClient>
     val licenses: List<ULicense>
     val machines: List<UMachine>
+    val registers: List<URegister>
     val interventions: List<UIntervention>
     val orders: List<UOrder>
 
@@ -123,6 +145,20 @@ class Archive(val state: ArchiveState) {
             val c = mastroTo[m.clientCode]; val ver = Dates.parse(m.verification); val next = ver?.plusYears(2); val end = Dates.parse(m.contractEnd)
             UMachine(m, c, c?.name ?: "Cliente Mastro ${m.clientCode}", ver, next, Dates.daysFromToday(next), end, Dates.daysFromToday(end)).also { c?.machines?.add(it) }
         }
+        // DTR-Service registers → Mastro machine by serial (a missing manufacturer prefix is tolerated when unambiguous), else VAT, else name
+        fun serKey(s: String?) = (s ?: "").uppercase().replace(Regex("[^A-Z0-9]"), "")
+        val bySerial = HashMap<String, UMachine>(); val byTail = HashMap<String, MutableList<Pair<String, UMachine>>>()
+        machines.sortedByDescending { it.m.active }.forEach { m ->
+            setOf(serKey(m.m.fiscalSerial), serKey(m.m.serial)).filter { it.length >= 8 }.forEach { k -> bySerial.putIfAbsent(k, m); byTail.getOrPut(k.takeLast(8)) { mutableListOf() }.add(k to m) }
+        }
+        registers = state.dtr.map { r ->
+            val k = serKey(r.serial)
+            val m = bySerial[k] ?: byTail[k.takeLast(8)].orEmpty().filter { (mk, _) -> mk.endsWith(k) || k.endsWith(mk) }.singleOrNull()?.second
+            val cVat = r.detail?.vat?.let(::idKey)?.takeIf { it.length >= 11 }?.let { byVat[it] }
+            val cName = nameTo[nameKey(r.client)] ?: r.detail?.holder?.let { nameTo[nameKey(it)] } ?: r.alias.takeIf { it.isNotBlank() }?.let { nameTo[nameKey(it)] }
+            val c = m?.client ?: cVat ?: cName
+            URegister(r, c, m, when { m?.client != null -> "matricola"; cVat != null -> "P.IVA"; cName != null -> "nome"; else -> "" }).also { c?.registers?.add(it) }
+        }
         interventions = state.interventions.map { i ->
             val c = if (i.source == "mastro") mastroTo[i.clientCode] else map[i.clientCode]
             UIntervention(i, c, c?.name ?: i.clientName.ifBlank { "—" }, Dates.parse(i.date)).also { c?.interventions?.add(it) }
@@ -151,6 +187,10 @@ class Archive(val state: ArchiveState) {
     val openInterventions by lazy { interventions.filter { it.i.status != "Chiuso" } }
     val verificationsDue by lazy { machines.filter { it.m.active && it.verDays != null && it.verDays <= 60 } }
     val contractsDue by lazy { machines.filter { it.m.subscribed && it.endDays != null && it.endDays <= 60 } }
+    val dtrErrors by lazy { registers.filter { it.warn } }
+    val dtrSilent by lazy { registers.filter { it.silent } }
+    val dtrGeSoon by lazy { registers.filter { it.geSoon } }
+    val dtrCertSoon by lazy { registers.filter { it.certSoon } }
     val technicians by lazy { interventions.map { it.i.technician }.filter { it.isNotBlank() }.distinct().sorted() }
 
     /** Licences, periodic verifications and contracts in one chronological list. */
@@ -159,6 +199,10 @@ class Archive(val state: ArchiveState) {
         machines.forEach { m ->
             if (m.m.active && m.nextVerification != null && m.verDays != null && m.verDays in fromDays..toDays) add(Deadline("Verificazione", m.nextVerification, m.verDays, m.client, m.clientName, "${m.m.model} · ${m.m.serial}"))
             if (m.m.subscribed && m.contractEnd != null && m.endDays != null && m.endDays in fromDays..toDays) add(Deadline("Abbonamento", m.contractEnd, m.endDays, m.client, m.clientName, "${m.m.model} · ${m.m.serial}"))
+        }
+        registers.forEach { r ->
+            if (r.geDue != null && r.geDays != null && r.geDays in fromDays..toDays) add(Deadline("Giornale elettronico", r.geDue, r.geDays, r.client, r.name, "GE ${r.r.geNumber} · ${r.r.serial}"))
+            if (r.certDue != null && r.certDays != null && r.certDays in fromDays..toDays) add(Deadline("Certificato RT", r.certDue, r.certDays, r.client, r.name, r.r.serial))
         }
     }.sortedBy { it.date }
 
