@@ -1,4 +1,4 @@
-# Top Cash Studio - installazione del server condiviso come servizio Windows.
+﻿# Top Cash Studio - installazione del server condiviso come servizio Windows.
 # Da eseguire UNA volta sul PC dell'ufficio che fara' da server, in PowerShell "Esegui come amministratore":
 #   powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\installa-server.ps1
 # Indirizzo breve in ufficio (facoltativo): -Nome tcssql.it  -> apre anche la porta 80, cosi' basta scrivere http://tcssql.it
@@ -16,6 +16,16 @@ $exe  = Join-Path $Cartella 'server-app\TopCash.Server.exe'
 $data = Join-Path $Cartella 'data'
 if (-not (Test-Path $exe)) { throw "Non trovo $exe" }
 
+# la porta 80 serve libera per l'indirizzo breve: se la usa gia' IIS o un altro programma lo dice subito
+$breve80 = $false
+if ($Nome) {
+  $occ = Get-NetTCPConnection -LocalPort 80 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($occ) {
+    $chi = if ($occ.OwningProcess -eq 4) { 'Windows (IIS / http.sys, servizio W3SVC)' } else { (Get-Process -Id $occ.OwningProcess -ErrorAction SilentlyContinue).ProcessName }
+    Write-Host "La porta 80 e' gia' usata da ${chi}: l'indirizzo breve funzionera' come http://${Nome}:$Porta." -ForegroundColor Yellow
+  } else { $breve80 = $true }
+}
+
 # 1. Servizio Windows: parte con il PC e si riavvia da solo in caso di errore
 if (Get-Service TopCashStudio -ErrorAction SilentlyContinue) { Stop-Service TopCashStudio -Force; sc.exe delete TopCashStudio | Out-Null; Start-Sleep 2 }
 New-Service -Name TopCashStudio -DisplayName 'Top Cash Studio Server' -Description 'Archivio condiviso Top Cash Service (clienti, licenze, ordini).' `
@@ -25,7 +35,7 @@ Start-Service TopCashStudio
 
 # 2. Firewall: porta aperta SOLO sulla rete privata dell'ufficio (non su reti pubbliche)
 Get-NetFirewallRule -DisplayName 'Top Cash Studio Server' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
-$porte = @($Porta); if ($Nome) { $porte += 80 }
+$porte = @($Porta); if ($breve80) { $porte += 80 }
 New-NetFirewallRule -DisplayName 'Top Cash Studio Server' -Direction Inbound -Protocol TCP -LocalPort $porte -Action Allow -Profile Private | Out-Null
 
 $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notmatch 'Loopback|vEthernet' -and $_.IPAddress -notlike '169.*' } | Select-Object -First 1).IPAddress
@@ -33,4 +43,4 @@ Write-Host ""
 Write-Host "Server Top Cash installato e avviato." -ForegroundColor Green
 Write-Host "Apri  http://localhost:$Porta  su questo PC per creare l'account amministratore."
 Write-Host "Dagli altri dispositivi in ufficio:  http://$($ip):$Porta"
-if ($Nome) { Write-Host "Indirizzo breve:  http://$Nome   (serve il record DNS nel router: $Nome -> $ip)" -ForegroundColor Cyan }
+if ($Nome) { $breve = if ($breve80) { "http://$Nome" } else { "http://${Nome}:$Porta" }; Write-Host "Indirizzo breve:  $breve   (serve il record DNS nel router: $Nome -> $ip)" -ForegroundColor Cyan }

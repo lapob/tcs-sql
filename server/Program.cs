@@ -29,6 +29,9 @@ var lanUrl=new Uri((args.FirstOrDefault(a=>a.StartsWith("--urls="))?[7..]??Envir
 // short office address: an internal DNS name (router record, e.g. tcssql.it → this PC) served on port 80 too, so people type just the name
 var lanName=(args.FirstOrDefault(a=>a.StartsWith("--nome="))?[7..]??"").Trim().ToLowerInvariant();
 var shortPort=int.TryParse(args.FirstOrDefault(a=>a.StartsWith("--porta-breve="))?[14..],out var sp)?sp:0;
+// the short port is a convenience: if something else already owns it (IIS, another web server) skip it instead of failing the whole server
+if(shortPort>0&&!PortFree(shortPort)){Console.Error.WriteLine($"Porta {shortPort} occupata da un altro programma: indirizzo breve disattivato, il server resta sulla {lanUrl.Port}.");shortPort=0;}
+static bool PortFree(int port){try{var l=new System.Net.Sockets.TcpListener(System.Net.IPAddress.IPv6Any,port);l.Server.DualMode=true;l.Start();l.Stop();return true;}catch(System.Net.Sockets.SocketException){return false;}}
 var tunnelPort=int.TryParse(args.FirstOrDefault(a=>a.StartsWith("--tunnel-port="))?[14..],out var tp)?tp:lanUrl.Port+2;
 builder.WebHost.UseSetting("urls","");
 builder.WebHost.ConfigureKestrel(k=>
