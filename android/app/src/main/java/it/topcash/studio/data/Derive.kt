@@ -192,7 +192,7 @@ class Archive(val state: ArchiveState) {
             if (c.city.isBlank()) c.city = m.city; if (c.address.isBlank()) c.address = m.address
             m.phones.filter { it !in c.phones }.forEach(c.phones::add); m.emails.filter { it !in c.emails }.forEach(c.emails::add)
         }
-        machines = state.machines.map { m ->
+        machines = state.machines.filterNot { rtDropped(it.model) }.map { m ->
             val c = mastroTo[m.clientCode]; val ver = Dates.parse(m.verification); val next = ver?.plusYears(2); val end = Dates.parse(m.contractEnd)
             UMachine(m, c, c?.name ?: "Cliente Mastro ${m.clientCode}", ver, next, Dates.daysFromToday(next), end, Dates.daysFromToday(end)).also { c?.machines?.add(it) }
         }
@@ -338,3 +338,7 @@ fun serviceKind(m: Machine): String? {
         m.subscribed -> "Abbonamento"; s.isNotBlank() -> "A chiamata"; else -> null
     }
 }
+
+/** Edit (E.D.IT.), Ditron and their models are no longer followed: left out of the app (Mastro keeps them). A model written with "RCH" stays. */
+private val rtDropRe = Regex("DITRON|SWEDA|\\bE\\.?D\\.?IT\\b|\\bEDIT\\b|\\bZERO ?(5|7|55|8|TOP|\\+)|\\bZERO5|\\bZERO7|\\bZERO55|^SPOT\\b|SPOT ZERO|SMARTY|\\bNINA\\b|\\bFLY\\b|GLOBE|QUADR|FLEXY|\\bZIP\\b|SPEEDY|MIKROPOS|^DREAM\\b|SEVENT?\\b|BUFFETTI|^POINT$|^VELVET|^MASTER\\b|\\bFLEA\\b|PULSAR|NESSO|SUPREMA|^ONE$|EDIT ONE")
+fun rtDropped(model: String): Boolean { val s = model.uppercase().trim(); return rtDropRe.containsMatchIn(s) && !Regex("\\bRCH\\b").containsMatchIn(s) }

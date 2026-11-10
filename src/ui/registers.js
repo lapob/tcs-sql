@@ -2,9 +2,14 @@
 // ───────────────────────── Registers: brand / model / category of every machine, portal coverage, Mastro fiscal detail.
 // Mastro keeps the model as free text ("DRTCASH+", "DTR DRTCASH", "EPSON FP-81 II RT"): brands are recognised here,
 // then each register of a brand that has a portal (DTR-Service, Ital Retail) is checked against that portal's list.
+// Edit (E.D.IT.), Ditron and their models are no longer followed: they are left out of the whole app (Mastro keeps them).
+// A model written with "RCH" stays: RCH sold some of the same names.
+const RT_DROP=/DITRON|SWEDA|\bE\.?D\.?IT\b|\bEDIT\b|\bZERO ?(5|7|55|8|TOP|\+)|\bZERO5|\bZERO7|\bZERO55|^SPOT\b|SPOT ZERO|SMARTY|\bNINA\b|\bFLY\b|GLOBE|QUADR|FLEXY|\bZIP\b|SPEEDY|MIKROPOS|^DREAM\b|SEVENT?\b|BUFFETTI|^POINT$|^VELVET|^MASTER\b|\bFLEA\b|PULSAR|NESSO|SUPREMA|^ONE$|EDIT ONE/;
+const rtDropped=model=>{const s=String(model||'').toUpperCase().trim();return RT_DROP.test(s)&&!/\bRCH\b/.test(s);};
+// sections: the brands with a portal (DTR, Ital Retail) and Epson on their own, every other register together
 const RT_BRANDS=[
- {k:'dtr',l:'DTR',portal:'dtr',pl:'DTR-Service',hue:212,re:/\bDTR\b|\bDRT|DRT ?CASH|DRT ?PALM|DRT ?FRONT/},
- {k:'ital',l:'Ital Retail',portal:'ital',pl:'Ital Retail',hue:152,re:/ITAL ?RETAIL|\bNICE\b|\bSPICE\b|ITAL ?START/},
+ {k:'dtr',l:'DTR',portal:'dtr',pl:'DTR-Service',hue:212,re:/\bDTR\b|\bDRT|DRT ?CASH|DRT ?PALM|DRT ?FRONT|^D(CASH|FLEX|PALM)\b/},
+ {k:'ital',l:'Ital Retail',portal:'ital',pl:'Ital Retail',hue:152,re:/ITAL ?RETAIL|\bNICE\b|\bSPICE\b|ITAL ?START|^NEXT\b/},
  {k:'rch',l:'RCH',hue:4,re:/\bRCH\b|PRINT!|\bONDA\b|WALL ?E\b|\bAPE ?\d|\bASSO\b|LDP-?\d/},
  {k:'epson',l:'Epson',hue:228,re:/EPSON|\bFP[- ]?\d/},
  {k:'axon',l:'Axon',hue:270,re:/AXON|\bDADO\b|WY ?CASH|\bAURA\b/},
@@ -18,7 +23,9 @@ const RT_BRANDS=[
  {k:'printer',l:'Stampanti',cat:'printer',hue:200,re:/^STAMP|STAMPANTE/},
  {k:'scale',l:'Bilance',cat:'scale',hue:120,re:/BILANCIA/},
 ];
-const RT_OTHER={k:'other',l:'Altri registratori',hue:220};
+const RT_OTHER={k:'other',l:'Registratori di cassa',hue:220};
+const RT_OWN=new Set(['dtr','ital','epson']);
+const secOrd=k=>{const i=['dtr','ital','epson','other'].indexOf(k);return i<0?9:i;};
 const RT_CATS={rt:'Registratori di cassa',cash:'Casse automatiche',soft:'Software e licenze',printer:'Stampanti',scale:'Bilance'};
 let RG=null;
 function rtBrand(model){const s=String(model||'').toUpperCase();return RT_BRANDS.find(b=>b.re.test(s))||RT_OTHER;}
@@ -33,19 +40,20 @@ function deriveRegisters(){
  const synced={dtr:(state.dtr||[]).length>0,ital:(state.ital||[]).length>0};
  const brands=new Map();
  for(const m of D.machines){
-  const b=rtBrand(m.model);m.brand=b;m.cat=b.cat||'rt';m.family=rtModel(m.model,b);m.rt=rt.get(m.id)||null;
+  const b0=rtBrand(m.model);const b=b0.cat||RT_OWN.has(b0.k)?b0:RT_OTHER;m.maker=b0.cat||b0.k==='other'?'':b0.l;
+  m.brand=b;m.cat=b.cat||'rt';m.family=(m.maker&&b===RT_OTHER?m.maker+' ':'')+rtModel(m.model,b0);m.rt=rt.get(m.id)||null;
   m.fw=m.rt?.fields?.['Firmware']||m.dtr?.firmware||m.ital?.d?.firmware||'';
   m.portal=b.portal?(!synced[b.portal]?'nosync':(b.portal==='dtr'?m.dtr:m.ital)?'in':'out'):'none';
   if(!brands.has(b.k))brands.set(b.k,{...b,cat:b.cat||'rt',synced:b.portal?synced[b.portal]:true,all:0,active:0,in:0,out:0,models:new Map()});
   const g=brands.get(b.k);g.all++;if(m.active){g.active++;if(m.portal==='in')g.in++;else if(m.portal==='out')g.out++;const f=g.models.get(m.family)||{name:m.family,n:0};f.n++;g.models.set(m.family,f);}
  }
- const list=[...brands.values()].map(g=>({...g,models:[...g.models.values()].sort((a,b)=>b.n-a.n)})).sort((a,b)=>(a.cat==='rt'?0:1)-(b.cat==='rt'?0:1)||(a.k==='other')-(b.k==='other')||b.active-a.active);
+ const list=[...brands.values()].map(g=>({...g,models:[...g.models.values()].sort((a,b)=>b.n-a.n)})).sort((a,b)=>(a.cat==='rt'?0:1)-(b.cat==='rt'?0:1)||secOrd(a.k)-secOrd(b.k)||b.active-a.active);
  const sites=new Map();for(const s of state.sites||[]){if(!sites.has(s.clientCode))sites.set(s.clientCode,[]);sites.get(s.clientCode).push(s);}
  const riba=new Map();for(const r of state.riba||[]){if(!riba.has(r.clientCode))riba.set(r.clientCode,[]);riba.get(r.clientCode).push(r);}
  for(const c of D.clients){const ks=c.mastroCodes||[];c.sites=ks.flatMap(k=>sites.get(k)||[]);c.riba=ks.flatMap(k=>riba.get(k)||[]);}
  RG={brands:list,missing:D.machines.filter(m=>m.active&&m.portal==='out'),verifications:(state.rt||[]).reduce((n,r)=>n+(r.verificationCount||0),0)};
 }
-const brandMark=(b,size='')=>!b?'':`<span class="bmark ${size}" style="--h:${b.hue}">${esc(b.l.split(/\s+/).map(w=>w[0]).join('').slice(0,2))}</span>`;
+const brandMark=(b,size='')=>!b?'':`<span class="bmark ${size}" style="--h:${b.hue}">${esc(b.l.split(/\s+/).filter((w,i,a)=>a.length<2||w.length>2).map(w=>w[0]).join('').toUpperCase().slice(0,2))}</span>`;
 function portalBadge(m){
  if(m.portal==='nosync')return`<span class="pbadge" data-tip="${esc(m.brand.pl)} non è ancora stato sincronizzato">${icon('clock')}${esc(m.brand.pl)} da sincronizzare</span>`;
  if(m.portal==='in')return`<span class="pbadge in" data-tip="Presente su ${esc(m.brand.pl)}">${icon('check')}${esc(m.brand.pl)}</span>`;
@@ -58,7 +66,7 @@ function brandGrid(){
   return`<button class="brand-card reveal${ui.mbrand===b.k?' on':''}" style="--i:${i};--h:${b.hue}" data-mbrand="${b.k}" aria-pressed="${ui.mbrand===b.k}">
    <div class="brand-top">${brandMark(b)}<div class="grow"><strong>${esc(b.l)}</strong><small>${plur(b.active,'attiva','attive')} · ${plur(b.models.length,'modello','modelli')}</small></div>${b.portal?`<span class="brand-portal">${esc(b.pl)}</span>`:''}</div>
    ${b.portal&&!b.synced?`<small class="cov-txt">${icon('clock')} ${esc(b.pl)} non ancora sincronizzato: collegalo dall’app Windows per il confronto</small>`:cov!==null?`<div class="cov"><i style="width:${cov}%"></i></div><small class="cov-txt"><b>${fmt(b.in)}</b> nel portale${b.out?` · <span class="warn">${fmt(b.out)} mancanti</span>`:' · tutte presenti'}</small>`:`<small class="cov-txt muted">${b.models.slice(0,3).map(x=>esc(x.name)).join(' · ')}</small>`}</button>`;};
- return`<div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Marchi e modelli</h2><p>Riconosciuti dal modello scritto in Mastro. Per DTR e Ital Retail controllo se ogni cassa attiva è presente sul portale.</p></div>${ui.mbrand?`<button class="btn sm ghost" data-mbrand="">${icon('close')}Tutti i marchi</button>`:''}</div>
+ return`<div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Sezioni</h2><p>DTR, Ital Retail ed Epson hanno la loro sezione; tutti gli altri sono in Registratori di cassa. Per DTR e Ital Retail controllo se ogni cassa attiva è presente sul portale.${D.dropped?` <span class="muted">${plur(D.dropped,'macchina Edit/Ditron esclusa','macchine Edit/Ditron escluse')}.</span>`:''}</p></div>${ui.mbrand?`<button class="btn sm ghost" data-mbrand="">${icon('close')}Tutti i marchi</button>`:''}</div>
   <div class="brand-grid">${rt.map(card).join('')}</div>
   ${other.length?`<div class="cat-row">${other.map((b,i)=>`<button class="chip${ui.mbrand===b.k?' on':''}" data-mbrand="${b.k}">${brandMark(b,'xs')}${esc(RT_CATS[b.cat]||b.l)}<em>${fmt(b.active)}</em></button>`).join('')}</div>`:''}</div>`;
 }

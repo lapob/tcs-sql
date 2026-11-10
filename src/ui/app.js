@@ -74,7 +74,8 @@ function derive(){
   c.phones=[...new Set([...c.phones,...m.phones])];c.emails=[...new Set([...c.emails,...m.emails])];
   if(!c.phone)c.phone=c.phones[0]||'';if(!c.email)c.email=c.emails[0]||'';
  }
- const machines=(state.machines||[]).map(m=>{if(/^[0\s.-]*$/.test(m.fiscalSerial||''))m={...m,fiscalSerial:''};if(/^[0\s.-]*$/.test(m.serial||''))m={...m,serial:''};const c=mastroTo.get(m.clientCode);const ver=parseDate(m.verification);
+ const allM=state.machines||[];const keptM=allM.filter(m=>!rtDropped(m.model));
+ const machines=keptM.map(m=>{if(/^[0\s.-]*$/.test(m.fiscalSerial||''))m={...m,fiscalSerial:''};if(/^[0\s.-]*$/.test(m.serial||''))m={...m,serial:''};const c=mastroTo.get(m.clientCode);const ver=parseDate(m.verification);
   const verNext=ver?new Date(ver.getFullYear()+2,ver.getMonth(),ver.getDate()):null; // periodic verification of fiscal devices: every 2 years
   const x={...m,c,client:c?.name||('Cliente Mastro '+m.clientCode),code:c?.code||null,ver,verNext,verDays:dayDiff(verNext),end:parseDate(m.contractEnd),endDays:dayDiff(parseDate(m.contractEnd))};if(c)c.machines.push(x);return x;});
  const interventions=(state.interventions||[]).map(i=>{const c=i.source==='mastro'?mastroTo.get(i.clientCode):byCode.get(i.clientCode);
@@ -82,7 +83,7 @@ function derive(){
  for(const c of list){c.search=norm([c.name,c.code,c.vat,c.taxCode,c.city,c.address,...c.phones,...c.emails,c.mastro?.pec,c.mastro?.code,...c.records.map(r=>r.serial),...c.machines.map(m=>m.serial+' '+m.fiscalSerial)].join(' '));}
  list.sort((a,b)=>a.name.localeCompare(b.name,'it'));
  const current=state.records.filter(isCurrent);
- D={clients:list,byCode,orders,current,machines,interventions,history:state.records.filter(r=>!isCurrent(r)),
+ D={clients:list,byCode,orders,current,machines,dropped:allM.length-keptM.length,interventions,history:state.records.filter(r=>!isCurrent(r)),
   due30:current.filter(r=>{const d=days(r.expiry);return d!==null&&d>=0&&d<=30;}),
   overdue:current.filter(r=>{const d=days(r.expiry);return d!==null&&d<0;}),
   tasks:list.filter(c=>c.meta.nextContact||c.meta.followupState&&c.meta.followupState!=='Completato'),
