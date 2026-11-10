@@ -183,6 +183,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun act(success: String, block: suspend () -> Unit) = viewModelScope.launch {
         try { block(); _messages.tryEmit(success); refresh() } catch (e: ApiException) { _messages.tryEmit(e.message ?: "Operazione non riuscita") }
     }
+    // ── administrator
+    fun saveClient(code: String, e: ClientEdit, onDone: (String) -> Unit = {}) = viewModelScope.launch {
+        try { val c = api.saveClient(code, e); _messages.tryEmit(if (code.isBlank()) "Cliente creato" else "Cliente aggiornato"); refresh(); onDone(c) }
+        catch (x: ApiException) { _messages.tryEmit(x.message ?: "Salvataggio non riuscito") }
+    }
+    fun deleteClient(code: String, deleted: Boolean) = act(if (deleted) "Cliente eliminato · ripristinabile da Altro → Clienti eliminati" else "Cliente ripristinato") { api.deleteClient(code, deleted) }
+    fun resetClient(code: String) = act("Modifiche annullate") { api.resetClient(code) }
+    fun saveLicense(id: String, e: LicenseEdit) = act(if (e.hidden) "Licenza tolta dall'elenco" else "Licenza aggiornata") { api.saveLicense(id, e) }
+    private val _users = MutableStateFlow<List<UserRow>?>(null); val users = _users.asStateFlow()
+    fun loadUsers() = viewModelScope.launch { try { _users.value = api.users() } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Utenti non disponibili") } }
+    private fun userAct(success: String, block: suspend () -> Unit) = viewModelScope.launch {
+        try { block(); _messages.tryEmit(success); _users.value = api.users() } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Operazione non riuscita") }
+    }
+    fun createUser(u: UserCreate) = userAct("Utente ${u.name} creato") { api.createUser(u) }
+    fun updateUser(username: String, p: UserPatch, success: String) = userAct(success) { api.updateUser(username, p) }
+    fun deleteUser(username: String) = userAct("Utente eliminato") { api.deleteUser(username) }
+    fun renameMe(name: String) = userAct("Nome aggiornato") { api.updateMe(name); _me.value = _me.value?.copy(name = name) }
+    fun changePassword(current: String, password: String, onDone: (Boolean) -> Unit) = viewModelScope.launch {
+        try { api.changePassword(current, password); _messages.tryEmit("Password aggiornata: accedi di nuovo"); onDone(true); logout() }
+        catch (x: ApiException) { _messages.tryEmit(x.message ?: "Password non aggiornata"); onDone(false) }
+    }
     fun saveNote(code: String, note: String) = act("Nota salvata e condivisa") { api.saveNote(code, note) }
     fun saveMeta(code: String, meta: ClientMeta, message: String = "Promemoria aggiornato") = act(message) { api.saveMeta(code, meta) }
     fun saveIntervention(i: Intervention, quiet: Boolean = false, onDone: (Intervention) -> Unit) = viewModelScope.launch {

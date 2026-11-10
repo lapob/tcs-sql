@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Call
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Email
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -35,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,8 +62,14 @@ import java.time.ZoneOffset
     val ctx = LocalContext.current
     var dueOpen by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf<String?>(null) }
     dueOpen?.let { id -> a.acc.due(id)?.let { d -> DueSheet(vm, d, null) { dueOpen = null } } }
+    val me by vm.me.collectAsState(); val admin = me?.role == "admin"
+    var editClient by remember { mutableStateOf(false) }
+    var editLicense by remember { mutableStateOf<it.topcash.studio.data.ULicense?>(null) }
+    if (editClient) ClientEditSheet(vm, c, { editClient = false })
+    editLicense?.let { l -> LicenseEditSheet(vm, a, l) { editLicense = null } }
     Page(vm, c.name, null, onBack = { nav.popBackStack() }, compactTitle = true,
         actions = {
+            if (admin) androidx.compose.material3.IconButton({ editClient = true }) { Icon(androidx.compose.material.icons.Icons.Rounded.Edit, "Modifica cliente") }
             val fav = c.meta.favorite
             androidx.compose.material3.IconButton({ vm.saveMeta(c.code, c.meta.copy(favorite = !fav), if (fav) "Rimosso dai preferiti" else "Aggiunto ai preferiti") }) {
                 val s by animateFloatAsState(if (fav) 1.15f else 1f, Bouncy, label = "fav")
@@ -75,7 +83,7 @@ import java.time.ZoneOffset
                     Text(c.name, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.sharedBox("name-${c.code}"), maxLines = 3, overflow = TextOverflow.Ellipsis)
                     Text("Cod. ${c.code.trimStart('0')}${if (c.mastro != null) " · Mastro ${c.mastro!!.code}" else ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
                     Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Pill(c.status, Archive.toneOf(c.status)); if (c.mastroOnly) Pill("Mastro", Tone.Info)
+                        Pill(c.status, Archive.toneOf(c.status)); if (c.mastroOnly) Pill("Mastro", Tone.Info); c.edit?.let { e -> Pill(if (e.created) "Creato a mano" else "Modificato", Tone.Accent) }
                     }
                 }
             }
@@ -96,7 +104,9 @@ import java.time.ZoneOffset
                 if (c.taxCode.isNotBlank() && c.taxCode != c.vat) Fact("Codice fiscale", c.taxCode)
                 if (c.phones.isNotEmpty()) Fact("Telefono", c.phones.joinToString(" · "))
                 if (c.emails.isNotEmpty()) Fact("Email", c.emails.joinToString(" · "))
-                c.mastro?.pec?.takeIf { it.isNotBlank() }?.let { Fact("PEC", it) }
+                c.pec.takeIf { it.isNotBlank() }?.let { Fact("PEC", it) }
+                if (c.contact.isNotBlank()) Fact("Referente", c.contact)
+                if (c.category.isNotBlank()) Fact("Categoria", c.category)
                 if (c.fullAddress.isNotBlank()) Fact("Indirizzo", c.fullAddress)
                 if (c.phones.isEmpty() && c.emails.isEmpty() && c.fullAddress.isBlank())
                     Text("Contatti e indirizzo arrivano con la sincronizzazione Zucchetti o l'importazione da MastroSQL.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp))
@@ -124,12 +134,16 @@ import java.time.ZoneOffset
             item(key = "dtr-title") { SectionTitle("Registratori DTR (${c.registers.size})") }
             c.registers.forEach { r -> item(key = "dtr" + r.r.serial) { RegisterCard(r, Modifier.padding(bottom = 8.dp), showClient = false) } }
         }
+        if (c.italDevices.isNotEmpty()) {
+            item(key = "ital-title") { SectionTitle("Casse Ital Retail (${c.italDevices.size})") }
+            c.italDevices.forEach { r -> item(key = "ital" + r.r.serial) { ItalCard(r, Modifier.padding(bottom = 8.dp), showClient = false) } }
+        }
         clientAccounting(a, c) { dueOpen = it }
         if (c.licenses.isNotEmpty()) {
             item(key = "l-title") { SectionTitle("Licenze Zucchetti (${c.licenses.size})") }
             c.licenses.forEach { l ->
                 item(key = "l" + l.r.id) {
-                    CardBox(Modifier.padding(bottom = 8.dp)) {
+                    CardBox(Modifier.padding(bottom = 8.dp), onClick = if (admin) ({ editLicense = l }) else null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) { Text(Catalog.family(l.family), style = MaterialTheme.typography.titleSmall); Text(l.r.serial, style = MaterialTheme.typography.bodySmall.tabular, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                             Pill(l.status, Archive.toneOf(l.status))

@@ -126,6 +126,17 @@ class Api(context: Context) {
             }
         } catch (e: ApiException) { throw e } catch (e: IOException) { throw ApiException("Server non raggiungibile") }
     }
+    // administrator: customers, licences, users
+    suspend fun saveClient(code: String, e: ClientEdit): String = json.decodeFromString<SavedCode>(post("/api/clients/save", json.encodeToString(ClientSaveRequest(code, e)))).code
+    suspend fun deleteClient(code: String, deleted: Boolean) { post("/api/clients/delete", json.encodeToString(ClientDeleteRequest(code, deleted))) }
+    suspend fun resetClient(code: String) { post("/api/clients/reset", json.encodeToString(ClientDeleteRequest(code, false))) }
+    suspend fun saveLicense(id: String, e: LicenseEdit) { post("/api/licenses/save", json.encodeToString(LicenseSaveRequest(id, e))) }
+    suspend fun users(): List<UserRow> = json.decodeFromString<UsersResponse>(get("/api/users")).users
+    suspend fun createUser(u: UserCreate) { post("/api/users", json.encodeToString(u)) }
+    suspend fun updateUser(username: String, p: UserPatch) { post("/api/users/" + enc(username), json.encodeToString(p)) }
+    suspend fun deleteUser(username: String) { post("/api/users/" + enc(username) + "/delete") }
+    suspend fun updateMe(name: String) { post("/api/me", json.encodeToString(UserPatch(name = name))) }
+    suspend fun changePassword(current: String, password: String) { post("/api/password", json.encodeToString(PasswordChange(current, password))) }
     suspend fun deleteIntervention(id: String) { post("/api/interventions/" + java.net.URLEncoder.encode(id, "UTF-8") + "/delete") }
 
     /** Returns null when the archive did not change (HTTP 304). */

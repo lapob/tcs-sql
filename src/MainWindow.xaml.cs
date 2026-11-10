@@ -49,7 +49,7 @@ public partial class MainWindow : Window
   // Fit any screen: 92% of the work area, never above the design size (small laptops get a usable window).
   var area=SystemParameters.WorkArea;Width=Math.Min(1480,area.Width*0.92);Height=Math.Min(960,area.Height*0.92);MinWidth=Math.Min(MinWidth,area.Width);MinHeight=Math.Min(MinHeight,area.Height);
   pushTimer.Tick+=async(_,_)=>{pushTimer.Stop();if(pushPending){pushPending=false;await PushNow();}};
-  Loaded+=Initialize;Closed+=(_,_)=>{timer.Stop();pushTimer.Stop();portal?.Close();dtr?.Quit();};
+  Loaded+=Initialize;Closed+=(_,_)=>{timer.Stop();pushTimer.Stop();portal?.Close();dtr?.Quit();ital?.Quit();};
   StateChanged+=(_,_)=>{try{if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.MemoryUsageTargetLevel=WindowState==WindowState.Minimized?CoreWebView2MemoryUsageTargetLevel.Low:CoreWebView2MemoryUsageTargetLevel.Normal;}catch{}};
  }
  readonly DispatcherTimer pushTimer=new(){Interval=TimeSpan.FromMilliseconds(1500)};bool pushPending;DateTime lastPush=DateTime.MinValue;
@@ -85,6 +85,7 @@ public partial class MainWindow : Window
    timer.Tick+=async(_,_)=>{if(!busy&&!ServerMode){var count=Scan(false);if(count>0)await Push();}};timer.Start();
    // DTR-Service: once connected on this PC the session is resumed in the background at every start
    if(DtrWindow.Configured&&(!ServerMode||syncToken.Length>0))OpenDtr(false);
+   if(ItalRetailWindow.Configured&&(!ServerMode||syncToken.Length>0))OpenItal(false);
   }
   catch(Exception ex)
   {
@@ -113,7 +114,7 @@ public partial class MainWindow : Window
   if(r==MessageBoxResult.No){serverUrl="";SaveSettings();}Navigate();
   }finally{serverErrorOpen=false;}
  }
- static readonly HashSet<string> RemoteActions=["external","portal","syncPortal","disconnectServer","setSyncToken","hostInfo","mastroRead","setExternal","dtr","dtrSync","autostart"];
+ static readonly HashSet<string> RemoteActions=["external","portal","syncPortal","disconnectServer","setSyncToken","hostInfo","mastroRead","setExternal","dtr","dtrSync","ital","italSync","autostart"];
  MastroBatch? lastMastro;
  static readonly JsonSerializerOptions jsonIn=new(){PropertyNameCaseInsensitive=true};
  /// Reads Mastro (read-only) on this PC and hands a preview to the page. Local mode keeps the batch for "mastroImport";
@@ -204,7 +205,7 @@ public partial class MainWindow : Window
      catch(Exception ex){await Notify("Server non raggiungibile: "+ex.Message);break;}
      serverUrl=url;activeServer=url;SaveSettings();portal?.Close();Navigate();break;
     case "disconnectServer":serverUrl="";serverExternal="";activeServer="";syncToken="";SaveSettings();portal?.Close();Navigate();break;
-    case "setSyncToken":syncToken=root.GetProperty("token").GetString()??"";SaveSettings();if(portal!=null)portal.Target=SyncTarget();if(dtr!=null)dtr.Target=SyncTarget();
+    case "setSyncToken":syncToken=root.GetProperty("token").GetString()??"";SaveSettings();if(portal!=null)portal.Target=SyncTarget();if(dtr!=null)dtr.Target=SyncTarget();if(ital!=null)ital.Target=SyncTarget();
      Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,portalOpen=portal!=null});await Notify(syncToken.Length>0?"Questo PC è ora la postazione di sincronizzazione.":"Postazione di sincronizzazione disattivata.");break;
     case "ready":await Push();break;
     case "scan":Scan(true);await Push();await Notify("Cartella controllata. Consulta il registro per i dettagli.");break;
@@ -219,20 +220,28 @@ public partial class MainWindow : Window
      if(bp.ShowDialog(this)==true){store.Backup(bp.FileName);store.Log("backup","Backup locale creato.");await Notify("Backup creato correttamente.");await Push();}break;
     case "export":
      var ep=new SaveFileDialog{Filter="CSV italiano|*.csv",FileName="TopCash-clienti-licenze-"+DateTime.Today.ToString("yyyyMMdd")+".csv"};
-     if(ep.ShowDialog(this)==true){var records=store.All();if(root.TryGetProperty("ids",out var ids)){var selected=ids.EnumerateArray().Select(x=>x.GetString()).ToHashSet();records=records.Where(r=>selected.Contains(r.Id)).ToList();}File.WriteAllText(ep.FileName,Imports.CsvExport(records),new UTF8Encoding(true));await Notify("Esportazione CSV salvata sul computer.");}break;
+     if(ep.ShowDialog(this)==true){var records=store.Licenses();if(root.TryGetProperty("ids",out var ids)){var selected=ids.EnumerateArray().Select(x=>x.GetString()).ToHashSet();records=records.Where(r=>selected.Contains(r.Id)).ToList();}File.WriteAllText(ep.FileName,Imports.CsvExport(records),new UTF8Encoding(true));await Notify("Esportazione CSV salvata sul computer.");}break;
     case "calendar":
      var cp=new SaveFileDialog{Filter="Calendario iCalendar|*.ics",FileName="TopCash-scadenze-90-giorni.ics"};
-     if(cp.ShowDialog(this)==true){File.WriteAllText(cp.FileName,Imports.Calendar(store.All().Where(r=>!r.Scope.EndsWith("-scadute"))),new UTF8Encoding(false));await Notify("Calendario delle scadenze salvato. Aprilo nell'app calendario che preferisci.");}break;
+     if(cp.ShowDialog(this)==true){File.WriteAllText(cp.FileName,Imports.Calendar(store.Licenses().Where(r=>!r.Scope.EndsWith("-scadute"))),new UTF8Encoding(false));await Notify("Calendario delle scadenze salvato. Aprilo nell'app calendario che preferisci.");}break;
     case "note":store.SaveNote(root.GetProperty("code").GetString()!,root.GetProperty("note").GetString()!);await Notify("Nota salvata sul computer.");break;
+    case "clientSave":{var ed=JsonSerializer.Deserialize<ClientEdit>(root.GetProperty("edit").GetRawText(),new JsonSerializerOptions{PropertyNameCaseInsensitive=true})!;
+     try{var code=store.SaveClient(root.TryGetProperty("code",out var cc)?cc.GetString():"",ed,Environment.UserName);await Push();await Notify("Cliente salvato.");Post(new{type="clientSaved",code});}catch(InvalidDataException ex){await Notify(ex.Message);}break;}
+    case "clientDelete":{var del=root.GetProperty("deleted").GetBoolean();store.DeleteClient(root.GetProperty("code").GetString()!,del,Environment.UserName);await Push();await Notify(del?"Cliente eliminato: puoi ripristinarlo da Clienti → Eliminati.":"Cliente ripristinato.");break;}
+    case "clientReset":try{store.ResetClient(root.GetProperty("code").GetString()!,Environment.UserName);await Push();await Notify("Modifiche annullate: il cliente torna ai dati dei portali e di Mastro.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
+    case "licenseSave":{var le=JsonSerializer.Deserialize<LicenseEdit>(root.GetProperty("edit").GetRawText(),new JsonSerializerOptions{PropertyNameCaseInsensitive=true})!;
+     try{store.SaveLicense(root.GetProperty("id").GetString()!,le,Environment.UserName);await Push();await Notify(le.Hidden?"Licenza tolta dall’elenco.":"Licenza aggiornata.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;}
     case "meta":var meta=JsonSerializer.Deserialize<ClientMeta>(root.GetProperty("meta").GetRawText(),new JsonSerializerOptions{PropertyNameCaseInsensitive=true})!;store.SaveMeta(root.GetProperty("code").GetString()!,meta);await Push();await Notify("Scheda di lavoro aggiornata.");break;
     case "portal":if(CanSync())OpenPortal();break;
     case "dtr":if(CanSync())OpenDtr(true);break;
+    case "ital":if(CanSync())OpenItal(true);break;
+    case "italSync":if(CanSync()){OpenItal(false);if(ital!=null)await ital.StartSync();}break;
     case "dtrSync":if(CanSync()){OpenDtr(false);if(dtr!=null)await dtr.StartSync();}break;
     case "syncPortal":if(CanSync()){OpenPortal();if(portal!=null)await portal.StartSync();}break;
     case "external":var ext=root.GetProperty("url").GetString()??"";if(SafeExternal(ext))Process.Start(new ProcessStartInfo(ext){UseShellExecute=true});break;
     case "exportClients":
      var xp=new SaveFileDialog{Filter="CSV italiano|*.csv",FileName="TopCash-anagrafica-clienti-"+DateTime.Today.ToString("yyyyMMdd")+".csv"};
-     if(xp.ShowDialog(this)==true){File.WriteAllText(xp.FileName,Imports.ClientsCsv(store.Clients(),store.All(),store.Metadata(),store.Notes()),new UTF8Encoding(true));await Notify("Anagrafica clienti esportata.");}break;
+     if(xp.ShowDialog(this)==true){File.WriteAllText(xp.FileName,Imports.ClientsCsv(store.Clients(),store.Licenses(),store.Metadata(),store.Notes()),new UTF8Encoding(true));await Notify("Anagrafica clienti esportata.");}break;
     case "dataFolder":Process.Start(new ProcessStartInfo("explorer.exe",store.Folder){UseShellExecute=true});break;
    }
   }
@@ -251,6 +260,17 @@ public partial class MainWindow : Window
  {
   get{try{using var k=Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKey);return k?.GetValue(RunName) is string v&&v.Contains(Environment.ProcessPath??"?",StringComparison.OrdinalIgnoreCase);}catch{return false;}}
   set{using var k=Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RunKey);if(value)k.SetValue(RunName,$"\"{Environment.ProcessPath}\" --minimized");else k.DeleteValue(RunName,false);}
+ }
+ ItalRetailWindow? ital;
+ void OpenItal(bool show)
+ {
+  if(ital==null)
+  {
+   ital=new ItalRetailWindow(SyncTarget(),async()=>await Push()){Owner=this};
+   ital.SignInRequired=()=>Dispatcher.InvokeAsync(async()=>{ital?.Reveal();await Notify("Ital Retail chiede di accedere di nuovo: ho aperto la finestra di accesso.");});
+   if(show)ital.Reveal();else ital.StartHidden();
+  }
+  else if(show)ital.Reveal();
  }
  DtrWindow? dtr;
  void OpenDtr(bool show)
@@ -292,7 +312,7 @@ public partial class MainWindow : Window
   await PushNow();
  }
  Task PushNow(){lastPush=DateTime.UtcNow;if(ServerMode)return Task.CompletedTask; // the shared server feeds the UI itself
-  if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="state",records=store.All(),clients=store.Clients(),orders=store.Orders(),mastroClients=store.MastroClients(),machines=store.Machines(),interventions=store.Interventions(),warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),syncRunning=portal?.Running??false,syncProgress=portal?.Progress??"",sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),dtr=store.DtrRegisters(),dtrStatus=store.DtrState(),sourceFolder,dataFolder=store.Folder,autoImport=true,portalConnected=portal?.Authenticated??false},json));return Task.CompletedTask;}
+  if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="state",records=store.Licenses(),licenseEdits=store.LicenseEdits(),licenseCleanup=store.LicenseCleanup(),clientEdits=store.ClientEdits(),clients=store.Clients(),orders=store.Orders(),mastroClients=store.MastroClients(),machines=store.Machines(),interventions=store.Interventions(),warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),syncRunning=portal?.Running??false,syncProgress=portal?.Progress??"",sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),dtr=store.DtrRegisters(),dtrStatus=store.DtrState(),ital=store.ItalDevices(),italOrders=store.ItalOrders(),italStatus=store.ItalState(),sourceFolder,dataFolder=store.Folder,autoImport=true,portalConnected=portal?.Authenticated??false},json));return Task.CompletedTask;}
  // In server mode the progress also reaches every browser through the server; locally it goes straight to the page.
  Task Notify(string message){Dashboard.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="toast",message},json));return Task.CompletedTask;}
 }

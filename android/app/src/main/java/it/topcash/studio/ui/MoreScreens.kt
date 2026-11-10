@@ -105,10 +105,15 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 MoreRow(Icons.Rounded.PointOfSale, "Parco macchine", "${a.machines.count { it.m.active }} attive · ${a.verificationsDue.size} verificazioni entro 60 gg", Modifier.appear(0)) { nav.navigate("machines") }
                 MoreRow(Icons.Rounded.Router, "Registratori DTR", if (a.registers.isEmpty()) "Si collegano dall'app Windows dell'ufficio" else "${a.registers.size} casse · ${a.dtrErrors.size} con errori · ${a.dtrSilent.size} silenziose", Modifier.appear(0)) { nav.navigate("dtr") }
+                MoreRow(Icons.Rounded.PointOfSale, "Casse Ital Retail", if (a.ital.isEmpty()) "Si collegano dall'app Windows dell'ufficio" else "${a.ital.size} casse · ${a.italUpdate.size} da aggiornare · ${a.italNoSub.size} senza abbonamento", Modifier.appear(0)) { nav.navigate("ital") }
                 MoreRow(Icons.Rounded.Euro, "Contabilità", if (a.acc.hasData) "${AccountingView.money0(a.acc.toCollect)} da incassare · ${a.acc.overdue.size} rate scadute" else "Fatture, incassi e pagamenti da MastroSQL", Modifier.appear(0)) { nav.navigate("accounting") }
                 MoreRow(Icons.Rounded.CalendarMonth, "Scadenziario", "${a.deadlines(0, 120).size} scadenze nei prossimi 120 giorni", Modifier.appear(0)) { nav.navigate("deadlines") }
                 MoreRow(Icons.Rounded.Key, "Licenze Zucchetti", "${a.currentLicenses.size} correnti · ${a.licenses.size - a.currentLicenses.size} storiche", Modifier.appear(1)) { nav.navigate("licenses") }
                 MoreRow(Icons.Rounded.ShoppingBag, "Ordini web", "${a.orders.size} ordini in archivio", Modifier.appear(2)) { nav.navigate("orders") }
+                if (me?.role == "admin") {
+                    MoreRow(Icons.Rounded.AccountCircle, "Utenti", "Crea, modifica ed elimina gli accessi, compreso il tuo", Modifier.appear(3)) { nav.navigate("users") }
+                    if (a.deleted.isNotEmpty()) MoreRow(Icons.Rounded.AccountCircle, "Clienti eliminati", "${a.deleted.size} da ripristinare", Modifier.appear(3)) { nav.navigate("deleted") }
+                }
                 MoreRow(Icons.Rounded.AccountCircle, "Account e impostazioni", "Tema, server, uscita", Modifier.appear(3)) { nav.navigate("account") }
             }
         }
@@ -161,7 +166,10 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
     }
 }
 
-@Composable fun LicensesScreen(a: Archive, nav: NavHostController) {
+@Composable fun LicensesScreen(vm: AppViewModel, a: Archive, nav: NavHostController) {
+    val me by vm.me.collectAsStateWithLifecycle(); val admin = me?.role == "admin"
+    var editing by remember { mutableStateOf<it.topcash.studio.data.ULicense?>(null) }
+    editing?.let { l -> LicenseEditSheet(vm, a, l) { editing = null } }
     var tab by rememberSaveable { mutableStateOf("Correnti") }
     var q by rememberSaveable { mutableStateOf("") }
     val list = remember(a, tab, q) {
@@ -172,9 +180,10 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
     Page(null, "Licenze", "${list.size} licenze", onBack = { nav.popBackStack() }) {
         item(key = "tabs") { SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) { listOf("Correnti", "Storico", "Tutte").forEachIndexed { i, t -> SegmentedButton(tab == t, { tab = t }, SegmentedButtonDefaults.itemShape(i, 3), label = { Text(t) }) } } }
         item(key = "search") { SearchField(q, { q = it }, "Cerca cliente, matricola, P.IVA", Modifier.padding(vertical = 10.dp)) }
+        a.state.licenseCleanup.let { k -> if (k.red + k.old + k.hidden > 0) item(key = "clean") { Text("Non compaiono ${listOfNotNull(k.red.takeIf { it > 0 }?.let { "$it licenze non valide sul portale" }, k.old.takeIf { it > 0 }?.let { "$it scadute da oltre 6 mesi" }, k.hidden.takeIf { it > 0 }?.let { "$it tolte a mano" }).joinToString(", ")}.${if (admin) " Tocca una licenza per correggerla." else ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 10.dp)) } }
         items(list.size.coerceAtMost(1500), key = { list[it].r.id }) { i ->
             val l = list[i]
-            CardBox(Modifier.padding(bottom = 8.dp).animateItem(), onClick = { nav.openClient(l.r.clientCode) }, padding = PaddingValues(14.dp)) {
+            CardBox(Modifier.padding(bottom = 8.dp).animateItem(), onClick = { if (admin) editing = l else nav.openClient(l.r.clientCode) }, padding = PaddingValues(14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(l.r.client, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)

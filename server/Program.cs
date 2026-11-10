@@ -212,6 +212,18 @@ app.MapPost("/api/users/{username}",(HttpContext ctx,string username,UserUpdate 
  }catch(InvalidDataException ex){return Bad(ex.Message);}
  store.Log("users",$"{Who(ctx)} ha modificato l'utente {username}.");hub.Changed();return Results.Ok();
 }).RequireAuthorization("admin");
+app.MapPost("/api/users/{username}/delete",(HttpContext ctx,string username)=>
+{
+ if(username==ctx.User.Identity!.Name)return Bad("Non puoi eliminare il tuo stesso utente: chiedi a un altro amministratore.");
+ try{users.Delete(username);}catch(InvalidDataException ex){return Bad(ex.Message);}
+ store.Log("users",$"{Who(ctx)} ha eliminato l'utente {username}.");hub.Changed();return Results.Ok();
+}).RequireAuthorization("admin");
+// your own name, from any device you are signed in with
+app.MapPost("/api/me",(HttpContext ctx,UserUpdate r)=>
+{
+ try{users.Update(ctx.User.Identity!.Name!,null,null,string.IsNullOrWhiteSpace(r.Name)?null:r.Name);}catch(InvalidDataException ex){return Bad(ex.Message);}
+ return Results.Ok();
+}).RequireAuthorization("read");
 app.MapPost("/api/sync/token",(HttpContext ctx)=>{var t=users.NewSyncToken();store.Log("users",$"{Who(ctx)} ha creato una nuova chiave per la postazione di sincronizzazione.");return Results.Ok(new{token=t});}).RequireAuthorization("admin");
 app.MapPost("/api/sync/token/revoke",(HttpContext ctx)=>{users.RevokeSyncToken();store.Log("users",$"{Who(ctx)} ha revocato la chiave della postazione di sincronizzazione.");return Results.Ok();}).RequireAuthorization("admin");
 
@@ -235,9 +247,27 @@ app.MapPost("/api/meta",(HttpContext ctx,MetaRequest r)=>
  try{store.SaveMeta(r.Code,r.Meta with{NextContact=r.Meta.NextContact??"",FollowupState=r.Meta.FollowupState??""});}catch(InvalidDataException ex){return Bad(ex.Message);}
  hub.Changed();return Results.Ok();
 }).RequireAuthorization("read");
-app.MapGet("/api/export/clients.csv",()=>Results.File(Utf8Bom(Imports.ClientsCsv(store.Clients(),store.All(),store.Metadata(),store.Notes())),"text/csv; charset=utf-8",$"TopCash-anagrafica-clienti-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("export");
-app.MapGet("/api/export/licenses.csv",()=>Results.File(Utf8Bom(Imports.CsvExport(store.All())),"text/csv; charset=utf-8",$"TopCash-licenze-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("export");
-app.MapGet("/api/export/calendar.ics",()=>Results.File(Encoding.UTF8.GetBytes(Imports.Calendar(store.All().Where(r=>!r.Scope.EndsWith("-scadute")))),"text/calendar; charset=utf-8","TopCash-scadenze-90-giorni.ics")).RequireAuthorization("export");
+// ───────────────────────── administrator edits: customers and licences (kept apart from the synchronised copies)
+app.MapPost("/api/clients/save",(HttpContext ctx,ClientSaveRequest r)=>
+{
+ try{var code=store.SaveClient(r.Code,r.Edit??new ClientEdit(),Who(ctx));hub.Changed();return Results.Ok(new{code});}catch(InvalidDataException ex){return Bad(ex.Message);}
+}).RequireAuthorization("admin");
+app.MapPost("/api/clients/delete",(HttpContext ctx,ClientDeleteRequest r)=>
+{
+ if(string.IsNullOrWhiteSpace(r.Code)||r.Code.Length>40)return Bad("Codice cliente mancante.");
+ store.DeleteClient(r.Code,r.Deleted,Who(ctx));hub.Changed();return Results.Ok();
+}).RequireAuthorization("admin");
+app.MapPost("/api/clients/reset",(HttpContext ctx,ClientDeleteRequest r)=>
+{
+ try{store.ResetClient(r.Code??"",Who(ctx));hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}
+}).RequireAuthorization("admin");
+app.MapPost("/api/licenses/save",(HttpContext ctx,LicenseSaveRequest r)=>
+{
+ try{store.SaveLicense(r.Id??"",r.Edit??new LicenseEdit(),Who(ctx));hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}
+}).RequireAuthorization("admin");
+app.MapGet("/api/export/clients.csv",()=>Results.File(Utf8Bom(Imports.ClientsCsv(store.Clients(),store.Licenses(),store.Metadata(),store.Notes())),"text/csv; charset=utf-8",$"TopCash-anagrafica-clienti-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("export");
+app.MapGet("/api/export/licenses.csv",()=>Results.File(Utf8Bom(Imports.CsvExport(store.Licenses())),"text/csv; charset=utf-8",$"TopCash-licenze-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("export");
+app.MapGet("/api/export/calendar.ics",()=>Results.File(Encoding.UTF8.GetBytes(Imports.Calendar(store.Licenses().Where(r=>!r.Scope.EndsWith("-scadute")))),"text/calendar; charset=utf-8","TopCash-scadenze-90-giorni.ics")).RequireAuthorization("export");
 app.MapGet("/api/backup",(HttpContext ctx)=>
 {
  var tmp=Paths.TempFile(".sqlite");
@@ -368,6 +398,9 @@ record DeviceHello(string? Name,string? Platform);
 record DeviceRename(string? Name);
 record PasswordRequest(string? Current,string? Password);
 record UserRequest(string? Username,string? Name,string? Role,string? Password);
+record ClientSaveRequest(string? Code,ClientEdit? Edit);
+record ClientDeleteRequest(string? Code,bool Deleted);
+record LicenseSaveRequest(string? Id,LicenseEdit? Edit);
 record UserUpdate(string? Role,bool? Disabled,string? Name,string? Password);
 record NoteRequest(string Code,string? Note);
 record MetaRequest(string Code,ClientMeta Meta);

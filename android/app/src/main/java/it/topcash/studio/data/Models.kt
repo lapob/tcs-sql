@@ -68,6 +68,8 @@ import kotlinx.serialization.Serializable
     val invoices: List<Invoice> = emptyList(), val dues: List<Due> = emptyList(), val balances: List<Balance> = emptyList(), val dueNotes: Map<String, DueNote> = emptyMap(),
     val features: Features = Features(),
     val dtr: List<DtrRegister> = emptyList(), val dtrStatus: DtrStatus = DtrStatus(),
+    val ital: List<ItalDevice> = emptyList(), val italOrders: List<ItalOrder> = emptyList(), val italStatus: DtrStatus = DtrStatus(),
+    val clientEdits: Map<String, ClientEdit> = emptyMap(), val licenseEdits: Map<String, LicenseEdit> = emptyMap(), val licenseCleanup: LicenseCleanup = LicenseCleanup(),
     val version: Long = 0,
 )
 /** Server capabilities: [mail] = signed reports can be e-mailed to the customer from the server. */
@@ -100,3 +102,30 @@ object Catalog {
     val priorities = listOf("Bassa", "Normale", "Alta", "Urgente")
     val followups = listOf("", "Da contattare", "In attesa", "Completato")
 }
+
+/** Ital Retail OnePlus (dealer area): read-only copy kept by the sync station. Dates are ISO. */
+@Serializable data class ItalDevice(val serial: String = "", val portalId: String = "", val type: String = "", val update: String = "", val subscribed: Boolean = false,
+    val client: String = "", val note: String = "", val detail: ItalDetail? = null)
+@Serializable data class ItalDetail(val subFrom: String = "", val subTo: String = "", val autoRenew: Boolean = false, val firmware: String = "", val closures: Int = 0,
+    val dgfeNumber: Int = 0, val dgfeSize: String = "", val dgfeFree: Int = -1, val rtState: String = "", val activated: String = "", val registered: String = "",
+    val certFrom: String = "", val certDue: String = "", val dataAt: String = "", val hw: String = "", val wifi: String = "", val seasonal: String = "", val clock: String = "",
+    val updates: List<ItalUpdate>? = null, val dgfe: List<ItalDgfe>? = null, val readAt: String = "")
+@Serializable data class ItalUpdate(val at: String = "", val from: String = "", val to: String = "")
+@Serializable data class ItalDgfe(val duration: String = "", val number: String = "", val at: String = "", val status: String = "")
+@Serializable data class ItalOrder(val number: String = "", val date: String = "", val serial: String = "", val client: String = "", val kind: String = "", val amount: String = "")
+/** Administrator's changes, kept apart from the synchronised copies (never overwritten by a sync). */
+@Serializable data class ClientEdit(val name: String = "", val vat: String = "", val taxCode: String = "", val city: String = "", val address: String = "", val phone: String = "",
+    val email: String = "", val pec: String = "", val contact: String = "", val category: String = "", val created: Boolean = false, val deleted: Boolean = false,
+    val updatedAt: String = "", val updatedBy: String = "")
+@Serializable data class LicenseEdit(val expiry: String = "", val note: String = "", val hidden: Boolean = false, val updatedAt: String = "", val updatedBy: String = "")
+@Serializable data class LicenseCleanup(val red: Int = 0, val old: Int = 0, val hidden: Int = 0)
+@Serializable data class ClientSaveRequest(val code: String, val edit: ClientEdit)
+@Serializable data class ClientDeleteRequest(val code: String, val deleted: Boolean)
+@Serializable data class LicenseSaveRequest(val id: String, val edit: LicenseEdit)
+@Serializable data class SavedCode(val code: String = "")
+@Serializable data class UserRow(val username: String = "", val name: String = "", val role: String = "", val roleLabel: String = "", val disabled: Boolean = false,
+    val created: String = "", val lastLogin: String = "")
+@Serializable data class UsersResponse(val users: List<UserRow> = emptyList())
+@Serializable data class UserCreate(val username: String, val name: String, val role: String, val password: String)
+@Serializable data class UserPatch(val role: String? = null, val disabled: Boolean? = null, val name: String? = null, val password: String? = null)
+@Serializable data class PasswordChange(val current: String, val password: String)

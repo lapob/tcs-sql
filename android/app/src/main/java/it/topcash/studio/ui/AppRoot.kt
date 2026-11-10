@@ -169,11 +169,14 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
                     screen("interventions") { InterventionsScreen(vm, it, onOpen = { id -> editor = EditorRequest(interventionId = id) }, onNew = { editor = EditorRequest() }) }
                     screen("machines") { MachinesScreen(it, nav) }
                     screen("dtr") { DtrScreen(it, nav) }
+                    screen("ital") { ItalScreen(it, nav) }
+                    screen("users") { if (admin) UsersScreen(vm, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
+                    screen("deleted") { if (admin) DeletedClientsScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("warehouse") { if (admin) WarehouseScreen(vm, it, nav) { t, art -> movement = t to art } else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("more") { MoreScreen(vm, it, nav) }
                     screen("deadlines") { DeadlinesScreen(it, nav) }
                     screen("accounting") { AccountingScreen(vm, it, nav) }
-                    screen("licenses") { LicensesScreen(it, nav) }
+                    screen("licenses") { LicensesScreen(vm, it, nav) }
                     screen("orders") { OrdersScreen(it, nav) }
                     screen("account") { AccountScreen(vm, nav) }
                     composable("article/{code}") { e ->

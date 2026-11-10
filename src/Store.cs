@@ -29,6 +29,8 @@ public sealed partial class Store
   InitContabilita(c);
   InitSettings(c);
   InitDtr(c);
+  InitItal(c);
+  InitEdits(c);
  }
  public List<ClientRecord> Clients(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM clients";using var r=q.ExecuteReader();var list=new List<ClientRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<ClientRecord>(r.GetString(0))!);return list;}
  public List<OrderRecord> Orders(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM orders";using var r=q.ExecuteReader();var list=new List<OrderRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<OrderRecord>(r.GetString(0))!);return list;}
@@ -80,6 +82,12 @@ public sealed partial class Store
    case "dtrstatus": // session heartbeat: headers = [connected, message, portal total]
     if(headers.Count<2)throw new InvalidDataException("Stato DTR incompleto.");
     DtrHeartbeat(headers[0]=="1",headers[1],headers.Count>2&&int.TryParse(headers[2],out var tot)?tot:0);return "DTR-Service: stato aggiornato";
+   case "ital":return ApplyItal(headers,rows,capturedAt,source.Replace("Zucchetti","Ital Retail"));
+   case "italdetail":return ApplyItalDetails(headers,rows,capturedAt);
+   case "italorders":return ApplyItalOrders(headers,rows);
+   case "italstatus":
+    if(headers.Count<2)throw new InvalidDataException("Stato Ital Retail incompleto.");
+    ItalHeartbeat(headers[0]=="1",headers[1],headers.Count>2&&int.TryParse(headers[2],out var itot)?itot:0);return "Ital Retail: stato aggiornato";
    default:throw new InvalidDataException("Tipo di elenco sconosciuto: "+kind);
   }
  }
@@ -246,6 +254,31 @@ public sealed partial class Store
   if(dd==null||dd.Vat!="04989200482"||dd.CertDue!="2028-07-17"||dd.LastVp!="2026-07-25"||dd.GeInit!="2026-06-25"||dd.Licenses![0].To!="2027-07-19"||dd.Errors![0].At!="2026-11-09T18:30"||dd.Address!="VIA ROMA 1 FIRENZE")throw new Exception("DTR: dettaglio");
   store.ApplyPortalList("dtrstatus","DTR","Stato",["0","Accesso richiesto"],[],"t","test");if(store.DtrState().Connected||store.DtrState().Error.Length==0)throw new Exception("DTR: sessione scaduta non segnalata");
   store.ApplyPortalList("dtrstatus","DTR","Stato",["1","Collegato","782"],[],"t","test");if(!store.DtrState().Connected||store.DtrState().Error.Length>0||store.DtrState().PortalTotal!=782)throw new Exception("DTR: ripresa sessione");
-  store.Backup(Path.Combine(folder,"backup.sqlite"));Console.WriteLine("PASS: upsert, deduplicazione, validazione atomica, note, magazzino, rapportini, email, contabilità, backup esterni, DTR-Service.");
+  // Ital Retail: whole-list replace, dd-MM-yyyy dates, details kept across list refreshes, orders, session state
+  var ih=Store.ItalHeaders.ToList();
+  store.ApplyPortalList("ital","ITAL","Dispositivi Ital Retail",ih,[["1BEN1002040","1831","NEXT","No","Sì","","EQUAZIONE"],["1BEN1002043","1864","NEXT","Sì [ version 1.0.4 ]","No","","HOTEL"]],"2026-11-10T10:00:00+01:00","test");
+  var il=store.ItalDevices();if(il.Count!=2||il[0].Update!=""||!il[0].Subscribed||il[1].Update!="1.0.4"||il[1].Subscribed||il[1].PortalId!="1864")throw new Exception("Ital Retail: elenco");
+  try{store.ApplyPortalList("ital","ITAL","x",["Matricola"],[["1BEN1002040"]],"t","test");throw new Exception("Ital Retail: colonne errate accettate");}catch(InvalidDataException){}
+  try{store.ApplyPortalList("ital","ITAL","x",ih,[],"t","test");throw new Exception("Ital Retail: elenco vuoto accettato");}catch(InvalidDataException){}
+  var idet=JsonSerializer.Serialize(new ItalDetail("1BEN1002040","03-11-2026","03-11-2027",true,"1.0.4",8,1,"330 Giornate lavorative",98,"In servizio","05-11-2026","03-11-2026","03-11-2026","03-11-2034","09-11-2026 18:23:35",Updates:[new("05-11-2026","1.0.3","1.0.4")],Dgfe:[new("330 giornate lavorative","1","14-09-2026 08:19:29","Completata online")]));
+  store.ApplyPortalList("italdetail","ITAL","Dettagli",["Matricola","Dettaglio"],[["1BEN1002040",idet],["ALTRA",idet]],"2026-11-10T10:00:00+01:00","test");
+  store.ApplyPortalList("ital","ITAL","Dispositivi Ital Retail",ih,[["1BEN1002040","1831","NEXT","No","Sì","","EQUAZIONE"]],"2026-11-10T12:00:00+01:00","test");
+  var idd=store.ItalDevices().Single().Detail;
+  if(idd==null||idd.SubTo!="2027-11-03"||idd.CertDue!="2034-11-03"||idd.DataAt!="2026-11-09T18:23"||idd.DgfeFree!=98||idd.Updates![0].At!="2026-11-05"||idd.Dgfe![0].At!="2026-09-14T08:19")throw new Exception("Ital Retail: dettaglio");
+  store.ApplyPortalList("italorders","ITAL","Ordini",Store.ItalOrderHeaders.ToList(),[["3420","03-11-2026","1BEN1002040","-","Contratto di manutenzione","0,00 €"]],"t","test");
+  if(store.ItalOrders().Single().Date!="2026-11-03"||store.ItalOrders()[0].Client!="")throw new Exception("Ital Retail: ordini");
+  store.ApplyPortalList("italstatus","ITAL","Stato",["0","Accesso richiesto"],[],"t","test");if(store.ItalState().Connected||store.ItalState().Error.Length==0)throw new Exception("Ital Retail: sessione scaduta non segnalata");
+  store.ApplyPortalList("italstatus","ITAL","Stato",["1","Collegato","7"],[],"t","test");if(!store.ItalState().Connected||store.ItalState().Error.Length>0)throw new Exception("Ital Retail: ripresa sessione");
+  // Administrator edits: customers created / changed / deleted, licences corrected or hidden, portal cleanup rules
+  var nc=store.SaveClient("",new ClientEdit(Name:"Bar Nuovo",Vat:"it 01234567890",Email:"Info@Bar.it"),"test");
+  var ce=store.ClientEdits()[nc];if(!ce.Created||ce.Vat!="IT01234567890"||ce.Email!="info@bar.it")throw new Exception("Clienti: creazione");
+  try{store.SaveClient("",new ClientEdit(),"test");throw new Exception("Clienti: senza nome accettato");}catch(InvalidDataException){}
+  store.DeleteClient(nc,true,"test");if(!store.ClientEdits()[nc].Deleted)throw new Exception("Clienti: eliminazione");
+  store.SaveClient("000000000334426",new ClientEdit(Phone:"055 123"),"test");store.ResetClient("000000000334426","test");if(store.ClientEdits().ContainsKey("000000000334426"))throw new Exception("Clienti: annulla modifiche");
+  var lic=store.All()[0];store.SaveLicense(lic.Id,new LicenseEdit(Expiry:"2031-01-31",Note:"rinnovata a mano"),"test");
+  if(store.Licenses().Single(x=>x.Id==lic.Id).Expiry!="31-01-2031")throw new Exception("Licenze: modifica scadenza");
+  store.SaveLicense(lic.Id,new LicenseEdit(Hidden:true),"test");if(store.Licenses().Any(x=>x.Id==lic.Id))throw new Exception("Licenze: nascosta ancora visibile");
+  store.SaveLicense(lic.Id,new LicenseEdit(),"test");if(store.LicenseEdits().ContainsKey(lic.Id))throw new Exception("Licenze: ripristino");
+  store.Backup(Path.Combine(folder,"backup.sqlite"));Console.WriteLine("PASS: upsert, deduplicazione, validazione atomica, note, magazzino, rapportini, email, contabilità, backup esterni, DTR-Service, Ital Retail, modifiche amministratore.");
  }
 }

@@ -111,7 +111,7 @@ async function api(path,opt={}){
 const post=(p,b)=>api(p,{method:'POST',body:JSON.stringify(b||{})});
 function download(url){const a=document.createElement('a');a.href=url;a.download='';document.body.append(a);a.click();a.remove();toast('Download avviato','download');}
 function pickAndUpload(){const i=document.createElement('input');i.type='file';i.accept='.csv,.json,.xlsx';i.onchange=async()=>{const f=i.files[0];if(!f)return;const fd=new FormData();fd.append('file',f);try{const r=await api('/api/import',{method:'POST',body:fd});toast(r.message||'Importazione completata');}catch(e){toast(e.message,'alert');}};i.click();}
-const HOST_ACTIONS=['portal','syncPortal','dtr','dtrSync','autostart','external','setSyncToken','disconnectServer','connectServer','hostInfo','setExternal'];
+const HOST_ACTIONS=['portal','syncPortal','dtr','dtrSync','ital','italSync','autostart','external','setSyncToken','disconnectServer','connectServer','hostInfo','setExternal'];
 function send(action,data={}){
  if(!WEB){if(host)host.postMessage({action,...data});else toast('Funzione disponibile nell’app Windows (TopCash.Licenze.exe).','alert');return;}
  if(host&&HOST_ACTIONS.includes(action))return host.postMessage({action,...data});
@@ -129,6 +129,7 @@ function send(action,data={}){
   case'backup':download('/api/backup');break;
   case'import':pickAndUpload();break;
   case'external':if(data.url.startsWith('https://'))window.open(data.url,'_blank','noopener');else location.href=data.url;break;
+  case'ital':case'italSync':toast('Ital Retail si aggiorna dalla postazione dell’ufficio: sessione controllata ogni 15 minuti, dati ogni 2 ore.','sync');break;
   case'dtr':case'dtrSync':toast('DTR-Service si aggiorna dalla postazione dell’ufficio: sessione controllata ogni 15 minuti, dati ogni 2 ore.','sync');break;
   case'syncPortal':case'portal':toast('La lettura da Zucchetti parte dalla postazione dell’ufficio, in automatico ogni 6 ore.','sync');break;
   default:toast('Funzione non disponibile da qui.','alert');
@@ -160,7 +161,7 @@ function ask({title,text='',ok='Conferma',danger=false,html='',cancel=true}){ret
 async function copy(text){try{await navigator.clipboard.writeText(text);toast('Copiato negli appunti');}catch{toast('Copia non riuscita','alert');}}
 
 // ───────────────────────── shared UI pieces
-const PAGES={overview:'Panoramica',clients:'Clienti',interventions:'Interventi',machines:'Macchine',dtr:'Registratori DTR',warehouse:'Magazzino',accounting:'Contabilità',licenses:'Licenze',expiry:'Scadenze',orders:'Ordini',tasks:'Attività',sync:'Sincronizzazione',settings:'Impostazioni',team:'Utenti'};
+const PAGES={overview:'Panoramica',clients:'Clienti',interventions:'Interventi',machines:'Macchine',dtr:'Registratori DTR',ital:'Casse Ital Retail',warehouse:'Magazzino',accounting:'Contabilità',licenses:'Licenze',expiry:'Scadenze',orders:'Ordini',tasks:'Attività',sync:'Sincronizzazione',settings:'Impostazioni',team:'Utenti'};
 function hero(title,text,actions=''){return`<section class="hero reveal"><div><h1>${title}</h1><p>${text}</p></div><div class="btn-row">${actions}</div></section>`;}
 function explain(id,html){if(store.get('hide.'+id,false))return'';return`<div class="explain reveal" style="--i:1"><span class="orb">${icon('sparkle')}</span><div>${html}</div><button class="x" data-hide-explain="${id}" aria-label="Nascondi spiegazione" data-tip="Nascondi questa spiegazione">${icon('close')}</button></div>`;}
 function kpi(label,value,note,ic,tone,go,i,tip){return`<div class="card kpi ${tone} reveal" style="--i:${i}" data-go="${go}" tabindex="0" ${tip?`data-tip="${esc(tip)}"`:''}><div class="kpi-top"><span>${label}</span><span class="kpi-icon">${icon(ic)}</span></div><div class="kpi-value" data-count="${value}">${fmt(value)}</div><div class="kpi-note">${note}</div></div>`;}
@@ -183,7 +184,7 @@ function lastCapture(){const d=state.sources.map(s=>s.capturedAt).concat((state.
 // ───────────────────────── pages
 // ── One agenda for everything that expires: Zucchetti licences, periodic checks and service contracts (Mastro),
 // electronic journal / certificate / RT-Utility licence (DTR). from..to are day offsets from today.
-const AG_KIND={lic:['Licenza Zucchetti','info'],ver:['Verificazione','acc'],con:['Abbonamento','acc'],ge:['Giornale elettronico','due'],cert:['Certificato RT','due'],rtu:['Licenza RT-Utility','info']};
+const AG_KIND={lic:['Licenza Zucchetti','info'],ver:['Verificazione','acc'],con:['Abbonamento','acc'],ge:['Giornale elettronico','due'],cert:['Certificato RT','due'],rtu:['Licenza RT-Utility','info'],isub:['Abbonamento Ital Retail','acc'],icert:['Certificato RT','due']};
 function agendaItems(from,to){
  const out=[];const add=(k,d,n,title,sub,attr)=>{if(d&&n!==null&&n>=from&&n<=to)out.push({k,d,n,title,sub,attr});};
  for(const r of D.current){const d=parseDate(r.expiry);add('lic',d,dayDiff(d),r.client,`${famLabel(famOfScope(r.scope))} · ${r.serial}`,`data-client="${esc(r.clientCode)}"`);}
@@ -193,26 +194,31 @@ function agendaItems(from,to){
   add('ge',parseDate(r.geDue),r.ge,nm,`GE ${r.geNumber||''} · ${r.serial}`,a);
   if(r.d?.certDue)add('cert',parseDate(r.d.certDue),r.cert,nm,r.serial,a);
   if(r.lic?.to)add('rtu',parseDate(r.lic.to),r.licDays,nm,r.serial,a);}
+ if(typeof IT!=='undefined'&&IT)for(const r of IT.devs){const nm=r.c?.name||r.label||r.serial,a=`data-ital="${esc(r.serial)}"`;
+  if(r.d?.subTo&&!r.d.autoRenew)add('isub',parseDate(r.d.subTo),r.sub,nm,`${r.type||'Cassa'} · ${r.serial}`,a);
+  if(r.d?.certDue)add('icert',parseDate(r.d.certDue),r.cert,nm,`Ital Retail · ${r.serial}`,a);}
  return out.sort((a,b)=>a.d-b.d);
 }
 function agendaRow(x){const[label,cls]=AG_KIND[x.k];return`<div class="list-row" ${x.attr}><span class="date-chip ${x.n<0?'bad':x.n<=30?'due':''}"><b>${x.d.getDate()}</b><span>${DF3.format(x.d)}</span></span><div class="grow"><strong>${esc(x.title)}</strong><small><span class="badge ${cls}">${label}</span> ${esc(x.sub)}</small></div><span class="in-days" style="color:var(--${x.n<0?'bad':x.n<=30?'due':'text-3'})">${rel(x.n)}</span></div>`;}
 // "Da fare oggi": only the lines that need attention, each one opens the right page
 function todayCard(){
  const late=D.tasks.filter(c=>c.meta.followupState!=='Completato'&&c.meta.nextContact&&days(c.meta.nextContact)<=0).length;
- const week=agendaItems(-3650,7);const dt=typeof DT!=='undefined'&&DT?DT:null;
+ const week=agendaItems(-3650,7);const dt=typeof DT!=='undefined'&&DT?DT:null;const it=typeof IT!=='undefined'&&IT?IT:null;
  const st=state.dtrStatus||{};const stale=WEB&&st.lastSync&&st.checkedAt&&(Date.now()-new Date(st.checkedAt))>3*3600e3;
  const rows=[
-  [stale,'alert','bad','La postazione di sincronizzazione non si vede da '+(stale?Math.round((Date.now()-new Date(st.checkedAt))/3600e3):0)+' ore','Zucchetti e DTR non si aggiornano: controlla che il PC dell’ufficio sia acceso con Studio aperto.','sync'],
+  [stale,'alert','bad','La postazione di sincronizzazione non si vede da '+(stale?Math.round((Date.now()-new Date(st.checkedAt))/3600e3):0)+' ore','Zucchetti, DTR e Ital Retail non si aggiornano: controlla che il PC dell’ufficio sia acceso con Studio aperto.','sync'],
   [D.openInterventions.length,'tool','info',`${fmt(D.openInterventions.length)} interventi aperti`,'Da completare o chiudere','interventions'],
   [late,'task','due',`${fmt(late)} promemoria da fare`,'Contatti fissati per oggi o già passati','tasks'],
   [week.length,'calendar','due',`${fmt(week.length)} scadenze entro 7 giorni`,'Licenze, verificazioni, abbonamenti, GE e certificati (comprese quelle già passate)','expiry'],
   [dt?.errors.length,'alert','bad',`${fmt(dt?.errors.length||0)} casse con errori`,'Errori o avvisi inviati a DTR negli ultimi 7 giorni','dtr','errors'],
   [dt?.silent.length,'clock','bad',`${fmt(dt?.silent.length||0)} casse silenziose`,'Nessuna comunicazione da oltre 7 giorni','dtr','silent'],
+  [it?.update.length,'download','due',`${fmt(it?.update.length||0)} casse Ital Retail da aggiornare`,'Nuovo firmware disponibile sul portale','ital','update'],
+  [it?.low.length,'box','bad',`${fmt(it?.low.length||0)} giornali elettronici quasi pieni`,'Casse Ital Retail con poco spazio nel DGFE','ital','dgfe'],
   [typeof A!=='undefined'&&A?A.overdue.length:0,'euro','due',`${fmt(typeof A!=='undefined'&&A?A.overdue.length:0)} scadenze contabili passate`,'Incassi e pagamenti da sollecitare','accounting'],
   [isAdmin()&&typeof W!=='undefined'&&W?W.below.length:0,'box','due',`${fmt(typeof W!=='undefined'&&W?W.below.length:0)} articoli sotto scorta`,'Da riordinare','warehouse'],
  ].filter(r=>r[0]);
  return`<div class="card reveal today" style="--i:5"><div class="card-head"><div><h2>Da fare oggi</h2><p>${rows.length?'Solo quello che richiede attenzione.':'Niente in sospeso: tutto in ordine.'}</p></div></div>
-  ${rows.map(([,ic,tone,title,sub,pg,tab])=>`<div class="list-row" data-go="${pg}"${tab?` data-go-dtab="${tab}"`:''} tabindex="0"><span class="today-ic t-${tone}">${icon(ic)}</span><div class="grow"><strong>${title}</strong><small>${sub}</small></div><span class="row-go">${icon('chevron')}</span></div>`).join('')||empty('check','Tutto fatto','Nessuna scadenza, errore o promemoria in sospeso.')}</div>`;
+  ${rows.map(([,ic,tone,title,sub,pg,tab])=>`<div class="list-row" data-go="${pg}"${tab?` data-go-${pg==='ital'?'itab':'dtab'}="${tab}"`:''} tabindex="0"><span class="today-ic t-${tone}">${icon(ic)}</span><div class="grow"><strong>${title}</strong><small>${sub}</small></div><span class="row-go">${icon('chevron')}</span></div>`).join('')||empty('check','Tutto fatto','Nessuna scadenza, errore o promemoria in sospeso.')}</div>`;
 }
 function overview(){
  const h=new Date().getHours();const greet=h<13?'Buongiorno':h<18?'Buon pomeriggio':'Buonasera';
@@ -232,6 +238,7 @@ function overview(){
  </div>
  <div class="layout-2"><div class="stack">
   ${todayCard()}
+  ${state.italStatus?.error?`<div class="banner reveal" style="--i:5"><span class="orb">${icon('alert')}</span><div class="grow"><h3>Ital Retail: serve un nuovo accesso</h3><p>${esc(state.italStatus.error)}</p></div><button class="btn" data-go="ital">Casse Ital Retail ${icon('arrow')}</button></div>`:''}
   ${state.dtrStatus?.error?`<div class="banner reveal" style="--i:5"><span class="orb">${icon('alert')}</span><div class="grow"><h3>DTR-Service: serve un nuovo accesso</h3><p>${esc(state.dtrStatus.error)}</p></div><button class="btn" data-go="dtr">Registratori ${icon('arrow')}</button></div>`:''}
   ${WEB&&me?.role==='admin'&&state.features?.backupError?`<div class="banner reveal" style="--i:5"><span class="orb">${icon('alert')}</span><div class="grow"><h3>Copia esterna dei backup non riuscita</h3><p>${esc(state.features.backupError)} Collega il disco: il server riprova da solo ogni ora.</p></div><button class="btn" data-go="settings">Impostazioni ${icon('arrow')}</button></div>`:''}
   ${needSync?`<div class="banner reveal" style="--i:6"><span class="orb">${icon('sync')}</span><div class="grow"><h3>Completa le anagrafiche dei clienti</h3><p>Avvia una sincronizzazione: verranno letti indirizzi, telefoni, email, codici fiscali e ordini da MY Zucchetti.</p></div><button class="btn" data-go="sync">Come si fa ${icon('arrow')}</button></div>`:`<div class="banner reveal" style="--i:6"><span class="orb">${icon('shield')}</span><div class="grow"><h3>Archivio allineato con Zucchetti</h3><p>Ultima lettura dal portale: ${esc(lastCapture())}. ${WEB?'Tutto il team vede gli stessi dati, in tempo reale.':'I dati restano sul tuo computer.'}</p></div><button class="btn" data-go="sync">Dettagli ${icon('arrow')}</button></div>`}
@@ -261,16 +268,25 @@ function clientsPage(){
  list=sortBy(list,{name:c=>c.name,city:c=>c.city||'~',lic:c=>c.active.length,next:c=>c.next?+c.next:Infinity});
  const size=14;const cities=[...new Set(D.clients.map(c=>c.city).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'it'));
  const rows=pageOf(list,size);
- return`${hero('I tuoi <span class="grad">clienti</span>.','Anagrafica completa dal portale Zucchetti, unita a licenze, ordini e alle tue note.',`<button class="btn" data-action="exportClients">${icon('download')}Esporta CSV</button>`)}
+ if(ui.clientView==='deleted')return deletedClientsPage();
+ return`${hero('I tuoi <span class="grad">clienti</span>.','Anagrafica completa dal portale Zucchetti, unita a licenze, ordini e alle tue note.',`${isAdmin()?`<button class="btn accent" data-new-client>${icon('plus')}Nuovo cliente</button>`:''}<button class="btn" data-action="exportClients">${icon('download')}Esporta CSV</button>`)}
  ${explain('clients','<strong>Clicca su un cliente</strong> per aprire la sua scheda: contatti, licenze, ordini, promemoria e note. Le icone nella colonna Contatti ti permettono di <strong>chiamare, scrivere o aprire la mappa</strong> con un clic. Clicca sull’intestazione di una colonna per ordinarla.')}
  <div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Anagrafica<span class="count">${fmt(list.length)}</span></h2><p>${fmt(D.clients.filter(c=>c.registry).length)} schede dal portale Zucchetti · ${fmt(D.clients.filter(c=>c.mastro).length)} da MastroSQL · ${fmt(D.clients.filter(c=>c.meta.favorite).length)} preferiti</p></div>
-  <div class="seg">${[['all','Tutti'],['fav','Preferiti'],['nocontact','Senza contatti']].map(([k,l])=>`<button class="${ui.clientView===k?'active':''}" data-cview="${k}">${l}</button>`).join('')}</div></div>
+  <div class="seg">${[['all','Tutti'],['fav','Preferiti'],['nocontact','Senza contatti'],...(isAdmin()&&D.deleted?.length?[['deleted',`Eliminati · ${D.deleted.length}`]]:[])].map(([k,l])=>`<button class="${ui.clientView===k?'active':''}" data-cview="${k}">${l}</button>`).join('')}</div></div>
   <div class="toolbar">${search('Cerca per nome, P.IVA, città, telefono, email, matricola…')}${sel('f-status','Tutti gli stati',['Attiva','In scadenza','Scaduta','Bloccata','Da verificare','Senza licenze'],ui.status)}${sel('f-product','Tutti i prodotti',Object.keys(FAMILY),ui.product)}${sel('f-city','Tutte le località',cities,ui.city)}</div>
   <div class="table-wrap"><table><thead><tr>${th('Cliente','name')}${th('Località','city')}<th>Contatti</th><th>Prodotti</th>${th('Licenze','lic','Licenze negli elenchi correnti')}${th('Prossima scadenza','next')}<th>Stato</th><th></th></tr></thead><tbody>
   ${rows.map((c,i)=>`<tr class="reveal" style="--i:${i}" data-client="${esc(c.code)}" tabindex="0"><td><div class="who">${markEl(c.name,c.code)}<div><strong>${hl(c.name,ui.q)}${c.meta.favorite?`<svg class="fav"><use href="#i-star"/></svg>`:''}</strong><small>Cod. ${esc(c.code.replace(/^0+/,''))}${c.vat?` · P.IVA ${esc(c.vat)}`:''}</small></div></div></td><td>${c.city?esc(c.city):'<span class="muted">—</span>'}</td><td>${contacts(c)}</td><td>${c.families.map(f=>`<span class="chip">${esc(famLabel(f))}</span>`).join('')}</td><td class="mono">${c.active.length}${c.records.length>c.active.length?`<span class="muted"> +${c.records.length-c.active.length}</span>`:''}</td><td>${c.next?`${dShort(c.next)}<br><small class="muted">${rel(dayDiff(c.next))}</small>`:'<span class="muted">—</span>'}</td><td>${badge(c.status)}</td><td><span class="row-go">${icon('chevron')}</span></td></tr>`).join('')||`<tr><td colspan="8">${empty('search','Nessun cliente trovato','Prova con un altro nome, una partita IVA o una matricola.')}</td></tr>`}
   </tbody></table></div>${pager(list.length,size)}</div>`;
 }
 
+function deletedClientsPage(){
+ const list=D.deleted||[];
+ return`${hero('Clienti <span class="grad">eliminati</span>.','Nascosti da Studio per tutto il team: i portali e Mastro non sono stati toccati. Ripristinali quando vuoi.',`<button class="btn" data-cview="all">${icon('arrow')}Torna ai clienti</button>`)}
+ <div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Eliminati<span class="count">${fmt(list.length)}</span></h2></div></div>
+ ${list.map(c=>`<div class="list-row">${markEl(c.name,c.code)}<div class="grow"><strong>${esc(c.name)}</strong><small>Cod. ${esc(c.code.replace(/^0+/,''))}${c.vat?' · P.IVA '+esc(c.vat):''}${c.edit?.updatedBy?` · eliminato da ${esc(c.edit.updatedBy)} ${esc(dTime(c.edit.updatedAt))}`:''}</small></div><button class="btn sm" data-restore-client="${esc(c.code)}">${icon('sync')}Ripristina</button></div>`).join('')||empty('check','Nessun cliente eliminato','')}</div>`;
+}
+const licEditBtn=r=>isAdmin()?`<button class="icon-btn sm" data-edit-lic="${esc(r.id)}" data-tip="Modifica licenza" aria-label="Modifica licenza">${icon('edit')}</button>`:'';
+const licNote=r=>{const e=D.licEdits?.[r.id];return e?`<span class="badge info" data-tip="${esc([e.note,e.updatedBy&&('Modificata da '+e.updatedBy)].filter(Boolean).join(' · '))}">${e.expiry?'scadenza corretta':'nota'}</span>`:'';};
 function licTable(list,size=14,title='Registro licenze',sub='Dati originali dell’ultima lettura dal portale.'){
  const q=norm(ui.q);if(q)list=list.filter(r=>norm([r.client,r.clientCode,r.vat,r.serial,r.product].join(' ')).includes(q));
  if(ui.status)list=list.filter(r=>licenseStatus(r)===ui.status);if(ui.product)list=list.filter(r=>famOfScope(r.scope)===ui.product);
@@ -280,16 +296,18 @@ function licTable(list,size=14,title='Registro licenze',sub='Dati originali dell
  return`<div class="card reveal" style="--i:3"><div class="card-head"><div><h2>${title}<span class="count">${fmt(list.length)}</span></h2><p>${sub}</p></div></div>
  <div class="toolbar">${search('Cerca cliente, matricola, P.IVA…')}${sel('f-status','Tutti gli stati',['Attiva','In scadenza','Scaduta','Bloccata','Da verificare'],ui.status)}${sel('f-product','Tutti i prodotti',Object.keys(FAMILY),ui.product)}</div>
  <div class="table-wrap"><table><thead><tr>${th('Cliente','client')}${th('Matricola','serial')}<th>Prodotto</th>${th('Versione','ver')}${th('Scadenza','exp')}<th>Stato</th><th></th></tr></thead><tbody>
- ${rows.map((r,i)=>{const d=parseDate(r.expiry),n=dayDiff(d);return`<tr class="reveal" style="--i:${i}" data-client="${esc(r.clientCode)}" tabindex="0"><td><div class="who">${markEl(r.client,r.clientCode)}<div><strong>${hl(r.client,ui.q)}</strong><small>Cod. ${esc(r.clientCode.replace(/^0+/,''))}</small></div></div></td><td class="mono">${hl(r.serial,ui.q)}</td><td><span class="chip">${esc(famLabel(famOfScope(r.scope)))}</span></td><td class="mono">${esc(r.version)||'—'}</td><td>${d?`${dShort(d)}<br><small style="color:var(--${n<0?'bad':n<=30?'due':'text-3'})">${rel(n)}</small>`:'<span class="muted">Non indicata</span>'}</td><td>${badge(licenseStatus(r))}</td><td><span class="row-go">${icon('chevron')}</span></td></tr>`;}).join('')||`<tr><td colspan="7">${empty('key','Nessuna licenza','Modifica la ricerca o i filtri.')}</td></tr>`}
+ ${rows.map((r,i)=>{const d=parseDate(r.expiry),n=dayDiff(d);return`<tr class="reveal" style="--i:${i}" data-client="${esc(r.clientCode)}" tabindex="0"><td><div class="who">${markEl(r.client,r.clientCode)}<div><strong>${hl(r.client,ui.q)}</strong><small>Cod. ${esc(r.clientCode.replace(/^0+/,''))}</small></div></div></td><td class="mono">${hl(r.serial,ui.q)}</td><td><span class="chip">${esc(famLabel(famOfScope(r.scope)))}</span></td><td class="mono">${esc(r.version)||'—'}</td><td>${d?`${dShort(d)}<br><small style="color:var(--${n<0?'bad':n<=30?'due':'text-3'})">${rel(n)}</small>`:'<span class="muted">Non indicata</span>'}</td><td>${badge(licenseStatus(r))} ${licNote(r)}</td><td><div class="row-act">${licEditBtn(r)}<span class="row-go">${icon('chevron')}</span></div></td></tr>`;}).join('')||`<tr><td colspan="7">${empty('key','Nessuna licenza','Modifica la ricerca o i filtri.')}</td></tr>`}
  </tbody></table></div>${pager(list.length,size)}</div>`;
 }
 function licensesPage(){
  const src=ui.tab==='all'?state.records:ui.tab==='history'?D.history:D.current;
  return`${hero('Le tue <span class="grad">licenze</span>.','Tutte le matricole Zucchetti, con versione, scadenza e stato calcolato.',`<button class="btn" data-action="export">${icon('download')}Esporta CSV</button>`)}
- ${explain('licenses','<strong>“Correnti”</strong> sono le licenze negli elenchi attivi del portale; lo <strong>storico</strong> contiene quelle già scadute. Lo stato è calcolato dalla data di scadenza: <span class="badge due">In scadenza</span> significa entro 30 giorni. Clicca una riga per aprire il cliente.')}
+ ${explain('licenses','<strong>“Correnti”</strong> sono le licenze negli elenchi attivi del portale; lo <strong>storico</strong> contiene quelle già scadute da meno di 6 mesi. Non compaiono le licenze segnate <strong>non valide</strong> sul portale (quadrato rosso) né quelle scadute da oltre 6 mesi. Lo stato è calcolato dalla data di scadenza: <span class="badge due">In scadenza</span> significa entro 30 giorni. Clicca una riga per aprire il cliente.')}
  <div class="toolbar reveal" style="--i:2"><div class="seg">${[['current',`Correnti · ${fmt(D.current.length)}`],['history',`Storico · ${fmt(D.history.length)}`],['all','Tutte']].map(([k,l])=>`<button class="${ui.tab===k?'active':''}" data-tab="${k}">${l}</button>`).join('')}</div></div>
- ${licTable(src)}`;
+ ${cleanupNote()}${licTable(src)}`;
 }
+function cleanupNote(){const k=state.licenseCleanup;if(!k||!(k.red+k.old+k.hidden))return'';
+ return`<div class="note reveal" style="--i:2">${icon('sparkle')}<span>Elenco ripulito: ${[k.red&&`<strong>${fmt(k.red)}</strong> non valide sul portale`,k.old&&`<strong>${fmt(k.old)}</strong> scadute da oltre 6 mesi`,k.hidden&&`<strong>${fmt(k.hidden)}</strong> tolte a mano`].filter(Boolean).join(' · ')}. ${isAdmin()?'Per correggere una licenza usa la matita accanto alla riga.':''}</span></div>`;}
 function expiryPage(){
  const win=D.current.filter(r=>{const d=days(r.expiry);return d!==null&&d>=0&&d<=120;}).sort((a,b)=>parseDate(a.expiry)-parseDate(b.expiry));
  const months=new Map();for(const r of win){const d=parseDate(r.expiry);const k=d.getFullYear()+'-'+d.getMonth();if(!months.has(k))months.set(k,{d,items:[]});months.get(k).items.push(r);}
@@ -363,7 +381,7 @@ function settingsPage(){const t=store.get('theme','auto');
  <div class="layout-half"><div class="stack">
   <div class="card reveal" style="--i:1"><h2>Aspetto</h2><p class="sub">Scegli il tema. “Automatico” segue Windows.</p><div class="theme-pick" style="margin-top:14px">${[['light','Chiaro','l'],['dark','Scuro','d'],['auto','Automatico','a']].map(([k,l,c])=>`<button class="${t===k?'active':''}" data-theme-set="${k}"><i class="${c}"></i>${l}</button>`).join('')}</div>
    <div class="btn-row" style="margin-top:14px"><button class="btn sm ghost" data-action-local="resetTips">${icon('sparkle')}Mostra di nuovo le spiegazioni</button></div></div>
-  ${host?`<div class="card reveal" style="--i:2"><h2>Avvio automatico</h2><p class="sub">Fai partire Studio da solo quando accendi il PC, ridotto a icona: sulla <strong>postazione di sincronizzazione</strong> tiene Zucchetti e DTR-Service sempre aggiornati anche dopo un riavvio.</p>
+  ${host?`<div class="card reveal" style="--i:2"><h2>Avvio automatico</h2><p class="sub">Fai partire Studio da solo quando accendi il PC, ridotto a icona: sulla <strong>postazione di sincronizzazione</strong> tiene Zucchetti, DTR-Service e Ital Retail sempre aggiornati anche dopo un riavvio.</p>
    <div class="seg" style="margin-top:14px"><button class="${hostInfo?.autostart?'active':''}" data-autostart="1">Avvia con Windows</button><button class="${hostInfo?.autostart?'':'active'}" data-autostart="0">Non avviare</button></div></div>`:''}
   <div class="card reveal" style="--i:2"><h2>Prestazioni</h2><p class="sub">“Automatico” misura la velocità del PC all’avvio e sceglie da solo. La modalità leggera toglie sfocature ed effetti di sfondo per la massima fluidità anche sui computer meno potenti. Ora attiva: <strong>${document.documentElement.dataset.perf==='lite'?'leggera':'effetti completi'}</strong>.</p>
    <div class="seg" style="margin-top:14px">${[['auto','Automatico'],['lite','Massima fluidità'],['full','Effetti completi']].map(([k,l])=>`<button class="${store.get('perf','auto')===k?'active':''}" data-perf-set="${k}">${l}</button>`).join('')}</div></div>
@@ -417,7 +435,7 @@ function machinesPage(){
  ${rows.map((m,k)=>`<tr class="reveal" style="--i:${k}" ${m.code?`data-client="${esc(m.code)}" tabindex="0"`:''}><td><div class="who">${markEl(m.client,m.code||m.client)}<div><strong>${hl(m.client,ui.q)}</strong><small>${esc(m.c?.city||'')}</small></div></div></td><td>${hl(m.model||'—',ui.q)}${m.type?`<br><small class="muted">${esc(m.type)}</small>`:''}</td><td class="mono">${hl(m.serial||'—',ui.q)}${m.fiscalSerial?`<br><small class="muted">${hl(m.fiscalSerial,ui.q)}</small>`:''}</td>
   <td>${m.verNext?`${dShort(m.verNext)}<br><small style="color:var(--${dueCls(m.verDays)==='bad'?'bad':dueCls(m.verDays)==='due'?'due':'text-3'})">${rel(m.verDays)}</small>`:'<span class="muted">—</span>'}</td>
   <td>${m.subscribed?(m.end?`${dShort(m.end)}<br><small style="color:var(--${dueCls(m.endDays)==='bad'?'bad':dueCls(m.endDays)==='due'?'due':'text-3'})">${rel(m.endDays)}</small>`:'In abbonamento'):'<span class="muted">Nessuno</span>'}</td>
-  <td>${m.active?'<span class="badge ok">Attiva</span>':'<span class="badge">Dismessa</span>'}${m.dtr&&typeof dtrMini==='function'?dtrMini(m.dtr):''}</td><td>${m.code?`<span class="row-go">${icon('chevron')}</span>`:''}</td></tr>`).join('')||`<tr><td colspan="7">${empty('register','Nessuna macchina',D.machines.length?'Modifica i filtri.':'Importa il parco macchine da MastroSQL.')}</td></tr>`}
+  <td>${m.active?'<span class="badge ok">Attiva</span>':'<span class="badge">Dismessa</span>'}${m.dtr&&typeof dtrMini==='function'?dtrMini(m.dtr):''}${m.ital&&typeof italMini==='function'?italMini(m.ital):''}</td><td>${m.code?`<span class="row-go">${icon('chevron')}</span>`:''}</td></tr>`).join('')||`<tr><td colspan="7">${empty('register','Nessuna macchina',D.machines.length?'Modifica i filtri.':'Importa il parco macchine da MastroSQL.')}</td></tr>`}
  </tbody></table></div>${pager(list.length,16)}</div>`;
 }
 // Intervention editor (modal form). History from Mastro opens read-only.
@@ -503,7 +521,7 @@ function teamPage(){
   ${usersData.users.map(u=>`<tr><td><div class="who">${markEl(u.name,u.username)}<div><strong>${esc(u.name)}${u.username===me.username?' <span class="badge acc">tu</span>':''}</strong><small>${esc(u.username)}</small></div></div></td>
    <td><select class="select" data-user-role="${esc(u.username)}">${[['admin','Amministratore'],['ufficio','Ufficio'],['tecnico','Tecnico']].map(([k,l])=>`<option value="${k}"${u.role===k?' selected':''}>${l}</option>`).join('')}</select></td>
    <td>${u.lastLogin?dTime(u.lastLogin):'<span class="muted">mai</span>'}</td><td>${u.disabled?'<span class="badge bad">Disattivato</span>':'<span class="badge ok">Attivo</span>'}</td>
-   <td><div class="btn-row">${u.username===me.username?'<span class="muted" style="font-size:12px">Password e uscita: Impostazioni</span>':`<button class="btn sm ghost" data-action-local="resetPwd" data-u="${esc(u.username)}">Nuova password</button><button class="btn sm ghost" data-action-local="toggleUser" data-u="${esc(u.username)}" data-d="${u.disabled?0:1}">${u.disabled?'Riattiva':'Disattiva'}</button>`}</div></td></tr>`).join('')}
+   <td><div class="btn-row"><button class="icon-btn sm" data-user-name="${esc(u.username)}" data-tip="Cambia nome" aria-label="Cambia nome">${icon('edit')}</button>${u.username===me.username?'<button class="btn sm ghost" data-go="settings">La tua password</button>':`<button class="btn sm ghost" data-user-del="${esc(u.username)}" data-tip="Elimina utente" aria-label="Elimina utente">${icon('close')}</button><button class="btn sm ghost" data-action-local="resetPwd" data-u="${esc(u.username)}">Nuova password</button><button class="btn sm ghost" data-action-local="toggleUser" data-u="${esc(u.username)}" data-d="${u.disabled?0:1}">${u.disabled?'Riattiva':'Disattiva'}</button>`}</div></td></tr>`).join('')}
   </tbody></table></div></div>
   <div class="stack"><form class="card reveal" style="--i:3" id="new-user"><h2>Nuovo utente</h2><p class="sub">Comunica nome utente e password al collega: potrà cambiarla dalle Impostazioni.</p>
    <div style="display:grid;gap:10px;margin-top:14px"><label class="field">Nome e cognome<input class="input" name="name" required maxlength="80"></label><label class="field">Nome utente<input class="input" name="username" required autocapitalize="none" spellcheck="false" placeholder="es. mario.rossi"></label>
@@ -605,13 +623,13 @@ document.addEventListener('submit',async e=>{
 document.addEventListener('change',async e=>{const u=e.target.dataset?.userRole;if(!u)return;try{await post('/api/users/'+encodeURIComponent(u),{role:e.target.value});toast('Ruolo aggiornato');usersData=null;render(false);}catch(x){toast(x.message,'alert');usersData=null;render(false);}});
 
 // ───────────────────────── drawer (client card)
-function openClient(code,keep){const c=D.byCode.get(code);if(!c)return;if(!keep)remember('c',code);drawerCode=code;const d=$('#drawer');const wasOpen=!d.hidden;$('#drawer-backdrop').hidden=false;d.hidden=false;if(!keep&&!wasOpen){d.classList.remove('out');}
+function openClient(code,keep){const c=D.byCode.get(code);if(!c)return;if(!keep)remember('c',code);drawerCode=code;const d=$('#drawer');const wasOpen=!d.hidden;$('#drawer-backdrop').hidden=false;d.hidden=false;if(!keep&&!wasOpen){d.classList.remove('out');}d.classList.toggle('keep',!!keep);
  const m=c.meta;const fact=(label,value,copyable)=>`<div class="fact"><small>${label}</small><span>${value?esc(value):'<span class="muted">—</span>'}${value&&copyable?`<button class="copy" data-copy="${esc(value)}" aria-label="Copia">${icon('copy')}</button>`:''}</span></div>`;
  const scroll=d.scrollTop;
- d.innerHTML=`<div class="d-head"><span class="tag">Scheda cliente</span><div class="btn-row"><button class="icon-btn" data-close aria-label="Chiudi">${icon('close')}</button></div></div><div class="d-body">
+ d.innerHTML=`<div class="d-head"><span class="tag">Scheda cliente</span><div class="btn-row">${isAdmin()?`<button class="btn sm ghost" data-edit-client="${esc(c.code)}">${icon('edit')}Modifica</button>`:''}<button class="icon-btn" data-close aria-label="Chiudi">${icon('close')}</button></div></div><div class="d-body">
  <div class="d-profile">${markEl(c.name,c.code)}<div><h2>${esc(c.name)}</h2><p>Codice cliente ${esc(c.code)} ${badge(c.status)}</p></div></div>
  <div class="quick"><button ${telOk(c.phone)?`data-ext="tel:${esc(c.phone.replace(/[^\d+]/g,''))}"`:'disabled'}>${icon('phone')}Chiama</button><button ${c.email?`data-ext="mailto:${esc(c.email)}"`:'disabled'}>${icon('mail')}Email</button><button ${c.address?`data-ext="${mapsUrl(c)}"`:'disabled'}>${icon('pin')}Mappa</button><button class="${m.favorite?'on':''}" data-fav="${esc(c.code)}">${icon('star')}${m.favorite?'Preferito':'Aggiungi'}</button></div>
- <div class="d-section"><h3>Anagrafica ${c.registry||c.mastro?'':'<span class="badge" data-tip="Completa con una sincronizzazione Zucchetti o un’importazione da MastroSQL">parziale</span>'}${c.mastroOnly?'<span class="badge info" data-tip="Cliente presente solo in MastroSQL">Mastro</span>':''}</h3><div class="facts">${fact('Partita IVA',c.vat,1)}${fact('Codice fiscale',c.taxCode,1)}${fact('Telefono',c.phones.join(' · ')||c.phone,1)}${fact('Email',c.emails.join(' · ')||c.email,1)}${fact('Indirizzo',c.address,1)}${fact('Località',c.city)}${fact('Prodotti',c.families.map(famLabel).join(', '))}${fact('Installatore',c.installer)}</div></div>
+ <div class="d-section"><h3>Anagrafica ${c.registry||c.mastro?'':'<span class="badge" data-tip="Completa con una sincronizzazione Zucchetti o un’importazione da MastroSQL">parziale</span>'}${c.mastroOnly?'<span class="badge info" data-tip="Cliente presente solo in MastroSQL">Mastro</span>':''}${c.edit?`<span class="badge acc" data-tip="${esc(c.edit.created?'Creato a mano':'Dati corretti a mano')}${c.edit.updatedBy?' da '+esc(c.edit.updatedBy):''}">${c.edit.created?'creato a mano':'modificato'}</span>`:''}</h3><div class="facts">${fact('Partita IVA',c.vat,1)}${fact('Codice fiscale',c.taxCode,1)}${fact('Telefono',c.phones.join(' · ')||c.phone,1)}${fact('Email',c.emails.join(' · ')||c.email,1)}${fact('Indirizzo',c.address,1)}${fact('Località',c.city)}${fact('Prodotti',c.families.map(famLabel).join(', '))}${fact('Installatore',c.installer)}${c.pec?fact('PEC',c.pec,1):''}${c.contact?fact('Referente',c.contact):''}${c.category?fact('Categoria',c.category):''}</div></div>
  <div class="d-section"><h3>Promemoria</h3><div class="form-row"><label class="field">Stato<select class="select" id="m-state">${['','Da contattare','In attesa','Completato'].map(s=>`<option value="${s}"${(m.followupState||'')===s?' selected':''}>${s||'Nessuno'}</option>`).join('')}</select></label><label class="field">Prossimo contatto<input type="date" class="input" id="m-date" value="${esc(m.nextContact||'')}"></label></div>
   <label class="field">Note<textarea class="textarea" id="m-note" placeholder="Accordi, preferenze, cose da ricordare…">${esc(c.note)}</textarea></label><div class="btn-row" style="margin-top:10px"><button class="btn primary sm" data-save="${esc(c.code)}">${icon('check')}Salva</button><span class="muted" style="font-size:12px;align-self:center">${WEB?'Visibile a tutto il team.':'Salvato solo sul tuo computer.'}</span></div></div>
  <div class="d-section"><h3>Interventi <span><button class="btn sm ghost" data-newint="${esc(c.code)}">${icon('plus')}Nuovo</button></span></h3>${c.interventions.slice(0,12).map(i=>`<div class="list-row" data-int="${esc(i.id)}"><div class="grow"><strong>${esc(i.title)}</strong><small>${i.d?dShort(i.d):'—'}${i.technician?' · '+esc(i.technician):''}${i.source==='mastro'?' · storico Mastro':''}</small></div><span class="badge ${istCls(i.status)}">${esc(i.status)}</span></div>`).join('')||'<p class="sub">Nessun intervento registrato.</p>'}${c.interventions.length>12?`<p class="sub">e altri ${c.interventions.length-12} nella pagina Interventi.</p>`:''}</div>
@@ -620,14 +638,15 @@ function openClient(code,keep){const c=D.byCode.get(code);if(!c)return;if(!keep)
   ${c.mastro.notes?`<p class="sub" style="margin-top:10px;white-space:pre-line">${esc(c.mastro.notes)}</p>`:''}
   ${Object.keys(c.mastro.extra||{}).length?`<details class="extra"><summary>Altri dati da Mastro (${Object.keys(c.mastro.extra).length})</summary><div class="facts">${Object.entries(c.mastro.extra).map(([k,v])=>fact(esc(k.replace(/_/g,' ').toLowerCase()),v,1)).join('')}</div></details>`:''}</div>`:''}
  ${typeof dtrClientSection==='function'?dtrClientSection(c):''}
+ ${typeof italClientSection==='function'?italClientSection(c):''}
  ${typeof accClientSection==='function'?accClientSection(c):''}
- <div class="d-section"><h3>Licenze <span>${c.records.length}</span></h3>${c.records.map(r=>{const d=parseDate(r.expiry),n=dayDiff(d);return`<div class="lic"><div class="lic-top"><strong>${esc(famLabel(famOfScope(r.scope)))} <span class="mono muted">${esc(r.serial)}</span></strong>${badge(licenseStatus(r))}</div><div class="lic-meta"><div>Scadenza<b>${d?dShort(d):'—'}</b>${d?`<span style="color:var(--${n<0?'bad':n<=30?'due':'text-3'})">${rel(n)}</span>`:''}</div><div>Versione<b>${esc(r.version)||'—'}</b></div><div>Elenco<b>${isCurrent(r)?'Corrente':'Storico'}</b></div><div>Rilasciata<b>${esc((r.released||'—').slice(0,10))}</b></div><div>Aggiornata<b>${esc((r.updated||'—').slice(0,10))}</b></div><div>Blocco<b>${esc(r.blocked)||'—'}</b></div></div></div>`;}).join('')||'<p class="sub">Nessuna licenza negli elenchi letti.</p>'}</div>
+ <div class="d-section"><h3>Licenze <span>${c.records.length}</span></h3>${c.records.map(r=>{const d=parseDate(r.expiry),n=dayDiff(d);return`<div class="lic"><div class="lic-top"><strong>${esc(famLabel(famOfScope(r.scope)))} <span class="mono muted">${esc(r.serial)}</span></strong><span class="row-act">${badge(licenseStatus(r))} ${licNote(r)}${licEditBtn(r)}</span></div>${D.licEdits?.[r.id]?.note?`<p class="lic-note">${esc(D.licEdits[r.id].note)}</p>`:''}<div class="lic-meta"><div>Scadenza<b>${d?dShort(d):'—'}</b>${d?`<span style="color:var(--${n<0?'bad':n<=30?'due':'text-3'})">${rel(n)}</span>`:''}</div><div>Versione<b>${esc(r.version)||'—'}</b></div><div>Elenco<b>${isCurrent(r)?'Corrente':'Storico'}</b></div><div>Rilasciata<b>${esc((r.released||'—').slice(0,10))}</b></div><div>Aggiornata<b>${esc((r.updated||'—').slice(0,10))}</b></div><div>Blocco<b>${esc(r.blocked)||'—'}</b></div></div></div>`;}).join('')||'<p class="sub">Nessuna licenza negli elenchi letti.</p>'}</div>
  <div class="d-section"><h3>Ordini <span>${c.orders.length}</span></h3>${c.orders.slice(0,20).map(o=>`<div class="list-row" style="cursor:default"><div class="grow"><strong class="mono">${esc(o.number)} <span class="muted">· ${esc(o.serial||'')}</span></strong><small>${o.d?dShort(o.d):esc(o.date)} · ${esc(famLabel(o.family))}</small></div><span class="badge ${orderCls(o.status)}">${esc(o.status)}</span></div>`).join('')||'<p class="sub">Nessun ordine collegato.</p>'}</div>
  </div>`;
  if(keep)d.scrollTop=scroll;else d.querySelector('[data-close]').focus({preventScroll:true});
 }
 function closeDrawer(){const d=$('#drawer');if(d.hidden)return;d.classList.add('out');$('#drawer-backdrop').classList.add('out');setTimeout(()=>{d.hidden=true;d.classList.remove('out');$('#drawer-backdrop').hidden=true;$('#drawer-backdrop').classList.remove('out');},280);drawerCode=null;}
-function saveMeta(code,patch){const old=state.metadata[code]||{favorite:false,nextContact:'',followupState:''};const meta={favorite:!!old.favorite,nextContact:old.nextContact||'',followupState:old.followupState||'',...patch};state.metadata[code]=meta;derive();if(typeof deriveDtr==='function')deriveDtr();send('meta',{code,meta});render(false);openClient(code,true);}
+function saveMeta(code,patch){const old=state.metadata[code]||{favorite:false,nextContact:'',followupState:''};const meta={favorite:!!old.favorite,nextContact:old.nextContact||'',followupState:old.followupState||'',...patch};state.metadata[code]=meta;derive();if(typeof applyEdits==='function')applyEdits();if(typeof deriveDtr==='function')deriveDtr();if(typeof deriveItal==='function')deriveItal();send('meta',{code,meta});render(false);openClient(code,true);}
 
 // ───────────────────────── command palette
 const MAIN_TABS=['overview','clients','interventions','warehouse'];
@@ -663,7 +682,7 @@ function render(animate){
  if(!D)return;const main=$('#main');const scroll=main.scrollTop;const focus=document.activeElement?.id;const caret=document.activeElement?.selectionStart;
  if(page==='team'&&!(WEB&&me?.role==='admin'))page='overview';
  if(page==='warehouse'&&!isAdmin())page='overview';
- const html={overview,clients:clientsPage,licenses:licensesPage,expiry:expiryPage,orders:ordersPage,tasks:tasksPage,sync:syncPage,settings:settingsPage,team:teamPage,interventions:interventionsPage,machines:machinesPage,dtr:typeof dtrPage==='function'?dtrPage:overview,warehouse:typeof warehousePage==='function'?warehousePage:overview,accounting:typeof accountingPage==='function'?accountingPage:overview}[page]||overview;
+ const html={overview,clients:clientsPage,licenses:licensesPage,expiry:expiryPage,orders:ordersPage,tasks:tasksPage,sync:syncPage,settings:settingsPage,team:teamPage,interventions:interventionsPage,machines:machinesPage,dtr:typeof dtrPage==='function'?dtrPage:overview,ital:typeof italPage==='function'?italPage:overview,warehouse:typeof warehousePage==='function'?warehousePage:overview,accounting:typeof accountingPage==='function'?accountingPage:overview}[page]||overview;
  document.body.classList.toggle('anim',!!animate&&!reduced);
  // live update on the same page: remember the numbers shown, to roll only the ones that change
  const before=!animate&&lastRendered===page?$$('#main [data-count]').map(el=>+el.dataset.count):null;
@@ -671,7 +690,7 @@ function render(animate){
  main.innerHTML=`<div class="page">${html()}</div>`;lastRendered=page;
  $('#crumb').textContent=PAGES[page];
  $$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.page===page));$('#nav-more')?.classList.toggle('active',!MAIN_TABS.includes(page));moveIndicator();
- $('#nav-clients').textContent=fmt(D.clients.length);$('#nav-licenses').textContent=fmt(D.current.length);$('#nav-orders').textContent=D.orders.length?fmt(D.orders.length):'';$('#nav-interventions').textContent=D.openInterventions.length||'';$('#nav-machines').textContent=D.machines.length?fmt(D.machines.length):'';if(typeof DT!=='undefined'&&DT&&$('#nav-dtr'))$('#nav-dtr').textContent=DT.status?.error?'!':DT.silent.length?fmt(DT.silent.length):'';if(typeof W!=='undefined'&&W)$('#nav-warehouse').textContent=W.below.length||'';if(typeof A!=='undefined'&&A)$('#nav-accounting').textContent=A.overdue.length?fmt(A.overdue.length):'';
+ $('#nav-clients').textContent=fmt(D.clients.length);$('#nav-licenses').textContent=fmt(D.current.length);$('#nav-orders').textContent=D.orders.length?fmt(D.orders.length):'';$('#nav-interventions').textContent=D.openInterventions.length||'';$('#nav-machines').textContent=D.machines.length?fmt(D.machines.length):'';if(typeof DT!=='undefined'&&DT&&$('#nav-dtr'))$('#nav-dtr').textContent=DT.status?.error?'!':DT.silent.length?fmt(DT.silent.length):'';if(typeof IT!=='undefined'&&IT&&$('#nav-ital'))$('#nav-ital').textContent=IT.status?.error?'!':IT.update.length?fmt(IT.update.length):'';if(typeof W!=='undefined'&&W)$('#nav-warehouse').textContent=W.below.length||'';if(typeof A!=='undefined'&&A)$('#nav-accounting').textContent=A.overdue.length?fmt(A.overdue.length):'';
  $('#nav-due').textContent=agendaItems(0,30).length||'';const late=D.tasks.filter(c=>c.meta.followupState!=='Completato'&&c.meta.nextContact&&days(c.meta.nextContact)<=0).length;$('#nav-tasks').textContent=late||'';
  $('#alerts-dot').classList.toggle('on',D.due30.length>0);$('#nav-more-dot').textContent=($('#nav-due').textContent||$('#nav-tasks').textContent)?'•':'';
  $('#nav-sync-dot').className='sync-dot '+(state.syncRunning?'run':state.portalConnected?'on':'');
@@ -761,7 +780,7 @@ document.addEventListener('click',e=>{
  if(ds.adays){ui.adays=+ds.adays;ui.amore=60;return render(false);}
  if('akind' in ds){ui.akind=ds.akind;ui.amore=60;return render(false);}
  if('amore' in ds){ui.amore=(ui.amore||60)+60;return render(false);}
- if(ds.go){if(ds.goDtab)ui.dtab=ds.goDtab;return go(ds.go);}
+ if(ds.go){if(ds.goDtab)ui.dtab=ds.goDtab;if(ds.goItab)ui.itab=ds.goItab;return go(ds.go);}
  if(t.hasAttribute('data-close'))return closeDrawer();
  if(ds.fav){const m=state.metadata[ds.fav]||{};saveMeta(ds.fav,{favorite:!m.favorite});toast(!m.favorite?'Aggiunto ai preferiti':'Rimosso dai preferiti','star');return;}
  if(ds.save){const code=ds.save;state.notes[code]=$('#m-note').value;send('note',{code,note:$('#m-note').value});saveMeta(code,{followupState:$('#m-state').value,nextContact:$('#m-date').value});return;}
@@ -847,12 +866,13 @@ function progress(v){state.syncRunning=v.running;state.syncProgress=v.text;state
  const live=$('#sync-live');if(live)live.textContent=v.text||'';}
 function receive(v){
  if(v.type==='toast')return toast(v.message);
+ if(v.type==='clientSaved'){if(typeof pendingOpen!=='undefined'&&!D.byCode.has(v.code))pendingOpen=v.code;return;}
  if(v.type==='progress')return progress(v);
  if(v.type==='mastro'){mastroState=v;if(v.stage==='preview'){mastroState=null;mastroPreview(v);}if(page==='settings')render(false);if(v.ok===false)toast(v.error,'alert');return;}
  if(v.type==='host'){hostInfo={...hostInfo,...v};if(v.syncStation)document.documentElement.dataset.station='1';else delete document.documentElement.dataset.station;if(page==='settings'||page==='team'||page==='sync')render(false);return;}
  if(v.type!=='state')return;
- state={...state,...v,clients:v.clients||[],orders:v.orders||[],mastroClients:v.mastroClients||[],machines:v.machines||[],interventions:v.interventions||[],warehouses:v.warehouses||[],articles:v.articles||[],stockLevels:v.stockLevels||[],stock:v.stock||[],movements:v.movements||[],invoices:v.invoices||[],dues:v.dues||[],balances:v.balances||[],dueNotes:v.dueNotes||{},metadata:v.metadata||{},notes:v.notes||{}};derive();if(typeof deriveDtr==='function')deriveDtr();
- render(firstState);firstState=false;if(drawerCode)openClient(drawerCode,true);
+ state={...state,...v,clients:v.clients||[],orders:v.orders||[],mastroClients:v.mastroClients||[],machines:v.machines||[],interventions:v.interventions||[],warehouses:v.warehouses||[],articles:v.articles||[],stockLevels:v.stockLevels||[],stock:v.stock||[],movements:v.movements||[],invoices:v.invoices||[],dues:v.dues||[],balances:v.balances||[],dueNotes:v.dueNotes||{},metadata:v.metadata||{},notes:v.notes||{}};derive();if(typeof applyEdits==='function')applyEdits();if(typeof deriveDtr==='function')deriveDtr();if(typeof deriveItal==='function')deriveItal();
+ render(firstState);firstState=false;if(typeof pendingOpen!=='undefined'&&pendingOpen&&D.byCode.has(pendingOpen)){const pc=pendingOpen;pendingOpen='';openClient(pc);}else if(drawerCode){if(D.byCode.has(drawerCode)&&!D.deleted?.some(x=>x.code===drawerCode))openClient(drawerCode,true);else closeDrawer();}
  $('#splash').classList.add('gone');
 }
 // ───────────────────────── shared server: session, live updates, offline

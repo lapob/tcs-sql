@@ -61,6 +61,20 @@ class URegister(val r: DtrRegister, val client: UClient?, val machine: UMachine?
     val search = norm(listOf(r.serial, r.client, r.alias, r.tags, r.detail?.holder, r.detail?.vat, r.detail?.address, client?.name, machine?.m?.model).joinToString(" "))
     companion object { private val remainingRe = Regex("CHIUSURE RIMANENTI\\s*:?\\s*(\\d+)", RegexOption.IGNORE_CASE) }
 }
+/** An Ital Retail device linked to the app's customer: by Mastro machine serial, else by the label written on the portal. */
+class UItal(val r: ItalDevice, val client: UClient?, val machine: UMachine?, val via: String, val orders: List<ItalOrder>) {
+    val d get() = r.detail
+    val subTo = Dates.parse(r.detail?.subTo); val subDays = Dates.daysFromToday(subTo)
+    val certDue = Dates.parse(r.detail?.certDue); val certDays = Dates.daysFromToday(certDue)
+    val seen = Dates.parse(r.detail?.dataAt); val seenDays = Dates.daysFromToday(seen)
+    val noSub = !r.subscribed
+    val subSoon = !noSub && subDays != null && subDays <= 45 && r.detail?.autoRenew != true
+    val lowDgfe = (r.detail?.dgfeFree ?: -1) in 0..15
+    val certSoon = certDays != null && certDays <= 90
+    val label get() = r.client.ifBlank { r.note }
+    val name get() = client?.name ?: label.ifBlank { r.serial }
+    val search = norm(listOf(r.serial, r.type, r.client, r.note, r.detail?.firmware, client?.name, machine?.m?.model).joinToString(" "))
+}
 data class UIntervention(val i: Intervention, var client: UClient?, val clientName: String, val date: LocalDate?)
 data class UOrder(val o: Order, var client: UClient?, val date: LocalDate?)
 
@@ -74,6 +88,9 @@ class UClient(
     val mastroCodes = mutableListOf<String>()
     val machines = mutableListOf<UMachine>()
     val registers = mutableListOf<URegister>()
+    val italDevices = mutableListOf<UItal>()
+    var pec = ""; var contact = ""; var category = ""
+    var edit: ClientEdit? = null
     val interventions = mutableListOf<UIntervention>()
     val orders = mutableListOf<UOrder>()
     val active get() = licenses.filter { it.current }
@@ -100,6 +117,9 @@ class Archive(val state: ArchiveState) {
     val licenses: List<ULicense>
     val machines: List<UMachine>
     val registers: List<URegister>
+    val ital: List<UItal>
+    /** Customers deleted by an administrator (hidden everywhere, restorable). */
+    val deleted: List<UClient>
     val interventions: List<UIntervention>
     val orders: List<UOrder>
 
@@ -168,8 +188,35 @@ class Archive(val state: ArchiveState) {
             val c = serialTo[o.serial] ?: nameTo[nameKey(o.client)]
             UOrder(o, c, Dates.parse(o.date)).also { c?.orders?.add(it) }
         }.sortedByDescending { it.date ?: LocalDate.MIN }
+        // Ital Retail devices → Mastro machine by serial, else the label written on the portal
+        val italOrders = state.italOrders.groupBy { it.serial }
+        ital = state.ital.map { r ->
+            val m = bySerial[serKey(r.serial)]; val cName = nameTo[nameKey(r.client)] ?: r.note.takeIf { it.isNotBlank() }?.let { nameTo[nameKey(it)] }
+            val c = m?.client ?: cName
+            UItal(r, c, m, when { m?.client != null -> "matricola"; cName != null -> "nome"; else -> "" }, italOrders[r.serial].orEmpty().sortedByDescending { it.date }).also { c?.italDevices?.add(it) }
+        }
+        // administrator's changes: they win over the synchronised data; a customer created by hand exists only here
+        val gone = mutableListOf<UClient>()
+        for ((code, e) in state.clientEdits) {
+            var c = map[code]
+            if (c == null) {
+                if (!e.created) continue
+                c = UClient(code, e.name.ifBlank { code }, "", "", "", "", mutableListOf(), mutableListOf(), mutableSetOf(), emptyList(), state.metadata[code] ?: ClientMeta(), state.notes[code].orEmpty(), false)
+                map[code] = c
+            }
+            c.edit = e
+            if (e.name.isNotBlank()) c.name = e.name; if (e.vat.isNotBlank()) c.vat = e.vat; if (e.taxCode.isNotBlank()) c.taxCode = e.taxCode
+            if (e.city.isNotBlank()) c.city = e.city; if (e.address.isNotBlank()) c.address = e.address
+            if (e.phone.isNotBlank()) { c.phones.remove(e.phone); c.phones.add(0, e.phone) }
+            if (e.email.isNotBlank()) { c.emails.remove(e.email); c.emails.add(0, e.email) }
+            c.pec = e.pec.ifBlank { c.mastro?.pec.orEmpty() }; c.contact = e.contact; c.category = e.category
+            if (e.deleted) gone += c
+        }
+        map.values.forEach { c -> if (c.pec.isBlank()) c.pec = c.mastro?.pec.orEmpty() }
+        deleted = gone.sortedBy { it.name }
+        gone.forEach { map.remove(it.code) }
         map.values.forEach { c ->
-            c.search = norm(listOf(c.name, c.code, c.vat, c.taxCode, c.city, c.address, c.mastro?.pec, c.mastro?.code).joinToString(" ") + " " +
+            c.search = norm(c.contact + " " + c.category + " " + listOf(c.name, c.code, c.vat, c.taxCode, c.city, c.address, c.mastro?.pec, c.mastro?.code).joinToString(" ") + " " +
                 c.phones.joinToString(" ") + " " + c.emails.joinToString(" ") + " " + c.licenses.joinToString(" ") { it.r.serial } + " " + c.machines.joinToString(" ") { it.m.serial + " " + it.m.fiscalSerial })
         }
         clients = map.values.sortedWith(compareBy(java.text.Collator.getInstance(java.util.Locale.ITALIAN)) { it.name })
@@ -191,6 +238,10 @@ class Archive(val state: ArchiveState) {
     val dtrSilent by lazy { registers.filter { it.silent } }
     val dtrGeSoon by lazy { registers.filter { it.geSoon } }
     val dtrCertSoon by lazy { registers.filter { it.certSoon } }
+    val italUpdate by lazy { ital.filter { it.r.update.isNotBlank() } }
+    val italNoSub by lazy { ital.filter { it.noSub } }
+    val italLow by lazy { ital.filter { it.lowDgfe } }
+    fun licenseEdit(id: String) = state.licenseEdits[id]
     val technicians by lazy { interventions.map { it.i.technician }.filter { it.isNotBlank() }.distinct().sorted() }
 
     /** Licences, periodic verifications and contracts in one chronological list. */
@@ -203,6 +254,10 @@ class Archive(val state: ArchiveState) {
         registers.forEach { r ->
             if (r.geDue != null && r.geDays != null && r.geDays in fromDays..toDays) add(Deadline("Giornale elettronico", r.geDue, r.geDays, r.client, r.name, "GE ${r.r.geNumber} · ${r.r.serial}"))
             if (r.certDue != null && r.certDays != null && r.certDays in fromDays..toDays) add(Deadline("Certificato RT", r.certDue, r.certDays, r.client, r.name, r.r.serial))
+        }
+        ital.forEach { r ->
+            if (r.subTo != null && r.subDays != null && r.d?.autoRenew != true && r.subDays in fromDays..toDays) add(Deadline("Abbonamento Ital Retail", r.subTo, r.subDays, r.client, r.name, "${r.r.type} · ${r.r.serial}"))
+            if (r.certDue != null && r.certDays != null && r.certDays in fromDays..toDays) add(Deadline("Certificato RT", r.certDue, r.certDays, r.client, r.name, "Ital Retail · ${r.r.serial}"))
         }
     }.sortedBy { it.date }
 

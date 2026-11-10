@@ -699,3 +699,53 @@ tbody tr[data-client]:active,tbody tr[data-int]:active,.card[data-go]:active{tra
 .today-ic svg{width:18px;height:18px}
 .today-ic.t-bad{background:var(--bad-soft);color:var(--bad)}.today-ic.t-due{background:var(--due-soft);color:var(--due)}.today-ic.t-info{background:var(--accent-soft);color:var(--accent)}
 .nav-caption{padding-top:12px}
+/* ── Ital Retail */
+.it-free{min-width:120px;max-width:170px}.it-free span{font-size:12.5px;color:var(--text-2)}
+.it-free .dtr-meter{margin-top:5px}.it-free.low span{color:var(--bad);font-weight:600}.it-free.low .dtr-meter i{background:var(--bad)}
+/* ── Panels: calmer, softer motion (no overshoot on large surfaces) */
+:root{--soft:cubic-bezier(.22,1,.36,1);--soft-in:cubic-bezier(.4,0,1,1)}
+.modal{background:rgba(10,12,24,.32);backdrop-filter:blur(6px) saturate(1.1);-webkit-backdrop-filter:blur(6px) saturate(1.1);animation:fade .26s var(--soft) both}
+.modal.out{animation:fadeout .2s var(--soft-in) both}
+.modal-box{animation:panelin .42s var(--soft) both;will-change:transform,opacity;transform-origin:50% 40%}
+.modal.out .modal-box{animation:panelout .2s var(--soft-in) both}
+.modal-box.wide{overscroll-behavior:contain;scrollbar-gutter:stable}
+.modal-box.wide>*{animation:rise .5s var(--soft) both}
+.modal-box.wide>*:nth-child(2){animation-delay:40ms}.modal-box.wide>*:nth-child(3){animation-delay:70ms}.modal-box.wide>*:nth-child(4){animation-delay:100ms}.modal-box.wide>*:nth-child(n+5){animation-delay:130ms}
+@keyframes panelin{from{opacity:0;transform:translateY(14px) scale(.975)}}
+@keyframes panelout{to{opacity:0;transform:translateY(8px) scale(.985)}}
+@keyframes fadeout{to{opacity:0}}
+.drawer{animation:drawerin .52s var(--soft) both;will-change:transform}
+.drawer.out{animation:drawerout .26s var(--soft-in) both}
+.backdrop{animation:fade .32s var(--soft) both}.backdrop.out{animation:fadeout .24s var(--soft-in) both}
+@keyframes drawerin{from{transform:translateX(calc(100% + 24px));opacity:.6}}
+@keyframes drawerout{to{transform:translateX(calc(100% + 24px));opacity:.6}}
+.drawer .d-body>*{animation:rise .5s var(--soft) both}
+.drawer .d-body>*:nth-child(2){animation-delay:50ms}.drawer .d-body>*:nth-child(3){animation-delay:90ms}.drawer .d-body>*:nth-child(n+4){animation-delay:120ms}
+.drawer.keep .d-body>*{animation:none}
+@media (max-width:760px){
+ .modal{place-items:end center;padding:0}
+ .modal-box.wide{width:100%;max-height:92vh;border-radius:24px 24px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));animation:sheetin .46s var(--soft) both}
+ .modal.out .modal-box.wide{animation:sheetout .24s var(--soft-in) both}
+ .drawer{animation-name:sheetin}.drawer.out{animation-name:sheetout}
+}
+/* ── Forms in panels */
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.form-grid .span-2{grid-column:span 2}
+@media (max-width:560px){.form-grid{grid-template-columns:1fr}.form-grid .span-2{grid-column:auto}}
+.form-panel .btn-row{align-items:center;flex-wrap:wrap;gap:8px}.form-panel .btn-row .grow{flex:1}
+.input.shake,.select.shake{animation:shake .42s var(--soft);border-color:var(--bad)}
+@keyframes shake{20%{transform:translateX(-5px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+.btn.danger-text{color:var(--bad)}.btn.danger-text:hover{background:var(--bad-soft)}
+.icon-btn.sm{width:30px;height:30px;border-radius:9px}.icon-btn.sm svg{width:15px;height:15px}
+.icon-btn:hover{background:var(--muted-soft);color:var(--text)}.icon-btn:active{transform:scale(.92)}
+.row-act{display:inline-flex;align-items:center;gap:6px;justify-content:flex-end}
+.lic-note{margin:6px 0 0;font-size:12.5px;color:var(--text-2);padding:6px 10px;border-radius:10px;background:var(--surface-2)}
+/* ── Compact sidebar (tablet width): every icon on the same axis */
+@media (max-width:900px) and (min-width:761px){
+ .sidebar{padding-inline:12px}
+ .brand{justify-content:center;padding:0}
+ .sidebar-foot{align-items:center;padding-inline:0}
+ .company{flex:none;justify-content:center;gap:0}
+ .nav-item,.cmd-trigger{padding:0;width:100%}
+ #nav .nav-item+.nav-caption{display:block;height:1px;margin:8px 10px;padding:0;background:var(--line);font-size:0}
+}

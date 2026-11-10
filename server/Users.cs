@@ -79,6 +79,14 @@ public sealed class Users
   q.Parameters.AddWithValue("$r",(object?)role??DBNull.Value);q.Parameters.AddWithValue("$d",disabled.HasValue?(disabled.Value?1:0):DBNull.Value);q.Parameters.AddWithValue("$n",(object?)name?.Trim()??DBNull.Value);q.Parameters.AddWithValue("$s",Guid.NewGuid().ToString("N"));q.Parameters.AddWithValue("$u",username);
   q.ExecuteNonQuery();tx.Commit();
  }
+ /// Removes a user for good (their sessions end at the next request). The last active administrator cannot be removed.
+ public void Delete(string username)
+ {
+  using var c=Open();using var tx=c.BeginTransaction();
+  var current=Get(username)??throw new InvalidDataException("Utente non trovato.");
+  if(current.User.Role==Roles.Admin&&!current.User.Disabled&&ActiveAdmins(c,tx)<=1)throw new InvalidDataException("Deve restare almeno un amministratore attivo.");
+  using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="DELETE FROM users WHERE username=$u";q.Parameters.AddWithValue("$u",username);q.ExecuteNonQuery();tx.Commit();
+ }
  public void SetPassword(string username,string password)
  {
   if(ValidatePassword(password) is string e)throw new InvalidDataException(e);

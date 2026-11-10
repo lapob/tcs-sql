@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SearchOff
@@ -55,7 +56,12 @@ private val filters = listOf("Tutti", "Preferiti", "In scadenza", "Con macchine"
             }
         }
     }
-    Page(vm, "Clienti", "${list.size} di ${a.clients.size}") {
+    val me by vm.me.collectAsStateWithLifecycle()
+    var creating by rememberSaveable { mutableStateOf(false) }
+    if (creating) ClientEditSheet(vm, null, { creating = false }) { code -> nav.openClient(code) }
+    Page(vm, "Clienti", "${list.size} di ${a.clients.size}", actions = {
+        if (me?.role == "admin") androidx.compose.material3.IconButton({ creating = true }) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.PersonAdd, "Nuovo cliente") }
+    }) {
         item(key = "search") {
             val fs by vm.focusSearch.collectAsStateWithLifecycle()
             SearchField(q, { q = it }, "Cerca nome, P.IVA, telefono", Modifier.padding(top = 2.dp), focus = fs) { vm.focusSearch.value = false }
