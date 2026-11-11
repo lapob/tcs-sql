@@ -97,7 +97,7 @@ private fun current(c: UClient, k: String) = when (k) { "name" -> c.name; "vat" 
             Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (c != null) {
                     if (isAdmin) IconButton({ confirmDelete = true }) { Icon(Icons.Rounded.Delete, "Elimina", tint = LocalStatus.current.bad) }
-                    if (isAdmin && !manual && c.edit != null) TextButton({ vm.resetClient(c.code); close() }) { Icon(Icons.Rounded.Restore, null, Modifier.size(18.dp)); Text(" Annulla modifiche") }
+                    if (isAdmin && !manual && c.edit != null) TextButton({ vm.resetClient(c.code); close() }) { Icon(Icons.Rounded.Restore, null, Modifier.size(18.dp)); Text("Annulla modifiche", Modifier.padding(start = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
                 }
                 Spacer(Modifier.weight(1f))
                 Button({

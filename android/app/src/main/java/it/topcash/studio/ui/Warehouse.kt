@@ -32,6 +32,9 @@ import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.animation.animateContentSize
+import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.rounded.LocalShipping
 import androidx.compose.material.icons.rounded.Warehouse
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
@@ -163,19 +166,25 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
         }
         item(key = "actions") {
             Row(Modifier.fillMaxWidth().padding(top = 12.dp).appear(1), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                FilledTonalButton({ onMovement("carico", x.a.code) }, Modifier.weight(1f).height(56.dp), shape = MaterialTheme.shapes.medium) { Icon(Icons.AutoMirrored.Rounded.CallReceived, null, Modifier.size(18.dp)); Text(" Carico") }
-                FilledTonalButton({ onMovement("scarico", x.a.code) }, Modifier.weight(1f).height(56.dp), shape = MaterialTheme.shapes.medium) { Icon(Icons.AutoMirrored.Rounded.CallMade, null, Modifier.size(18.dp)); Text(" Scarico") }
-                FilledTonalButton({ onMovement("trasferimento", x.a.code) }, Modifier.weight(1f).height(56.dp), shape = MaterialTheme.shapes.medium, contentPadding = PaddingValues(4.dp)) { Icon(Icons.Rounded.SwapHoriz, null, Modifier.size(18.dp)); Text(" Trasf.") }
+                ActionTile(Icons.AutoMirrored.Rounded.CallReceived, "Carico", { onMovement("carico", x.a.code) }, Modifier.weight(1f))
+                ActionTile(Icons.AutoMirrored.Rounded.CallMade, "Scarico", { onMovement("scarico", x.a.code) }, Modifier.weight(1f))
+                ActionTile(Icons.Rounded.SwapHoriz, "Trasferisci", { onMovement("trasferimento", x.a.code) }, Modifier.weight(1f))
             }
         }
         item(key = "stock-title") { SectionTitle("Dove si trova") }
         item(key = "stock") {
-            CardBox(Modifier.appear(2)) {
-                val rows = wh.warehouses.filter { it.active || (x.perWarehouse[it.id] ?: 0.0) != 0.0 }
+            // where the article really is first; the empty warehouses (often many) behind one tap
+            var showEmpty by rememberSaveable(x.a.code) { mutableStateOf(false) }
+            CardBox(Modifier.appear(2).animateContentSize()) {
+                val all = wh.warehouses.filter { it.active || (x.perWarehouse[it.id] ?: 0.0) != 0.0 }
+                val full = all.filter { (x.perWarehouse[it.id] ?: 0.0) != 0.0 || x.levels[it.id] != null }
+                val empty = all - full.toSet()
+                val rows = if (showEmpty || full.isEmpty() && empty.size <= 3) full + empty else full
+                if (rows.isEmpty()) Text("Nessuna giacenza in magazzino", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp))
                 rows.forEachIndexed { i, w ->
                     val v = x.perWarehouse[w.id] ?: 0.0; val l = x.levels[w.id]
                     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(if (w.kind == "furgone") Icons.Rounded.SwapHoriz else Icons.Rounded.Warehouse, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Icon(if (w.kind == "furgone") Icons.Rounded.LocalShipping else Icons.Rounded.Warehouse, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                             Text(w.name, style = MaterialTheme.typography.bodyLarge)
                             if (l != null) Text("scorta min ${qty(l.min)} · max ${qty(l.max)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -184,6 +193,9 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
                             color = when { v < 0 -> LocalStatus.current.bad; l != null && v <= l.min -> LocalStatus.current.due; else -> MaterialTheme.colorScheme.onSurface })
                     }
                     if (i < rows.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+                if (empty.isNotEmpty() && rows.size < all.size || showEmpty && empty.isNotEmpty()) TextButton({ showEmpty = !showEmpty }, Modifier.padding(top = 2.dp)) {
+                    Text(if (showEmpty) "Nascondi i magazzini vuoti" else if (empty.size == 1) "Mostra 1 magazzino vuoto" else "Mostra ${empty.size} magazzini vuoti")
                 }
             }
         }
@@ -304,6 +316,7 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
 @Composable fun PartsEditor(a: Archive, parts: List<it.topcash.studio.data.PartUse>, technician: String, readOnly: Boolean, onChange: (List<it.topcash.studio.data.PartUse>) -> Unit) {
     val wh = a.wh; var scan by remember { mutableStateOf(false) }; var query by remember { mutableStateOf("") }
     val van = wh.vanOf(technician)?.id ?: "sede"
+    if (readOnly && parts.isEmpty()) return // a closed report without parts: no empty title
     Text("Ricambi usati", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp))
     parts.forEachIndexed { i, p ->
         val x = wh.byCode[p.article.uppercase()]

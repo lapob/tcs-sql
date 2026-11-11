@@ -197,9 +197,9 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
             Text(if (signed) "Rapportino n. ${existing.i.reportNo}" else if (ro) "Intervento dallo storico Mastro" else if (existing != null) "Modifica intervento" else "Nuovo intervento", style = MaterialTheme.typography.headlineSmall)
             if (signed) existing.i.let { e ->
-                Row(Modifier.fillMaxWidth().padding(top = 10.dp).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.primaryContainer).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.Verified, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Text("  Firmato da ${e.signer} il ${Dates.short(Dates.parse(e.signedAt.take(10)))}${if (e.hours.isNotBlank()) " · " + e.hours.replace('.', ',') + " h" else ""}. Non è più modificabile.",
+                Row(Modifier.fillMaxWidth().padding(top = 12.dp).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Verified, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(24.dp))
+                    Text(modifier = Modifier.weight(1f).padding(start = 12.dp), text = "Firmato da ${e.signer} il ${Dates.short(Dates.parse(e.signedAt.take(10)))}${if (e.hours.isNotBlank()) " · " + e.hours.replace('.', ',') + " h" else ""}. Non è più modificabile.",
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
             }
@@ -249,10 +249,13 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
             if (machines.isNotEmpty()) {
                 Gap(10.dp)
                 Text("Macchina", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // a few machines: chips, one tap; many (a chain with dozens of registers): a menu, so the form stays short
+                if (machines.size <= 4) FlowRow(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(machine.isEmpty(), { if (!ro) machine = "" }, label = { Text("Nessuna") }, enabled = !ro)
                     machines.forEach { m -> FilterChip(machine == m.m.id, { if (!ro) machine = m.m.id }, label = { Text("${m.m.model} · ${m.m.serial}", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, enabled = !ro) }
-                }
+                } else SelectField("Macchina (${machines.size})", machine, listOf(SelectOption("", "Nessuna")) + machines.map { m ->
+                        SelectOption(m.m.id, "${m.m.model} · ${m.m.serial}".trim(' ', '·'), supporting = listOfNotNull(m.m.type.takeIf { it.isNotBlank() }, if (m.m.active) null else "dismessa").joinToString(" · ")) },
+                    { machine = it }, Modifier.fillMaxWidth().padding(top = 6.dp), enabled = !ro)
             }
             Gap(10.dp)
             PartsEditor(a, parts, tech, ro) { parts = it }
@@ -262,39 +265,39 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp)) }
             Gap(16.dp)
             Row(verticalAlignment = Alignment.CenterVertically) {
+                FlowRow(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
                 if (signed && me?.role != "tecnico") TextButton({ vm.unsignIntervention(existing.i.id); close() }) { Text("Annulla firma", color = MaterialTheme.colorScheme.error) }
-                if (existing != null && !ro && me?.role != "tecnico") TextButton({ confirmDelete = true }) { Icon(Icons.Rounded.Delete, null, tint = MaterialTheme.colorScheme.error); Text(" Elimina", color = MaterialTheme.colorScheme.error) }
+                if (existing != null && !ro && me?.role != "tecnico") TextButton({ confirmDelete = true }) { Icon(Icons.Rounded.Delete, null, tint = MaterialTheme.colorScheme.error); Text("Elimina", Modifier.padding(start = 6.dp), color = MaterialTheme.colorScheme.error, maxLines = 1) }
                 if (clientCode.isNotEmpty()) TextButton({ onOpenClient(clientCode) }) { Text("Apri cliente") }
-                Box(Modifier.weight(1f))
-                if (signed) OutlinedButton({ vm.shareReport(existing.i, ctx) }, shape = MaterialTheme.shapes.medium) { Icon(Icons.Rounded.Share, null); Text("  Condividi") }
-                else if (ro) Button(close) { Text("Chiudi") }
+                }
+                if (signed) Unit
+                else if (ro) Button(close, Modifier.padding(start = 8.dp)) { Text("Chiudi") }
                 else Button({
                     saving = true
                     vm.saveIntervention(current()) { saving = false; close() }.invokeOnCompletion { saving = false }
-                }, enabled = !saving && clientCode.isNotEmpty() && title.isNotBlank(), shape = MaterialTheme.shapes.medium) { Text(if (saving) "Salvataggio…" else "Salva") }
+                }, Modifier.padding(start = 8.dp), enabled = !saving && clientCode.isNotEmpty() && title.isNotBlank(), shape = MaterialTheme.shapes.medium) { Text(if (saving) "Salvataggio…" else "Salva") }
             }
             if (signed) existing.i.let { e ->
                 if (e.sentAt.isNotBlank()) Text("PDF inviato a ${e.sentTo} il ${Dates.short(Dates.parse(e.sentAt.take(10)))}", style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
                 Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    androidx.compose.material3.FilledTonalButton({ vm.printReport(e, ctx) }, Modifier.weight(1f).height(52.dp), shape = MaterialTheme.shapes.medium) {
-                        Icon(Icons.Rounded.Print, null); Text("  Stampa") }
-                    if (mailOn) Button({ mailDialog = true }, Modifier.weight(1f).height(52.dp), shape = MaterialTheme.shapes.medium) {
-                        Icon(Icons.Rounded.Email, null); Text("  Email cliente") }
+                    ActionTile(Icons.Rounded.Print, "Stampa", { vm.printReport(e, ctx) }, Modifier.weight(1f))
+                    ActionTile(Icons.Rounded.Share, "Condividi", { vm.shareReport(e, ctx) }, Modifier.weight(1f))
+                    if (mailOn) ActionTile(Icons.Rounded.Email, "Email cliente", { mailDialog = true }, Modifier.weight(1f), primary = true)
                 }
             }
             if (!ro && existing != null) androidx.compose.material3.FilledTonalButton({
                 saving = true
                 vm.saveIntervention(current(), quiet = true) { r -> vm.printReport(r, ctx) }.invokeOnCompletion { saving = false }
             }, Modifier.fillMaxWidth().padding(top = 10.dp).height(52.dp), enabled = !saving && clientCode.isNotEmpty() && title.isNotBlank(), shape = MaterialTheme.shapes.medium) {
-                Icon(Icons.Rounded.Print, null); Text("  Stampa da portare dal cliente")
+                Icon(Icons.Rounded.Print, null); Text("Stampa da portare dal cliente", Modifier.padding(start = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
             // the customer signs on the spot: the current edits are saved first, then the pad opens
             if (!ro) OutlinedButton({
                 saving = true
                 vm.saveIntervention(current(), quiet = true) { r -> signing = r }.invokeOnCompletion { saving = false }
             }, Modifier.fillMaxWidth().padding(top = 10.dp).height(52.dp), enabled = !saving && clientCode.isNotEmpty() && title.isNotBlank(), shape = MaterialTheme.shapes.medium) {
-                Icon(Icons.Rounded.Draw, null); Text("  Fai firmare il rapportino al cliente")
+                Icon(Icons.Rounded.Draw, null); Text("Fai firmare il rapportino al cliente", Modifier.padding(start = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
         }
     }
@@ -302,7 +305,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
     afterSign?.let { s ->
         AlertDialog(onDismissRequest = { afterSign = null; close() }, icon = { Icon(Icons.Rounded.Verified, null) }, title = { Text("Rapportino n. ${s.reportNo} firmato") },
             text = { Text("Puoi stamparlo subito o condividerlo (WhatsApp, email, Drive…).") },
-            confirmButton = { Button({ vm.printReport(s, ctx); afterSign = null; close() }) { Icon(Icons.Rounded.Print, null); Text("  Stampa") } },
+            confirmButton = { Button({ vm.printReport(s, ctx); afterSign = null; close() }) { Icon(Icons.Rounded.Print, null); Text("Stampa", Modifier.padding(start = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) } },
             dismissButton = { Row {
                 TextButton({ afterSign = null; close() }) { Text("Chiudi") }
                 TextButton({ vm.shareReport(s, ctx); afterSign = null; close() }) { Text("Condividi") } } })

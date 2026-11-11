@@ -272,7 +272,7 @@ private fun deltaText(now: Double, prev: Double): String =
                     Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.onSurface.copy(alpha = .05f)).padding(horizontal = 12.dp, vertical = 10.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(8.dp).clip(RoundedCornerShape(3.dp)).background(tones[r * 2 + j]))
-                            Text("  " + b.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(b.label, Modifier.padding(start = 6.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Text(money0(b.sum), style = MaterialTheme.typography.titleSmall.tabular, maxLines = 1)
                         Text(if (b.count == 1) "1 rata" else "${b.count} rate", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -352,7 +352,7 @@ fun LazyListScope.clientAccounting(a: Archive, c: UClient, onDue: (String) -> Un
                     val uri = ("mailto:" + android.net.Uri.encode(email) + "?subject=" + android.net.Uri.encode(subject) + "&body=" + android.net.Uri.encode(body)).toUri()
                     runCatching { ctx.startActivity(Intent(Intent.ACTION_SENDTO, uri)) }.onFailure { vm.notify("Nessuna app email trovata") }
                     if (status.isBlank()) status = "Sollecitato"
-                }) { Icon(Icons.Rounded.Mail, null, Modifier.size(18.dp)); Text(" Sollecito") }
+                }) { Icon(Icons.Rounded.Mail, null, Modifier.size(18.dp)); Text("Sollecito", Modifier.padding(start = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
                 if (nav != null && d.client != null) FilledTonalButton({ close { nav.openClient(d.client.code) } }) { Text("Cliente") }
                 Spacer(Modifier.weight(1f))
                 Button({ vm.saveDueNote(d.d.id, status, note.trim()); close() }) { Text("Salva") }

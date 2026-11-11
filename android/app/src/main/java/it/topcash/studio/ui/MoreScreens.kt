@@ -282,10 +282,10 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
         item(key = "server") {
             SectionTitle("Server")
             CardBox(Modifier.appear(2)) {
-                Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Rounded.Router, null, tint = MaterialTheme.colorScheme.primary); Text("  " + vm.server.removePrefix("http://").trimEnd('/'), style = MaterialTheme.typography.bodyLarge) }
+                Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Rounded.Router, null, tint = MaterialTheme.colorScheme.primary); Text(vm.server.removePrefix("http://").trimEnd('/'), Modifier.weight(1f).padding(start = 12.dp), style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
                 Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton({ vm.changeServer() }) { Text("Cambia server") }
-                    OutlinedButton({ vm.logout() }) { Icon(Icons.AutoMirrored.Rounded.Logout, null, Modifier.size(18.dp)); Text("  Esci") }
+                    OutlinedButton({ vm.logout() }) { Icon(Icons.AutoMirrored.Rounded.Logout, null, Modifier.size(18.dp)); Text("Esci", Modifier.padding(start = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
                 }
             }
         }

@@ -199,7 +199,7 @@ private fun renTone(s: String) = when (s) { "Rinnovato" -> Tone.Ok; "Perso" -> T
     var editing by remember { mutableStateOf<UAsset?>(null) }; var creating by remember { mutableStateOf(false) }
     editing?.let { x -> AssetSheet(vm, a, x.a, c, fixedClient = true) { editing = null } }
     if (creating) AssetSheet(vm, a, null, c, fixedClient = true) { creating = false }
-    SectionTitle("PC e sistemi${if (c.assets.isNotEmpty()) " (${c.assets.size})" else ""}") { TextButton({ creating = true }) { Icon(Icons.Rounded.Add, null, Modifier.size(18.dp)); Text(" Aggiungi") } }
+    SectionTitle("PC e sistemi${if (c.assets.isNotEmpty()) " (${c.assets.size})" else ""}") { TextButton({ creating = true }) { Icon(Icons.Rounded.Add, null, Modifier.size(18.dp)); Text("Aggiungi", Modifier.padding(start = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) } }
     if (c.assets.isEmpty()) Text("Nessun PC, stampante o apparato registrato.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
     c.assets.forEach { x -> AssetCard(x, Modifier.padding(bottom = 8.dp), showClient = false) { editing = x } }
 }
@@ -254,12 +254,12 @@ private fun renTone(s: String) = when (s) { "Rinnovato" -> Tone.Ok; "Perso" -> T
             Text(d.clientName, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text("${d.kind} · ${d.detail} · scade il ${Dates.short(d.date)} (${Dates.relative(d.days)})", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                c?.phone?.takeIf { it.isNotBlank() }?.let { tel -> FilledTonalButton({ ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + tel.replace(" ", "")))) }) { Icon(Icons.Rounded.Call, null, Modifier.size(18.dp)); Text(" Chiama") } }
+                c?.phone?.takeIf { it.isNotBlank() }?.let { tel -> FilledTonalButton({ ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + tel.replace(" ", "")))) }) { Icon(Icons.Rounded.Call, null, Modifier.size(18.dp)); Text("Chiama", Modifier.padding(start = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) } }
                 FilledTonalButton({
                     val subj = "${d.kind} in scadenza il ${Dates.short(d.date)}"
                     val body = "Buongiorno,\n\nle ricordiamo che il ${Dates.short(d.date)} scade: ${d.kind.lowercase()} (${d.detail}).\nPer rinnovare senza interruzioni può rispondere a questa email o chiamarci: ci pensiamo noi.\n\nCordiali saluti\nTop Cash Service S.r.l."
                     ctx.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:" + Uri.encode(c?.email.orEmpty()) + "?subject=" + Uri.encode(subj) + "&body=" + Uri.encode(body))))
-                }) { Icon(Icons.Rounded.Mail, null, Modifier.size(18.dp)); Text(" Email") }
+                }) { Icon(Icons.Rounded.Mail, null, Modifier.size(18.dp)); Text("Email", Modifier.padding(start = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
                 if (c != null) OutlinedButton({ close { nav.openClient(c.code) } }) { Text("Scheda cliente") }
             }
             Text("Esito", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
@@ -348,7 +348,7 @@ private val routeKinds = listOf("Intervento" to "Interventi", "Verificazione" to
                         val dest = places.last(); val way = places.dropLast(1)
                         val url = "https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=" + Uri.encode(dest) + if (way.isNotEmpty()) "&waypoints=" + Uri.encode(way.joinToString("|")) else ""
                         runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
-                    }) { Icon(Icons.Rounded.Directions, null, Modifier.size(18.dp)); Text(" Percorso") }
+                    }) { Icon(Icons.Rounded.Directions, null, Modifier.size(18.dp)); Text("Percorso", Modifier.padding(start = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
                 }
             }
             val expanded = place in open

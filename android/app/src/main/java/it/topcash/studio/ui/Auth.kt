@@ -158,12 +158,12 @@ import kotlinx.coroutines.launch
             Modifier.appear(3).clip(MaterialTheme.shapes.large).background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 26.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.VerifiedUser, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-            Text("  " + d.code, style = MaterialTheme.typography.headlineMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, letterSpacing = androidx.compose.ui.unit.TextUnit(3f, androidx.compose.ui.unit.TextUnitType.Sp)),
+            Text(d.code, Modifier.padding(start = 12.dp), maxLines = 1, style = MaterialTheme.typography.headlineMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, letterSpacing = androidx.compose.ui.unit.TextUnit(3f, androidx.compose.ui.unit.TextUnitType.Sp)),
                 color = MaterialTheme.colorScheme.onPrimaryContainer)
         }
         if (!blocked) androidx.compose.foundation.layout.Row(Modifier.padding(top = 22.dp).appear(4), verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-            Text("  In attesa di approvazione: si apre da solo", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("In attesa di approvazione: si apre da solo", Modifier.padding(start = 10.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         TextButton({ checking = true; scope.launch { vm.checkDevice(); checking = false } }, Modifier.padding(top = 12.dp), enabled = !checking) { Text(if (checking) "Controllo…" else "Controlla ora") }
         TextButton({ vm.changeServer() }) { Text("Cambia server") }

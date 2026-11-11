@@ -12,6 +12,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -326,8 +327,10 @@ fun Modifier.bleed(h: Dp): Modifier = this.layout { m, c ->
         val n = options.size.coerceAtLeast(1); val w = maxWidth / n
         val x by androidx.compose.animation.core.animateDpAsState(w * selected.coerceIn(0, n - 1),
             androidx.compose.animation.core.spring(dampingRatio = 0.82f, stiffness = 520f), label = "thumb")
+        // the raised pill is lighter than the track in both themes (in dark mode "surface" is darker than the track and looked black)
+        val thumb = if (cs.surface.luminance() < 0.5f) cs.surfaceBright else cs.surface
         if (selected in options.indices) Box(Modifier.offset { androidx.compose.ui.unit.IntOffset(x.roundToPx(), 0) }.width(w).fillMaxHeight()
-            .shadow(2.dp, pill, clip = false).clip(pill).background(cs.surface))
+            .shadow(if (enabled) 2.dp else 0.dp, pill, clip = false).clip(pill).background(if (enabled) thumb else thumb.copy(alpha = 0.7f)))
         Row(Modifier.fillMaxSize()) {
             options.forEachIndexed { i, label ->
                 val on = i == selected
@@ -343,5 +346,26 @@ fun Modifier.bleed(h: Dp): Modifier = this.layout { m, c ->
                 }
             }
         }
+    }
+}
+
+/**
+ * Action button with the icon above the label, for rows of 2-4 actions (Carico / Scarico / Trasferisci, Stampa /
+ * Condividi / Email). The label never wraps and never gets cut: it shrinks a step when the phone uses large text.
+ */
+@Composable fun ActionTile(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier,
+                           primary: Boolean = false, enabled: Boolean = true) {
+    val cs = MaterialTheme.colorScheme
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val bg = if (primary) cs.primary else cs.secondaryContainer
+    val fg = (if (primary) cs.onPrimary else cs.onSecondaryContainer).let { if (enabled) it else it.copy(alpha = 0.5f) }
+    Column(modifier.heightIn(min = 68.dp).clip(MaterialTheme.shapes.medium).background(if (enabled) bg else bg.copy(alpha = 0.5f))
+        .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button) { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.ContextClick); onClick() }
+        .padding(horizontal = 8.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterVertically)) {
+        androidx.compose.material3.Icon(icon, null, tint = fg, modifier = Modifier.size(22.dp))
+        androidx.compose.foundation.text.BasicText(label, maxLines = 1, softWrap = false, color = { fg },
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center),
+            autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MaterialTheme.typography.labelLarge.fontSize, stepSize = 0.5.sp))
     }
 }

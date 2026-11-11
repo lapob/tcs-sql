@@ -111,7 +111,7 @@ private fun exportPng(strokes: List<List<Offset>>, size: IntSize, strokePx: Floa
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.large).onSizeChanged { s -> padSize = s }) {
                 if (strokes.isEmpty() && current.isEmpty())
                     Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.Draw, null, tint = Color(0xFF8A90A8)); Text("  Firma qui con il dito", color = Color(0xFF8A90A8))
+                        Icon(Icons.Rounded.Draw, null, tint = Color(0xFF8A90A8)); Text("Firma qui con il dito", Modifier.padding(start = 8.dp), color = Color(0xFF8A90A8))
                     }
                 Canvas(Modifier.matchParentSize().pointerInput(Unit) {
                     awaitEachGesture {
