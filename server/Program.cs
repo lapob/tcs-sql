@@ -485,6 +485,24 @@ app.MapPost("/api/update/upload",async(HttpContext ctx,string kind,string versio
 void DailyBackup(){try{Backups.Run(store,dataDir);hub.Changed();}catch(Exception ex){store.Log("error","Backup automatico: "+ex.Message);}}
 var backupTimer=new Timer(_=>DailyBackup(),null,TimeSpan.FromMinutes(1),TimeSpan.FromHours(1));
 app.Lifetime.ApplicationStopping.Register(()=>backupTimer.Dispose());
+// The Windows app (Mastro import, portals on this PC) and other tools write the same archive directly, without going through
+// this server: SQLite's data_version (on one connection kept open) changes whenever another connection commits, so every
+// device gets the new data within a few seconds instead of waiting for the next change made here.
+var watchDb=new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder{DataSource=store.DatabasePath,Mode=Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly}.ToString());
+long lastDataVersion=-1;var watchGate=new Lock();
+void WatchDb()
+{
+ lock(watchGate)try
+ {
+  if(watchDb.State!=System.Data.ConnectionState.Open)watchDb.Open();
+  using var q=watchDb.CreateCommand();q.CommandText="PRAGMA data_version";var v=Convert.ToInt64(q.ExecuteScalar());
+  if(lastDataVersion>=0&&v!=lastDataVersion)hub.Changed();
+  lastDataVersion=v;
+ }
+ catch{try{watchDb.Close();}catch{}lastDataVersion=-1;}
+}
+var watchTimer=new Timer(_=>WatchDb(),null,TimeSpan.FromSeconds(2),TimeSpan.FromSeconds(3));
+app.Lifetime.ApplicationStopping.Register(()=>{watchTimer.Dispose();lock(watchGate)watchDb.Dispose();});
 
 store.Log("server","Server Top Cash avviato.");
 app.Run();
