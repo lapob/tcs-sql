@@ -35,6 +35,7 @@ if ($Installa) {
   Write-Host "Registro: $log"
 }
 
+if ($Auto) { Set-Content -Path (Join-Path $PSScriptRoot '.runtime\aggiorna-server.ultimo') -Value (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') -Encoding UTF8 } # proof the scheduled task runs
 $vNew = Ver $new; $vCur = Ver $dst
 if (-not $vNew) { if (-not $Installa) { Log "Nessun aggiornamento in $new" }; exit 0 }
 if ($vCur -and $vNew -le $vCur) { if (-not $Auto) { Log "Il server è già aggiornato ($vCur)." }; exit 0 }

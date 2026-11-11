@@ -3,6 +3,7 @@ package it.topcash.studio.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -227,8 +228,13 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
                 Catalog.priorities.forEachIndexed { i, p -> SegmentedButton(priority == p, { if (!ro) priority = p }, SegmentedButtonDefaults.itemShape(i, Catalog.priorities.size), enabled = !ro, label = { Text(p, maxLines = 1) }) }
             }
             Gap(14.dp)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton({ pickDate = true }, Modifier.weight(1f).height(56.dp), enabled = !ro, shape = MaterialTheme.shapes.medium) { Icon(Icons.Rounded.CalendarMonth, null); Text("  " + Dates.short(Dates.parse(date))) }
+            // date and assignee: two fields of the same shape, label on the border, aligned on one line
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
+                Box(Modifier.weight(1f)) {
+                    OutlinedTextField(Dates.short(Dates.parse(date)), {}, Modifier.fillMaxWidth(), readOnly = true, enabled = !ro, singleLine = true,
+                        label = { Text("Data") }, leadingIcon = { Icon(Icons.Rounded.CalendarMonth, null) }, shape = MaterialTheme.shapes.medium)
+                    Box(Modifier.matchParentSize().padding(top = 8.dp).clip(MaterialTheme.shapes.medium).clickable(enabled = !ro) { pickDate = true })
+                }
                 SelectField("Assegna a", tech, teamOptions(a.state.team, tech), { tech = it }, Modifier.weight(1f), enabled = !ro)
             }
             val machines = a.byCode[clientCode]?.machines.orEmpty()

@@ -1016,3 +1016,13 @@ td .svc{padding:3px 8px;font-size:11px;margin:0 4px 4px 0}td small svg{width:12p
 }
 @media (max-width:760px){.anim .reveal,.anim tbody tr.reveal{animation:none!important}} /* phones: the whole page moves once (pageIn) */
 @media (max-width:760px) and (prefers-reduced-motion:reduce){.nav-item,.nav-item svg{transition:none}.nav-item.active svg{transform:none}}
+/* breathing room: blocks placed one after another in a page never touch (grids keep their own gap) */
+.page > :is(.card,.stack,.dtr-status,.layout-2,.layout-half,.kpis) + :is(.card,.stack,.dtr-status,.layout-2,.layout-half,.kpis){margin-top:16px}
+/* long words (log lines, addresses, codes) wrap or ellipsize inside their box instead of running out of it */
+.event > div{min-width:0;overflow-wrap:anywhere}
+.lan-row{min-width:0}
+/* card headers: the title and the filters share the line while they fit, otherwise the filters move below (never out of the card) */
+.card-head{flex-wrap:wrap;row-gap:12px}
+.card-head > div:first-child{min-width:min(220px,100%)}
+.seg{max-width:100%;overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain}
+.seg::-webkit-scrollbar{display:none}
