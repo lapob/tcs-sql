@@ -1,7 +1,7 @@
 'use strict';
 // ───────────────────────── organised work: inventory of PCs and systems, guided renewals, the day's route,
 // data check (duplicates, VAT, unlinked devices, missing contacts) and the single sheet of every register / serial.
-let WK={inv:'all',invQ:'',ren:'open',renQ:'',route:'',kind:'',open:new Set(),check:'dup',more:{}};
+let WK={inv:'all',invQ:'',ren:'open',renQ:'',route:undefined,kind:'',open:new Set(),check:'dup',more:{}};
 const AS_KINDS=['PC','Server','Stampante','Router / firewall','NAS','Tablet','Licenza software','Altro'];
 const AS_ICON={PC:'grid',Server:'box',Stampante:'print','Router / firewall':'sync',NAS:'folder',Tablet:'phone','Licenza software':'key',Altro:'tool'};
 const REN_STATES=[['Da contattare','info'],['Contattato','acc'],['Da sollecitare','due'],['Rinnovato','ok'],['Perso','bad']];
@@ -127,31 +127,41 @@ async function openRenewal(key){
 }
 
 // ───────────────────────── 3. the day's route
+// rank orders the work: 0 urgent (urgent job, overdue verification), 1 soon (high priority, verification within 30 days,
+// journal almost full), 2 normal job, 3 register reporting errors (often solved remotely, so they come last)
 function routeStops(){
- const stops=[];const add=(c,kind,cls,text,attr,tech)=>{stops.push({c,kind,cls,text,attr,tech:tech||'',city:(c?.city||c?.mastro?.city||'').trim()||'Senza località',zone:c?.mastro?.zone||''});};
- for(const i of D.openInterventions)add(i.c,'Intervento',i.priority==='Urgente'?'bad':i.priority==='Alta'?'due':'info',i.title||'Intervento',`data-int="${esc(i.id)}"`,i.technician);
- for(const m of D.machines)if(m.active&&m.verDays!==null&&m.verDays<=30)add(m.c,'Verificazione',m.verDays<0?'bad':'due',`${m.model||'Macchina'} · ${m.serial} · ${rel(m.verDays)}`,m.code?`data-client="${esc(m.code)}"`:'');
- if(typeof DT!=='undefined'&&DT)for(const r of DT.errors||[])add(r.c,'Errore DTR','bad',`${r.serial} · ${r.model||'cassa'}`,`data-dtr="${esc(r.serial)}"`);
- if(typeof IT!=='undefined'&&IT)for(const r of IT.low||[])add(r.c,'DGFE quasi pieno','bad',`${r.serial} · ${r.d?.dgfeFree}% libero`,`data-ital="${esc(r.serial)}"`);
- if(typeof RC!=='undefined'&&RC)for(const r of RC.low||[])add(r.c,'DGFE quasi pieno','bad',`${r.serial} · ${r.dgfeFree}% libero`,`data-rch="${esc(r.serial)}"`);
+ const stops=[];const add=(c,kind,cls,text,attr,tech,rank)=>{stops.push({c,kind,cls,text,attr,rank,tech:tech||'',city:(c?.city||c?.mastro?.city||'').trim()||'Senza località',cap:(c?.mastro?.cap||'').trim(),zone:c?.mastro?.zone||''});};
+ for(const i of D.openInterventions){const r=i.priority==='Urgente'?0:i.priority==='Alta'?1:2;add(i.c,'Intervento',['bad','due','info'][r],i.title||'Intervento',`data-int="${esc(i.id)}"`,i.technician,r);}
+ for(const m of D.machines)if(m.active&&m.verDays!==null&&m.verDays<=30)add(m.c,'Verificazione',m.verDays<0?'bad':'due',`${m.model||'Macchina'} · ${m.serial} · ${rel(m.verDays)}`,m.code?`data-client="${esc(m.code)}"`:'','',m.verDays<0?0:1);
+ if(typeof IT!=='undefined'&&IT)for(const r of IT.low||[])add(r.c,'DGFE quasi pieno','due',`${r.serial} · ${r.d?.dgfeFree}% libero`,`data-ital="${esc(r.serial)}"`,'',1);
+ if(typeof RC!=='undefined'&&RC)for(const r of RC.low||[])add(r.c,'DGFE quasi pieno','due',`${r.serial} · ${r.dgfeFree}% libero`,`data-rch="${esc(r.serial)}"`,'',1);
+ if(typeof DT!=='undefined'&&DT)for(const r of DT.errors||[])add(r.c,'Errore DTR','bad',`${r.serial} · ${r.model||'cassa'}`,`data-dtr="${esc(r.serial)}"`,'',3);
  return stops;
 }
+// a technician opens the round on his own stops (his name contains the technician's name, e.g. "Marco Chiti" → "Chiti")
+function routeMine(techs){if(me?.role!=='tecnico')return'';const n=norm(me.name||'').trim();if(n.length<3)return'';return techs.find(t=>norm(t).trim().length>=3&&(n.includes(norm(t).trim())||norm(t).includes(n)))||'';}
 function routePage(){
  const all=routeStops();const techs=[...new Set(all.map(s=>s.tech).filter(Boolean))].sort();
+ if(WK.route===undefined)WK.route=routeMine(techs);if(WK.route&&!techs.includes(WK.route))WK.route='';
  const byTech=all.filter(s=>!WK.route||s.tech===WK.route);
  // what kind of stop: the counts help decide where to go first
- const KINDS=[['Intervento','Interventi'],['Verificazione','Verificazioni'],['Errore DTR','Errori cassa'],['DGFE quasi pieno','DGFE pieni']].map(([k,l])=>[k,l,byTech.filter(s=>s.kind===k).length]).filter(x=>x[2]);
+ const KINDS=[['Intervento','Interventi'],['Verificazione','Verificazioni'],['DGFE quasi pieno','DGFE pieni'],['Errore DTR','Errori cassa']].map(([k,l])=>[k,l,byTech.filter(s=>s.kind===k).length]).filter(x=>x[2]);
  if(WK.kind&&!KINDS.some(x=>x[0]===WK.kind))WK.kind='';
  const list=byTech.filter(s=>!WK.kind||s.kind===WK.kind);const SHOW=6;
- const groups=new Map();for(const s of list){const k=s.city;if(!groups.has(k))groups.set(k,[]);groups.get(k).push(s);}
- const ordered=[...groups.entries()].sort((a,b)=>b[1].length-a[1].length||a[0].localeCompare(b[0],'it'));
+ // a big city is split by postcode so each group is a real round; urgent places first, "Senza località" last
+ const per={};for(const s of list)per[s.city]=(per[s.city]||0)+1;
+ const groups=new Map();for(const s of list){const k=per[s.city]>20&&s.cap&&s.city!=='Senza località'?s.city+' '+s.cap:s.city;if(!groups.has(k))groups.set(k,[]);groups.get(k).push(s);}
+ for(const ss of groups.values())ss.sort((a,b)=>a.rank-b.rank||(a.c?.name||'').localeCompare(b.c?.name||'','it'));
+ const hot=ss=>ss.filter(s=>s.rank<=1).length;
+ const ordered=[...groups.entries()].sort((a,b)=>(a[0]==='Senza località')-(b[0]==='Senza località')||a[1][0].rank-b[1][0].rank||hot(b[1])-hot(a[1])||b[1].length-a[1].length||a[0].localeCompare(b[0],'it'));
+
  const addr=c=>[c?.address||c?.mastro?.address,c?.mastro?.cap,c?.city||c?.mastro?.city,c?.mastro?.prov].filter(Boolean).join(', ');
  const maps=ss=>{const places=[...new Set(ss.map(s=>addr(s.c)).filter(Boolean))].slice(0,10);if(!places.length)return'';const dest=places.pop();
   return`https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${encodeURIComponent(dest)}${places.length?'&waypoints='+encodeURIComponent(places.join('|')):''}`;};
  return`${hero('<span class="grad">Giro di oggi</span>.','Interventi aperti, verificazioni entro 30 giorni, casse in errore e giornali quasi pieni, raggruppati per località: un tocco apre il percorso sul telefono.','')}
  <div class="toolbar route-tools reveal" style="--i:1">${KINDS.length>1?`<div class="seg"><button class="${!WK.kind?'active':''}" data-w-kind="">Tutto<span class="count">${byTech.length}</span></button>${KINDS.map(([k,l,n])=>`<button class="${WK.kind===k?'active':''}" data-w-kind="${esc(k)}">${l}<span class="count">${n}</span></button>`).join('')}</div>`:''}
   ${techs.length?`<div class="seg"><button class="${!WK.route?'active':''}" data-w-route="">Tutti i tecnici</button>${techs.map(t=>`<button class="${WK.route===t?'active':''}" data-w-route="${esc(t)}">${esc(t)}</button>`).join('')}</div>`:''}</div>
- ${ordered.length?`<div class="route-grid">${ordered.slice(0,12+(WK.more.route||0)).map(([city,ss],gi)=>{const url=maps(ss);return`<div class="card reveal route-card" style="--i:${Math.min(gi+2,9)}"><div class="card-head"><div><h2>${esc(city)}<span class="count">${ss.length}</span></h2><p>${esc([...new Set(ss.map(s=>s.zone).filter(z=>z&&!/^\d+$/.test(z)))].join(', ')||(ss.length===1?'1 tappa':ss.length+' tappe'))}</p></div>${url?`<a class="btn sm accent" href="${esc(url)}" target="_blank" rel="noopener">${icon('pin')}Percorso</a>`:''}</div>
+ ${ordered.length?`<div class="route-grid">${ordered.slice(0,12+(WK.more.route||0)).map(([city,ss],gi)=>{const url=maps(ss);return`<div class="card reveal route-card" style="--i:${Math.min(gi+2,9)}"><div class="card-head"><div><h2>${esc(city)}<span class="count">${ss.length}</span></h2><p>${esc([...new Set(ss.map(s=>s.zone).filter(z=>z&&!/^\d+$/.test(z)))].join(', ')||(ss.length===1?'1 tappa':ss.length+' tappe'))}${ss.some(s=>s.rank===0)?` · <span style="color:var(--bad);font-weight:600">${ss.filter(s=>s.rank===0).length===1?'1 urgente':ss.filter(s=>s.rank===0).length+' urgenti'}</span>`:''}</p></div>${url?`<a class="btn sm accent" href="${esc(url)}" target="_blank" rel="noopener">${icon('pin')}Percorso</a>`:''}</div>
   ${(WK.open.has(city)?ss:ss.slice(0,SHOW)).map(s=>`<div class="list-row" ${s.attr} tabindex="0"><span class="badge ${s.cls}">${esc(s.kind)}</span><div class="grow"><strong>${esc(s.c?.name||'Cliente da abbinare')}</strong><small>${esc(s.text)}${addr(s.c)?' · '+esc(addr(s.c)):''}${s.tech?' · '+esc(s.tech):''}</small></div>${s.c?.phone?`<a class="icon-btn sm" href="tel:${esc(s.c.phone.replace(/\s/g,''))}" aria-label="Chiama ${esc(s.c.name)}" data-stop>${icon('phone')}</a>`:''}</div>`).join('')}${ss.length>SHOW?`<button class="btn sm ghost route-more" data-w-city="${esc(city)}">${WK.open.has(city)?'Mostra meno':`Mostra altre ${ss.length-SHOW}`}</button>`:''}</div>`;}).join('')}</div>${ordered.length>12+(WK.more.route||0)?`<button class="btn route-more-cities" data-w-more="route">${icon('chevron')}Mostra altre ${ordered.length-12-(WK.more.route||0)} località</button>`:''}`
  :`<div class="card reveal empty"><span class="orb">${icon('check')}</span><h3>Giornata libera</h3><p>Nessun intervento aperto né verificazione imminente.</p></div>`}`;
 }

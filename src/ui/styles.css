@@ -1135,3 +1135,11 @@ td .svc{padding:3px 8px;font-size:11px;margin:0 4px 4px 0}td small svg{width:12p
  :root.kb-open .sidebar{display:none}
  :root.kb-open main{padding-bottom:16px}
 }
+
+/* Giro di oggi on a phone: the kind badge sits above the name, so name and address use the whole width */
+@media (max-width:600px){
+ .route-card .list-row{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px;row-gap:4px;align-items:center}
+ .route-card .list-row>.badge{grid-column:1;grid-row:1;justify-self:start}
+ .route-card .list-row>.grow{grid-column:1;grid-row:2;min-width:0}
+ .route-card .list-row>.icon-btn{grid-column:2;grid-row:1/span 2}
+}

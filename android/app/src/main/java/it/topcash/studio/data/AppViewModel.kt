@@ -33,7 +33,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val hashFile = File(app.filesDir, "archive.hashes")
 
     private val _screen = MutableStateFlow(Screen.Loading); val screen = _screen.asStateFlow()
-    /** Pending launcher shortcut ("new", "load", "search"), consumed by the UI once the archive is ready. */
+    /** Pending launcher shortcut ("route", "new", "load", "search"), consumed by the UI once the archive is ready. */
     val shortcut = MutableStateFlow<String?>(null)
     /** One-shot: the clients search field takes the focus (shortcut "Cerca cliente"). */
     val focusSearch = MutableStateFlow(false)

@@ -126,7 +126,7 @@ private val accRoutes = setOf("acc", "accRec", "accInv", "accPay")
     val sc by vm.shortcut.collectAsStateWithLifecycle()
     LaunchedEffect(sc, archive != null, admin) {
         if (archive == null) return@LaunchedEffect
-        when (sc) { "new" -> editor = EditorRequest(); "load" -> if (admin) movement = "carico" to null else vm.notify("Il magazzino è riservato all'amministratore"); "search" -> { nav.switchTab("clients"); vm.focusSearch.value = true }; else -> return@LaunchedEffect }
+        when (sc) { "new" -> editor = EditorRequest(); "load" -> if (admin) movement = "carico" to null else vm.notify("Il magazzino è riservato all'amministratore"); "search" -> { nav.switchTab("clients"); vm.focusSearch.value = true }; "route" -> nav.navigate("route") { launchSingleTop = true }; else -> return@LaunchedEffect }
         vm.shortcut.value = null
     }
     val entry by nav.currentBackStackEntryAsState()

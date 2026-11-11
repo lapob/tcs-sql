@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- long-press the app icon: the most frequent actions in one tap -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="route" android:enabled="true" android:icon="@drawable/shortcut_route" android:shortcutShortLabel="@string/sc_route_short" android:shortcutLongLabel="@string/sc_route">
+        <intent android:action="it.topcash.studio.ROUTE" android:targetPackage="it.topcash.studio" android:targetClass="it.topcash.studio.MainActivity" />
+    </shortcut>
     <shortcut android:shortcutId="new" android:enabled="true" android:icon="@drawable/shortcut_new" android:shortcutShortLabel="@string/sc_new_short" android:shortcutLongLabel="@string/sc_new">
         <intent android:action="it.topcash.studio.NEW_INTERVENTION" android:targetPackage="it.topcash.studio" android:targetClass="it.topcash.studio.MainActivity" />
     </shortcut>

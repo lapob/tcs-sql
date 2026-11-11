@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -276,50 +279,97 @@ private fun renTone(s: String) = when (s) { "Rinnovato" -> Tone.Ok; "Perso" -> T
 }
 
 // ───────────────────────── Giro di oggi
-private class Stop(val c: UClient?, val kind: String, val tone: Tone, val text: String, val tech: String, val open: () -> Unit)
+/** One stop of the day. [rank] orders the work: 0 urgent (urgent job, overdue verification), 1 soon (high priority,
+ *  verification within 30 days, journal almost full), 2 normal job, 3 register reporting errors (often solved remotely). */
+private class Stop(val c: UClient?, val kind: String, val tone: Tone, val text: String, val tech: String, val rank: Int, val key: String, val open: () -> Unit)
+private const val ROUTE_SHOW = 6
+private fun urgentLabel(n: Int) = if (n == 1) "1 urgente" else "$n urgenti"
+private const val ROUTE_SPLIT = 20
+private val routeKinds = listOf("Intervento" to "Interventi", "Verificazione" to "Verificazioni", "DGFE quasi pieno" to "DGFE pieni", "Errore DTR" to "Errori cassa")
+
+/**
+ * Giro di oggi: the stops grouped by place, the most urgent places first and "Senza località" last. A big city is
+ * split by postcode so each group is a real round (Firenze 50127, 50142…). Every stop is its own list item, so a
+ * place with hundreds of stops scrolls as smoothly as one with three. A technician starts on his own stops.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable fun RouteScreen(vm: AppViewModel, a: Archive, nav: NavHostController, onOpenIntervention: (String) -> Unit) {
     val ctx = LocalContext.current
-    var tech by rememberSaveable { mutableStateOf("Tutti") }
+    val me by vm.me.collectAsStateWithLifecycle()
     val stops = remember(a) {
         buildList {
-            a.openInterventions.forEach { i -> add(Stop(i.client, "Intervento", when (i.i.priority) { "Urgente" -> Tone.Bad; "Alta" -> Tone.Due; else -> Tone.Info }, i.i.title, i.i.technician) { onOpenIntervention(i.i.id) }) }
-            a.machines.filter { it.m.active && it.verDays != null && it.verDays <= 30 }.forEach { m -> add(Stop(m.client, "Verificazione", if ((m.verDays ?: 0) < 0) Tone.Bad else Tone.Due, "${m.m.model} · ${m.m.serial} · ${Dates.relative(m.verDays)}", "") { m.client?.let { nav.openClient(it.code) } }) }
-            a.dtrErrors.forEach { r -> add(Stop(r.client, "Errore DTR", Tone.Bad, r.r.serial, "") { r.client?.let { nav.openClient(it.code) } }) }
-            a.italLow.forEach { r -> add(Stop(r.client, "DGFE quasi pieno", Tone.Bad, "${r.r.serial} · ${r.d?.dgfeFree}% libero", "") { r.client?.let { nav.openClient(it.code) } }) }
+            a.openInterventions.forEach { i ->
+                val r = when (i.i.priority) { "Urgente" -> 0; "Alta" -> 1; else -> 2 }
+                add(Stop(i.client, "Intervento", when (r) { 0 -> Tone.Bad; 1 -> Tone.Due; else -> Tone.Info }, i.i.title.ifBlank { "Intervento" }, i.i.technician, r, "i" + i.i.id) { onOpenIntervention(i.i.id) })
+            }
+            a.machines.filter { it.m.active && it.verDays != null && it.verDays <= 30 }.forEach { m ->
+                val late = (m.verDays ?: 0) < 0
+                add(Stop(m.client, "Verificazione", if (late) Tone.Bad else Tone.Due, "${m.m.model} · ${m.m.serial} · ${Dates.relative(m.verDays)}", "", if (late) 0 else 1, "m" + m.m.id) { m.client?.let { nav.openClient(it.code) } })
+            }
+            a.italLow.forEach { r -> add(Stop(r.client, "DGFE quasi pieno", Tone.Due, "${r.r.serial} · ${r.d?.dgfeFree}% libero", "", 1, "it" + r.r.serial) { r.client?.let { nav.openClient(it.code) } }) }
+            a.rchLow.forEach { r -> add(Stop(r.client, "DGFE quasi pieno", Tone.Due, "${r.r.serial} · ${r.r.dgfeFree}% libero", "", 1, "rc" + r.r.serial) { r.client?.let { nav.openClient(it.code) } }) }
+            a.dtrErrors.forEach { r -> add(Stop(r.client, "Errore DTR", Tone.Bad, r.r.serial, "", 3, "d" + r.r.serial) { r.client?.let { nav.openClient(it.code) } }) }
         }
     }
-    val techs = listOf("Tutti") + stops.map { it.tech }.filter { it.isNotBlank() }.distinct().sorted()
-    val shown = stops.filter { tech == "Tutti" || it.tech == tech }
-    val groups = shown.groupBy { (it.c?.city ?: it.c?.mastro?.city).orEmpty().trim().ifBlank { "Senza località" } }.entries.sortedWith(compareBy({ -it.value.size }, { it.key }))
-    Page(vm, "Giro di oggi", "${shown.size} tappe in ${groups.size} località", onBack = { nav.popBackStack() }) {
-        if (techs.size > 2) item(key = "tech") { ChoiceChips(techs, tech, { tech = it }, Modifier.padding(bottom = 10.dp)) }
-        if (groups.isEmpty()) item(key = "none") { Empty(Icons.Rounded.Route, "Giornata libera", "Nessun intervento aperto né verificazione imminente.") }
-        groups.forEachIndexed { gi, (city, ss) ->
-            item(key = "g$city") {
-                CardBox(Modifier.padding(bottom = 10.dp).appear(gi)) {
+    val techs = remember(stops) { stops.map { it.tech }.filter { it.isNotBlank() }.distinct().sorted() }
+    // a technician opens the page on his own stops (name match), everyone else on the whole team
+    val mine = remember(me, techs) { me?.takeIf { it.role == "tecnico" }?.name?.trim()?.lowercase()?.takeIf { it.length >= 3 }?.let { n -> techs.firstOrNull { t -> val x = t.trim().lowercase(); x.length >= 3 && (n.contains(x) || x.contains(n)) } } }
+    var tech by rememberSaveable(mine) { mutableStateOf(mine ?: "Tutti") }
+    var kind by rememberSaveable { mutableStateOf("Tutto") }
+    var open by remember { mutableStateOf(setOf<String>()) }
+    val byTech = remember(stops, tech) { stops.filter { tech == "Tutti" || it.tech == tech } }
+    val kinds = remember(byTech) { routeKinds.mapNotNull { (k, l) -> byTech.count { it.kind == k }.takeIf { it > 0 }?.let { Triple(k, l, it) } } }
+    if (kind != "Tutto" && kinds.none { it.second == kind }) kind = "Tutto"
+    val shown = remember(byTech, kind) { val k = kinds.firstOrNull { it.second == kind }?.first; byTech.filter { k == null || it.kind == k } }
+    val groups = remember(shown) {
+        fun city(s: Stop) = (s.c?.city ?: s.c?.mastro?.city).orEmpty().trim().ifBlank { "Senza località" }
+        val big = shown.groupingBy(::city).eachCount().filter { it.value > ROUTE_SPLIT && it.key != "Senza località" }.keys
+        shown.groupBy { s -> val c = city(s); val cap = s.c?.mastro?.cap.orEmpty().trim(); if (c in big && cap.isNotBlank()) "$c $cap" else c }
+            .mapValues { (_, v) -> v.sortedWith(compareBy({ it.rank }, { it.c?.name.orEmpty() })) }
+            .entries.sortedWith(compareBy({ it.key == "Senza località" }, { it.value.first().rank }, { -it.value.count { s -> s.rank <= 1 } }, { -it.value.size }, { it.key }))
+    }
+    val urgent = shown.count { it.rank == 0 }
+    Page(vm, "Giro di oggi", "${shown.size} tappe in ${groups.size} zone" + if (urgent > 0) " · " + urgentLabel(urgent) else "", onBack = { nav.popBackStack() }) {
+        if (techs.isNotEmpty()) item(key = "tech") { ChoiceChips(listOf("Tutti") + techs, tech, { tech = it }, Modifier.padding(bottom = 6.dp)) }
+        if (kinds.size > 1) item(key = "kind") { ChoiceChips(listOf("Tutto") + kinds.map { it.second }, kind, { kind = it }, Modifier.padding(bottom = 10.dp)) }
+        if (groups.isEmpty()) item(key = "none") { Empty(Icons.Rounded.Route, "Giornata libera", if (tech == "Tutti") "Nessun intervento aperto né verificazione imminente." else "Nessuna tappa per $tech.") }
+        groups.forEach { (place, ss) ->
+            stickyHeader(key = "g$place") {
+                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(top = 10.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(place, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        val u = ss.count { it.rank == 0 }
+                        Text((if (ss.size == 1) "1 tappa" else "${ss.size} tappe") + if (u > 0) " · " + urgentLabel(u) else "", style = MaterialTheme.typography.bodySmall,
+                            color = if (u > 0) LocalStatus.current.bad else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    // the route follows the order of the list: the most urgent addresses first (Maps takes up to 10)
+                    val places = ss.mapNotNull { it.c?.fullAddress?.takeIf { s -> s.isNotBlank() } }.distinct().take(10)
+                    if (places.isNotEmpty()) FilledTonalButton({
+                        val dest = places.last(); val way = places.dropLast(1)
+                        val url = "https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=" + Uri.encode(dest) + if (way.isNotEmpty()) "&waypoints=" + Uri.encode(way.joinToString("|")) else ""
+                        runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                    }) { Icon(Icons.Rounded.Directions, null, Modifier.size(18.dp)); Text(" Percorso") }
+                }
+            }
+            val expanded = place in open
+            val rows = if (expanded) ss else ss.take(ROUTE_SHOW)
+            items(rows.size, key = { "s$place" + rows[it].key }) { idx -> val s = rows[idx]
+                CardBox(Modifier.padding(bottom = 8.dp).animateItem(), onClick = s.open, padding = PaddingValues(start = 14.dp, end = 4.dp, top = 10.dp, bottom = 10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("$city · ${ss.size}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        val places = ss.mapNotNull { it.c?.fullAddress?.takeIf { s -> s.isNotBlank() } }.distinct().take(10)
-                        if (places.isNotEmpty()) FilledTonalButton({
-                            val dest = places.last(); val way = places.dropLast(1)
-                            val url = "https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=" + Uri.encode(dest) + if (way.isNotEmpty()) "&waypoints=" + Uri.encode(way.joinToString("|")) else ""
-                            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                        }) { Icon(Icons.Rounded.Directions, null, Modifier.size(18.dp)); Text(" Percorso") }
-                    }
-                    ss.forEach { s ->
-                        Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f).let { m -> m }) {
-                                TextButton(s.open, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
-                                    Column(Modifier.fillMaxWidth()) {
-                                        Text(s.c?.name ?: "Cliente da abbinare", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text(listOf(s.text, s.c?.fullAddress.orEmpty(), s.tech).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                    }
-                                }
-                            }
-                            Pill(s.kind, s.tone)
-                            s.c?.phone?.takeIf { it.isNotBlank() }?.let { tel -> IconButton({ ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + tel.replace(" ", "")))) }) { Icon(Icons.Rounded.Call, "Chiama") } }
+                        Column(Modifier.weight(1f)) {
+                            Text(s.c?.name ?: "Cliente da abbinare", style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(listOf(s.text, s.c?.fullAddress.orEmpty(), s.tech).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
+                        Pill(s.kind, s.tone, Modifier.padding(start = 8.dp))
+                        s.c?.phone?.takeIf { it.isNotBlank() }?.let { tel -> IconButton({ runCatching { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + tel.replace(" ", "")))) } }) { Icon(Icons.Rounded.Call, "Chiama ${s.c.name}") } }
+                            ?: Spacer(Modifier.width(10.dp))
                     }
+                }
+            }
+            if (ss.size > ROUTE_SHOW) item(key = "more$place") {
+                TextButton({ open = if (expanded) open - place else open + place }, Modifier.padding(bottom = 6.dp).animateItem()) {
+                    Text(if (expanded) "Mostra meno" else "Mostra altre ${ss.size - ROUTE_SHOW}")
                 }
             }
         }

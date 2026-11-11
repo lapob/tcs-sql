@@ -169,6 +169,7 @@ In **Impostazioni → Avvio automatico** scegli *Avvia con Windows*: Studio part
 
 - **Panoramica**: la scheda *Da fare oggi* mostra solo ciò che richiede attenzione (interventi aperti, promemoria, scadenze entro 7 giorni, casse con errori o silenziose, rate scadute, articoli sotto scorta); ogni riga apre la pagina giusta.
 - **Lavoro**: Clienti, Interventi, Giro di oggi, Attività, Scadenze, Rinnovi. **Scadenze** è un'agenda unica: licenze Zucchetti, verificazioni, abbonamenti, giornali elettronici, certificati RT e licenze RT-Utility, filtrabile per tipo e per periodo (7, 30, 90 giorni).
+- **Giro di oggi** (dalla 2.8.14, sito e app Android): le località con tappe **urgenti** (interventi urgenti, verificazioni scadute) vengono per prime, poi quelle con verificazioni vicine e giornali quasi pieni; le casse che segnalano errori sul portale DTR vanno in fondo, perché spesso si risolvono a distanza. Le città con più di 20 tappe sono divise per **CAP** (es. *FIRENZE 50127*), così ogni gruppo è un giro vero; *Senza località* è sempre l'ultimo. *Percorso* apre Google Maps con gli indirizzi nell'ordine della lista (massimo 10). Un tecnico apre il giro già filtrato sulle **sue** tappe. Il numero accanto a *Giro di oggi* conta solo le tappe urgenti. Sull'app Android si apre anche tenendo premuta l'icona → **Giro**.
 - **Registratori di cassa**: Tutti, Portale DTR, Portale Ital Retail, Portale RCH (una sezione per ogni portale online).
 - **Zucchetti**: Licenze, Ordini, PC e sistemi.
 - **Amministrazione**: Magazzino, Contabilità.
