@@ -18,8 +18,8 @@ android {
         applicationId = "it.topcash.studio"
         minSdk = 26
         targetSdk = 36
-        versionCode = 22
-        versionName = "2.8.0"
+        versionCode = 23
+        versionName = "2.8.1"
     }
 
     signingConfigs {
@@ -57,6 +57,8 @@ kotlin {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.splashscreen)
+    // installs the Compose libraries' ready-made performance profiles on sideloaded APKs: smooth from the first launch
+    implementation(libs.androidx.profileinstaller)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)

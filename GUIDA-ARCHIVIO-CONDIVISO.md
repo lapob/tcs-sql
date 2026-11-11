@@ -203,13 +203,13 @@ Il repository è pubblico: i colleghi scaricano i file dalla pagina *Releases* (
 
 ## Macchine: marchi, modelli e portali
 
-La pagina **Macchine** riconosce il marchio dal modello scritto in Mastro e divide i registratori in cinque **sezioni**: **DTR**, **Ital Retail**, **Axon Micrelec**, **Epson** e **Registratori di cassa** (tutti gli altri: RCH, Custom, Olivetti… il marchio resta scritto nel modello). A parte: casse automatiche Cashmatic, software e licenze, stampanti, bilance. La scheda cliente usa le stesse sezioni, su PC e su Android.
+La pagina **Macchine** riconosce il marchio dal modello scritto in Mastro e divide i registratori in quattro **sezioni**: **DTR**, **Ital Retail**, **Epson** e **Registratori di cassa** (tutti gli altri: RCH, Axon Micrelec, Custom, Olivetti… il marchio resta scritto nel modello). A parte: casse automatiche Cashmatic, software e licenze, stampanti, bilance. La scheda cliente usa le stesse sezioni, su PC e su Android.
 
 - **Edit, Ditron e derivati** (Smarty, Nina, Zero, Spot, Fly, Globe, Quadra, Flexy, Zip, Speedy, Mikropos, Seven, Buffetti One…) **non compaiono più** in Studio: restano solo in MastroSQL, che non viene toccato. Un modello scritto con "RCH" resta.
 - **Sezioni**: una scheda per sezione con macchine attive, numero di modelli e, per DTR e Ital Retail, la **copertura del portale** (quante casse attive sono presenti sul portale e quante mancano). Clic su una sezione per filtrare, poi sui modelli.
-- **Non nei portali**: le casse DTR e Ital Retail attive in Mastro che il portale non conosce, da controllare. Se un portale non è mai stato sincronizzato le casse risultano *da sincronizzare*, non mancanti.
+- **Non iscritte**: le casse DTR e Ital Retail attive in Mastro che non risultano iscritte al portale (di solito il servizio non è stato attivato per quella cassa; a volte la matricola in Mastro è scritta diversa). Se un portale non è mai stato sincronizzato le casse risultano *da sincronizzare*, non mancanti.
 - La colonna **Portale** e la scheda del registratore mostrano se la cassa è sul portale; nella scheda trovi anche i dati fiscali di Mastro e lo storico delle verificazioni.
-- In fondo alle pagine **Registratori DTR** e **Casse Ital Retail** c'è l'elenco delle casse di Mastro che mancano su quel portale.
+- In fondo alle pagine **Registratori DTR** e **Casse Ital Retail** c'è l'elenco delle casse di Mastro non iscritte a quel portale.
 
 ## Scheda cliente e lavoro di tutti i giorni
 
@@ -245,7 +245,7 @@ I clienti **senza** dispositivi attivi, licenze in corso, tecnico, pagamenti ape
 
 ## Portali e accessi
 
-La scheda **Portali e accessi** (in Panoramica quando manca un accesso, sempre in *Sincronizzazione*) mostra lo stato di MY Zucchetti, DTR-Service, Ital Retail e Axon Micrelec: verde collegato, giallo mai collegato, rosso accesso da rifare. Sulla postazione di sincronizzazione **Accedi di nuovo** apre la finestra del portale: accedi tu, Studio non salva le password e legge i dati in sola lettura.
+La scheda **Portali e accessi** (in Panoramica quando manca un accesso, sempre in *Sincronizzazione*) mostra lo stato di MY Zucchetti, DTR-Service e Ital Retail: verde collegato, giallo mai collegato, rosso accesso da rifare. Sulla postazione di sincronizzazione **Accedi di nuovo** apre la finestra del portale: accedi tu, Studio non salva le password e legge i dati in sola lettura.
 
 ## Fluidità automatica
 

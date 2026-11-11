@@ -245,12 +245,22 @@ app.MapPost("/api/users",(HttpContext ctx,UserRequest r)=>
 app.MapPost("/api/users/{username}",(HttpContext ctx,string username,UserUpdate r)=>
 {
  if(OwnerOnly(ctx,username,r.Role) is IResult deny)return deny;
+ var before=users.Get(username)?.User;if(before==null)return Bad("Utente non trovato.");
+ // nobody changes their own role, blocks themselves or resets their own password from here (it would bypass the
+ // current-password check of /api/me/password): another administrator has to do it, and it stays in the log
+ if(string.Equals(username,ctx.User.Identity!.Name,StringComparison.OrdinalIgnoreCase)&&((r.Role!=null&&r.Role!=before.Role)||r.Disabled==true||!string.IsNullOrEmpty(r.Password)))
+  return Results.Json(new{error="Non puoi cambiare il tuo ruolo, disattivarti o reimpostare la tua password da qui: chiedi a un altro amministratore (la password la cambi dalle Impostazioni)."},statusCode:403);
  try
  {
   if(r.Role!=null||r.Disabled!=null||r.Name!=null)users.Update(username,r.Role,r.Disabled,r.Name);
   if(!string.IsNullOrEmpty(r.Password))users.SetPassword(username,r.Password);
  }catch(InvalidDataException ex){return Bad(ex.Message);}
- store.Log("users",$"{Who(ctx)} ha modificato l'utente {username}.");hub.Changed();return Results.Ok();
+ var what=new List<string>();
+ if(r.Role!=null&&r.Role!=before.Role)what.Add($"ruolo {Roles.Label(before.Role)} → {Roles.Label(r.Role)}");
+ if(r.Disabled!=null&&r.Disabled!=before.Disabled)what.Add(r.Disabled.Value?"disattivato":"riattivato");
+ if(!string.IsNullOrEmpty(r.Password))what.Add("nuova password");
+ if(r.Name!=null&&r.Name.Trim()!=before.Name)what.Add("nome");
+ store.Log("users",$"{Who(ctx)} ha modificato l'utente {username}{(what.Count>0?": "+string.Join(", ",what):"")}.");hub.Changed();return Results.Ok();
 }).RequireAuthorization("admin");
 app.MapPost("/api/users/{username}/delete",(HttpContext ctx,string username)=>
 {

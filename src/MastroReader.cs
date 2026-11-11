@@ -42,6 +42,7 @@ public static class MastroReader
   ulong u=>u.ToString(CultureInfo.InvariantCulture),
   _=>Convert.ToString(v,CultureInfo.InvariantCulture)?.Trim()??""
  };
+ static bool IsSupplier(string s)=>s=="2"||s.StartsWith("F",StringComparison.OrdinalIgnoreCase);
  static bool True(string s)=>s is "1" or "S" or "s" or "SI" or "si" or "Si" or "True" or "true" or "Y" or "T";
 
  public static async Task<(MastroBatch Batch,Preview Preview)> Read(Config cfg,CancellationToken ct=default)
@@ -308,21 +309,21 @@ public static class MastroReader
    }
   }
   else warnings.Add("Tabella fatture (lis_fat) non trovata: fatture non importate.");
-  if(Tab("mov_sca") is string ts)
+  if(Tab("mov_sca","mov_scade") is string ts)
   {
    dues=[];int n=0;
    foreach(var d in await All(ts,400_000))
    {
-    var party=F(d,"CLIFOR").StartsWith("F",StringComparison.OrdinalIgnoreCase)?"F":"C";var code=F(d,"NUMCLIFOR","CODI");var due=F(d,"SCADENZA","DATA_SCA");if(code.Length==0||due.Length==0)continue;
+    var party=IsSupplier(F(d,"CLIFOR"))?"F":"C";var code=Num(F(d,"NUMCLIFOR","CODI"));var due=F(d,"SCADENZA","DATA_SCA");if(code.Length==0||due.Length==0)continue;
     var amount=D(F(d,"IMPORTO"));if(amount==0)amount=D(F(d,"TOTALE"));
-    var pagatoRaw=F(d,"PAGATO");var paid=True(pagatoRaw)?amount:D(pagatoRaw);
+    var pagatoRaw=F(d,"PAGATO");var paid=True(pagatoRaw)?amount:D(pagatoRaw);if(True(F(d,"PAGATA")))paid=Math.Abs(amount);
     var pay=F(d,"PAGA","COD_PAG","PAGAMENTO");
     var id=F(d,"ID","NUME","PROGR");if(id.Length==0)id=(++n).ToString(CultureInfo.InvariantCulture);
     dues.Add(new($"{party}{code}-{Num(F(d,"NUMDOC"))}-{due}-{id}",party,code,party=="F"?supNames.GetValueOrDefault(code,code):cliNames.GetValueOrDefault(code,code),
      Num(F(d,"NUMDOC")),F(d,"DATADOC"),due,Math.Abs(amount),Math.Abs(paid),pays.GetValueOrDefault(pay,pay)));
    }
   }
-  else warnings.Add("Tabella scadenze (mov_sca) non trovata: scadenzario non importato.");
+  else warnings.Add("Tabella scadenze (mov_scade) non trovata: scadenzario non importato.");
   if(Tab("mov_con") is string tcon)
   {
    try
@@ -333,10 +334,26 @@ public static class MastroReader
     while(await r.ReadAsync(ct))
     {
      var code=S(r.GetValue(1));if(code.Length==0)continue;
-     balances.Add(new(S(r.GetValue(0)).StartsWith("F",StringComparison.OrdinalIgnoreCase)?"F":"C",Num(code),D(S(r.GetValue(2))),D(S(r.GetValue(3)))));
+     balances.Add(new(IsSupplier(S(r.GetValue(0)))?"F":"C",Num(code),D(S(r.GetValue(2))),D(S(r.GetValue(3)))));
     }
    }
    catch(MySqlException){balances=null;warnings.Add("Saldi contabili (mov_con) non leggibili: verranno mostrate solo fatture e scadenze.");}
+  }
+
+  // Mastro marks instalments as paid only for RiBa: transfers and direct remittances stay "unpaid" forever and the
+  // payment lives in the ledger. The ledger balance is the truth: it is matched to the most recent instalments
+  // (older ones are considered settled first), so "still to pay" and "overdue" add up exactly to what the ledger says.
+  if(dues!=null&&balances!=null)
+  {
+   var open=balances.GroupBy(b=>b.Party+"|"+b.Code).ToDictionary(g=>g.Key,g=>g.Sum(b=>b.Party=="F"?b.Credit-b.Debit:b.Debit-b.Credit));
+   var fixedDues=new List<Due>(dues.Count);
+   foreach(var g in dues.GroupBy(x=>x.Party+"|"+x.PartyCode))
+   {
+    var left=Math.Max(0m,open.GetValueOrDefault(g.Key,0m));
+    foreach(var x in g.OrderByDescending(x=>x.DueDate,StringComparer.Ordinal).ThenByDescending(x=>x.Id,StringComparer.Ordinal))
+    {var o=Math.Min(x.Amount,left);left-=o;fixedDues.Add(x with{Paid=x.Amount-o});}
+   }
+   dues=fixedDues;
   }
 
   // ── bank receipts (RiBa / effetti) of the customers: open and unpaid ones of the last 3 years

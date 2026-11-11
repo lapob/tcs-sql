@@ -11,6 +11,8 @@ import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.scaleOut
 import androidx.compose.ui.unit.dp
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -60,6 +62,8 @@ import it.topcash.studio.data.Archive
 import it.topcash.studio.data.Screen
 
 /** Scopes for shared-element transitions (list avatar → detail header). */
+private const val BACK_MS = 300
+private val BackEase = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0f, 0f, 1f)
 val LocalShared = compositionLocalOf<SharedTransitionScope?> { null }
 val LocalAnim = compositionLocalOf<AnimatedVisibilityScope?> { null }
 
@@ -147,17 +151,23 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
         val a = archive
         // pages extend under the glass bottom bar (they reserve space with their own bottom content padding)
         SharedTransitionLayout(Modifier.fillMaxSize().hazeSourceCompat(haze)) {
-            val barSpace by androidx.compose.animation.core.animateDpAsState(if (topLevel) androidx.compose.ui.unit.Dp(80f) else androidx.compose.ui.unit.Dp(0f), tween(260, easing = EmphasizedDecelerate), label = "bar")
+            // the room left for the bar changes in one step: animating it re-measured every list under the page on each
+            // frame of the back animation (that was the stutter); the bar itself still fades and slides in
+            val barSpace = if (topLevel) androidx.compose.ui.unit.Dp(80f) else androidx.compose.ui.unit.Dp(0f)
             CompositionLocalProvider(LocalShared provides this, LocalAppHaze provides haze, LocalBottomBar provides barSpace) {
                 NavHost(nav, startDestination = "home",
-                    // Material 3 motion. Tabs: "fade through" (old fades out fast, new fades in). The system "predictive back"
-                    // (page shrinking under the finger, app shrinking to home) is off in the manifest: back plays only this.
-                    // Details: "shared axis X" — the new page slides in a short distance while fading, the old one drifts
-                    // the other way and fades. Back is the exact mirror. Nothing shrinks, no rounded card, no bounce.
+                    // Material 3 motion. Tabs: "fade through" (old fades out fast, new fades in).
+                    // Details: "shared axis X", the new page slides in a short distance while fading.
+                    // Back follows the device: with predictive back (Android 13+, on in the manifest) the page follows the finger:
+                    // it slides right, shrinks a little and fades while the previous page comes forward; a cancelled gesture puts
+                    // everything back, and the system draws its own back-to-home animation. Linear timing tracks the finger 1:1.
+                    // Older devices play the same animation on the back key.
                     enterTransition = { if (isTabSwitch()) fadeIn(tween(220, 60, EmphasizedDecelerate)) else slideInHorizontally(tween(320, easing = EmphasizedDecelerate)) { (it * 0.10f).toInt() } + fadeIn(tween(200, 60)) },
                     exitTransition = { if (isTabSwitch()) fadeOut(tween(80)) else slideOutHorizontally(tween(320, easing = EmphasizedDecelerate)) { -(it * 0.10f).toInt() } + fadeOut(tween(110)) },
-                    popEnterTransition = { if (isTabSwitch()) fadeIn(tween(220, 60, EmphasizedDecelerate)) else slideInHorizontally(tween(320, easing = EmphasizedDecelerate)) { -(it * 0.10f).toInt() } + fadeIn(tween(200, 60)) },
-                    popExitTransition = { if (isTabSwitch()) fadeOut(tween(80)) else slideOutHorizontally(tween(320, easing = EmphasizedDecelerate)) { (it * 0.10f).toInt() } + fadeOut(tween(110)) },
+                    // back (button or gesture): one smooth curve for both pages, so a button press glides instead of moving at
+                    // constant speed, and the predictive gesture still follows the finger (the transition is seekable).
+                    popEnterTransition = { if (isTabSwitch()) fadeIn(tween(220, 60, EmphasizedDecelerate)) else slideInHorizontally(tween(BACK_MS, easing = BackEase)) { -(it * 0.08f).toInt() } + fadeIn(tween(BACK_MS, easing = BackEase), initialAlpha = 0.6f) },
+                    popExitTransition = { if (isTabSwitch()) fadeOut(tween(80)) else slideOutHorizontally(tween(BACK_MS, easing = BackEase)) { (it * 0.22f).toInt() } + scaleOut(tween(BACK_MS, easing = BackEase), targetScale = 0.96f) + fadeOut(tween(BACK_MS, easing = BackEase)) },
                 ) {
                     fun screen(r: String, body: @Composable (Archive) -> Unit) = composable(r) {
                         CompositionLocalProvider(LocalAnim provides this) { Box(Modifier.navCard(this)) { if (a == null) LoadingArchive() else body(a) } }

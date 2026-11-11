@@ -250,9 +250,9 @@ import java.time.ZoneOffset
 }
 
 /** Kind of device from the model written in Mastro: registers, automatic cash (Cashmatic), software, printers, scales. */
-private val devGroups = listOf("Registratori di cassa", "Casse automatiche · Cashmatic", "Software e app", "Stampanti", "Bilance", "Registratori DTR", "Ital Retail", "Epson", "Axon Micrelec")
+private val devGroups = listOf("Registratori di cassa", "Casse automatiche · Cashmatic", "Software e app", "Stampanti", "Bilance", "Registratori DTR", "Ital Retail", "Epson")
 /** Order on screen: DTR, Ital Retail and Epson on their own, then every other register, then the other kinds. */
-private val devOrder = listOf(5, 6, 8, 7, 0, 1, 2, 3, 4)
+private val devOrder = listOf(5, 6, 7, 0, 1, 2, 3, 4)
 private val softRe = Regex("LICENZA|\\bAPP\\b|APP\\.|SOFTWARE|RISTOQUICK|POSBY"); private val printRe = Regex("^STAMP|STAMPANTE")
 private fun devCat(model: String): Int { val s = model.uppercase(); return when { "CASHMATIC" in s -> 1; softRe.containsMatchIn(s) -> 2; printRe.containsMatchIn(s) -> 3; "BILANCIA" in s -> 4; else -> rtSection(s) } }
-private fun rtSection(s: String) = when { Regex("\\bDTR\\b|\\bDRT|^D(CASH|FLEX|PALM)\\b").containsMatchIn(s) -> 5; Regex("ITAL ?RETAIL|\\bNICE\\b|\\bSPICE\\b|ITAL ?START|^NEXT\\b").containsMatchIn(s) -> 6; Regex("EPSON|\\bFP[- ]?\\d").containsMatchIn(s) -> 7; Regex("AXON|MICRELEC|HYDRA|DADO|WY ?CASH|AURA").containsMatchIn(s) -> 8; else -> 0 }
+private fun rtSection(s: String) = when { Regex("\\bDTR\\b|\\bDRT|^D(CASH|FLEX|PALM)\\b").containsMatchIn(s) -> 5; Regex("ITAL ?RETAIL|\\bNICE\\b|\\bSPICE\\b|ITAL ?START|^NEXT\\b").containsMatchIn(s) -> 6; Regex("EPSON|\\bFP[- ]?\\d").containsMatchIn(s) -> 7; else -> 0 }

@@ -4,10 +4,10 @@
    Loaded after app.js, registers.js and report.js. */
 
 let CT={code:'',t:'sum',off:false};
-const DEV_GROUPS=[['dtr','Registratori DTR','register'],['ital','Ital Retail','register'],['axon','Axon Micrelec','register'],['epson','Epson','register'],['rt','Registratori di cassa','register'],['cash','Casse automatiche · Cashmatic','euro'],['soft','Software e app','grid'],['printer','Stampanti','print'],['scale','Bilance','box']];
+const DEV_GROUPS=[['dtr','Registratori DTR','register'],['ital','Ital Retail','register'],['epson','Epson','register'],['rt','Registratori di cassa','register'],['cash','Casse automatiche · Cashmatic','euro'],['soft','Software e app','grid'],['printer','Stampanti','print'],['scale','Bilance','box']];
 const devCat=m=>m.cat&&DEV_GROUPS.some(g=>g[0]===m.cat)?m.cat:'rt';
 // section in the client card: DTR, Ital Retail and Epson on their own, every other register together
-const devSec=m=>{const c=devCat(m);return c==='rt'&&['dtr','ital','axon','epson'].includes(m.brand?.k)?m.brand.k:c;};
+const devSec=m=>{const c=devCat(m);return c==='rt'&&['dtr','ital','epson'].includes(m.brand?.k)?m.brand.k:c;};
 const devName=m=>m.brand&&m.cat==='rt'&&m.brand.k!=='other'?`${m.brand.l} ${m.family||''}`.trim():(m.model||'Dispositivo');
 
 function clientCard(c,fact){

@@ -12,7 +12,7 @@ const RT_BRANDS=[
  {k:'ital',l:'Ital Retail',portal:'ital',pl:'Ital Retail',hue:152,re:/ITAL ?RETAIL|\bNICE\b|\bSPICE\b|ITAL ?START|^NEXT\b/},
  {k:'rch',l:'RCH',hue:4,re:/\bRCH\b|PRINT!|\bONDA\b|WALL ?E\b|\bAPE ?\d|\bASSO\b|LDP-?\d/},
  {k:'epson',l:'Epson',hue:228,re:/EPSON|\bFP[- ]?\d/},
- {k:'axon',l:'Axon Micrelec',portal:'axon',pl:'Axon Micrelec',hue:270,re:/AXON|\bDADO\b|WY ?CASH|\bAURA\b|MICRELEC|HYDRA/},
+ {k:'axon',l:'Axon Micrelec',hue:270,re:/AXON|\bDADO\b|WY ?CASH|\bAURA\b|MICRELEC|HYDRA/},
  {k:'ditron',l:'Ditron',hue:28,re:/DITRON/},
  {k:'custom',l:'Custom',hue:190,re:/\bCUSTOM\b/},
  {k:'olivetti',l:'Olivetti',hue:340,re:/OLIVETTI|NETTUN/},
@@ -23,8 +23,8 @@ const RT_BRANDS=[
  {k:'scale',l:'Bilance',cat:'scale',hue:120,re:/BILANCIA/},
 ];
 const RT_OTHER={k:'other',l:'Registratori di cassa',hue:220};
-const RT_OWN=new Set(['dtr','ital','axon','epson']);
-const secOrd=k=>{const i=['dtr','ital','axon','epson','other'].indexOf(k);return i<0?9:i;};
+const RT_OWN=new Set(['dtr','ital','epson']);
+const secOrd=k=>{const i=['dtr','ital','epson','other'].indexOf(k);return i<0?9:i;};
 const RT_CATS={rt:'Registratori di cassa',cash:'Casse automatiche',soft:'Software e licenze',printer:'Stampanti',scale:'Bilance'};
 let RG=null;
 function rtBrand(model){const s=String(model||'').toUpperCase();return RT_BRANDS.find(b=>b.re.test(s))||RT_OTHER;}
@@ -36,13 +36,13 @@ function deriveRegisters(){
  if(!D){RG=null;return;}
  const rt=new Map((state.rt||[]).map(r=>[r.machineId,r]));
  // a portal never synchronised says nothing about its registers: they are not "missing", the list is just not there yet
- const synced={dtr:(state.dtr||[]).length>0,ital:(state.ital||[]).length>0,axon:(state.axon||[]).length>0};
+ const synced={dtr:(state.dtr||[]).length>0,ital:(state.ital||[]).length>0};
  const brands=new Map();
  for(const m of D.machines){
   const b0=rtBrand(m.model);const b=b0.cat||RT_OWN.has(b0.k)?b0:RT_OTHER;m.maker=b0.cat||b0.k==='other'?'':b0.l;
   m.brand=b;m.cat=b.cat||'rt';m.family=(m.maker&&b===RT_OTHER?m.maker+' ':'')+rtModel(m.model,b0);m.rt=rt.get(m.id)||null;
   m.fw=m.rt?.fields?.['Firmware']||m.dtr?.firmware||m.ital?.d?.firmware||'';
-  m.portal=b.portal?(!synced[b.portal]?'nosync':(b.portal==='dtr'?m.dtr:b.portal==='ital'?m.ital:m.axon)?'in':'out'):'none';
+  m.portal=b.portal?(!synced[b.portal]?'nosync':(b.portal==='dtr'?m.dtr:m.ital)?'in':'out'):'none';
   if(!brands.has(b.k))brands.set(b.k,{...b,cat:b.cat||'rt',synced:b.portal?synced[b.portal]:true,all:0,active:0,in:0,out:0,models:new Map()});
   const g=brands.get(b.k);g.all++;if(m.active){g.active++;if(m.portal==='in')g.in++;else if(m.portal==='out')g.out++;const f=g.models.get(m.family)||{name:m.family,n:0};f.n++;g.models.set(m.family,f);}
  }
@@ -64,8 +64,8 @@ function brandGrid(){
  const card=(b,i)=>{const cov=b.portal&&b.synced&&b.active?Math.round(b.in/b.active*100):null;
   return`<button class="brand-card reveal${ui.mbrand===b.k?' on':''}" style="--i:${i};--h:${b.hue}" data-mbrand="${b.k}" aria-pressed="${ui.mbrand===b.k}">
    <div class="brand-top">${brandMark(b)}<div class="grow"><strong>${esc(b.l)}</strong><small>${plur(b.active,'attiva','attive')} · ${plur(b.models.length,'modello','modelli')}</small></div>${b.portal?`<span class="brand-portal">${esc(b.pl)}</span>`:''}</div>
-   ${b.portal&&!b.synced?`<small class="cov-txt">${icon('clock')} ${esc(b.pl)} non ancora sincronizzato: collegalo dall’app Windows per il confronto</small>`:cov!==null?`<div class="cov"><i style="width:${cov}%"></i></div><small class="cov-txt"><b>${fmt(b.in)}</b> nel portale${b.out?` · <span class="warn">${fmt(b.out)} mancanti</span>`:' · tutte presenti'}</small>`:`<small class="cov-txt muted">${b.models.slice(0,3).map(x=>esc(x.name)).join(' · ')}</small>`}</button>`;};
- return`<div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Sezioni</h2><p>DTR, Ital Retail, Axon Micrelec ed Epson hanno la loro sezione; tutti gli altri sono in Registratori di cassa. Per i marchi con un portale controllo se ogni cassa attiva è presente sul portale.${D.dropped?` <span class="muted">${plur(D.dropped,'macchina Edit/Ditron esclusa','macchine Edit/Ditron escluse')}.</span>`:''}</p></div>${ui.mbrand?`<button class="btn sm ghost" data-mbrand="">${icon('close')}Tutti i marchi</button>`:''}</div>
+   ${b.portal&&!b.synced?`<small class="cov-txt">${icon('clock')} ${esc(b.pl)} non ancora sincronizzato: collegalo dall’app Windows per il confronto</small>`:cov!==null?`<div class="cov"><i style="width:${cov}%"></i></div><small class="cov-txt"><b>${fmt(b.in)}</b> nel portale${b.out?` · <span class="warn">${fmt(b.out)} non iscritte</span>`:' · tutte iscritte'}</small>`:`<small class="cov-txt muted">${b.models.slice(0,3).map(x=>esc(x.name)).join(' · ')}</small>`}</button>`;};
+ return`<div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Sezioni</h2><p>DTR, Ital Retail ed Epson hanno la loro sezione; tutti gli altri sono in Registratori di cassa. Per i marchi con un portale controllo se ogni cassa attiva è presente sul portale.${D.dropped?` <span class="muted">${plur(D.dropped,'macchina Edit/Ditron esclusa','macchine Edit/Ditron escluse')}.</span>`:''}</p></div>${ui.mbrand?`<button class="btn sm ghost" data-mbrand="">${icon('close')}Tutti i marchi</button>`:''}</div>
   <div class="brand-grid">${rt.map(card).join('')}</div>
   ${other.length?`<div class="cat-row">${other.map((b,i)=>`<button class="chip${ui.mbrand===b.k?' on':''}" data-mbrand="${b.k}">${brandMark(b,'xs')}${esc(RT_CATS[b.cat]||b.l)}<em>${fmt(b.active)}</em></button>`).join('')}</div>`:''}</div>`;
 }
@@ -85,10 +85,10 @@ function machinesPage(){
  const act=D.machines.filter(m=>m.active).length;
  return`${hero('Il <span class="grad">parco macchine</span>.','Registratori di cassa e dispositivi presso i clienti, divisi per marchio e modello, con presenza nei portali, verificazioni e abbonamenti.','')}
  ${D.machines.length?'':`<div class="banner reveal" style="--i:1"><span class="orb">${icon('register')}</span><div class="grow"><h3>Importa il parco macchine da MastroSQL</h3><p>Da Impostazioni → Importa da MastroSQL, su un PC dove Mastro è installato.</p></div><button class="btn" data-go="settings">Vai alle impostazioni ${icon('arrow')}</button></div>`}
- <div class="kpis" style="grid-template-columns:repeat(4,1fr)">${kpi('Macchine attive',act,`${fmt(D.machines.length)} in archivio`,'register','','machines',1)}${kpi('Non nei portali',RG?.missing.length||0,'Casse DTR e Ital Retail da controllare','alert',RG?.missing.length?'t-due':'','machines',2)}${kpi('Verificazioni entro 60 gg',D.verDue.length,RG?.verifications?`${plur(RG.verifications,'verifica nello storico','verifiche nello storico')}`:'Comprese quelle già scadute','shield','t-due','machines',3)}${kpi('Abbonamenti in scadenza',D.contractDue.length,`${fmt(D.machines.filter(m=>m.subscribed).length)} in abbonamento`,'calendar','t-info','machines',4)}</div>
+ <div class="kpis" style="grid-template-columns:repeat(4,1fr)">${kpi('Macchine attive',act,`${fmt(D.machines.length)} in archivio`,'register','','machines',1)}${kpi('Non iscritte ai portali',RG?.missing.length||0,'Attive in Mastro, assenti da DTR-Service / Ital Retail','alert',RG?.missing.length?'t-due':'','machines',2)}${kpi('Verificazioni entro 60 gg',D.verDue.length,RG?.verifications?`${plur(RG.verifications,'verifica nello storico','verifiche nello storico')}`:'Comprese quelle già scadute','shield','t-due','machines',3)}${kpi('Abbonamenti in scadenza',D.contractDue.length,`${fmt(D.machines.filter(m=>m.subscribed).length)} in abbonamento`,'calendar','t-info','machines',4)}</div>
  ${RG&&D.machines.length?brandGrid():''}
- <div class="card reveal" style="--i:5"><div class="card-head"><div><h2>${brand?brandMark(brand,'sm')+' '+esc(brand.l):'Macchine'}<span class="count">${fmt(list.length)}</span></h2>${brand?.portal?`<p>${fmt(brand.in)} su ${esc(brand.pl)} · ${plur(brand.out,'attiva non trovata','attive non trovate')}</p>`:''}</div>
-  <div class="seg">${[['active','Attive'],['gap','Non nei portali'],['ver','Verifiche'],['end','Abbonamenti in scadenza'],['sub','In abbonamento'],['all','Tutte']].map(([k,l])=>`<button class="${ui.mtab===k?'active':''}" data-mtab="${k}">${l}${k==='gap'&&RG?.missing.length?` <em class="seg-n">${fmt(RG.missing.length)}</em>`:''}</button>`).join('')}</div></div>
+ <div class="card reveal" style="--i:5"><div class="card-head"><div><h2>${brand?brandMark(brand,'sm')+' '+esc(brand.l):'Macchine'}<span class="count">${fmt(list.length)}</span></h2>${brand?.portal?`<p>${fmt(brand.in)} su ${esc(brand.pl)} · ${plur(brand.out,'attiva non iscritta','attive non iscritte')}</p>`:''}</div>
+  <div class="seg">${[['active','Attive'],['gap','Non iscritte'],['ver','Verifiche'],['end','Abbonamenti in scadenza'],['sub','In abbonamento'],['all','Tutte']].map(([k,l])=>`<button class="${ui.mtab===k?'active':''}" data-mtab="${k}">${l}${k==='gap'&&RG?.missing.length?` <em class="seg-n">${fmt(RG.missing.length)}</em>`:''}</button>`).join('')}</div></div>
  ${brand&&brand.models.length>1?`<div class="chips model-chips">${brand.models.slice(0,24).map(x=>`<button class="chip${ui.mmodel===x.name?' on':''}" data-mmodel="${esc(x.name)}">${esc(x.name)}<em>${fmt(x.n)}</em></button>`).join('')}</div>`:''}
  <div class="toolbar">${search('Cerca cliente, marchio, modello, matricola, firmware…')}</div>
  <div class="table-wrap"><table><thead><tr>${th('Cliente','client')}${th('Modello','model')}<th>Matricola</th><th>Portale</th>${th('Prossima verificazione','ver')}${th('Fine abbonamento','end')}<th>Stato</th></tr></thead><tbody>
@@ -106,9 +106,9 @@ function portalGapCard(portal){
  if(!RG)return'';const b=RT_BRANDS.find(x=>x.portal===portal);const list=RG.missing.filter(m=>m.brand.k===b.k);const g=RG.brands.find(x=>x.k===b.k);
  if(!g)return'';
  if(!g.synced)return`<div class="card reveal gap-card" style="--i:9"><div class="card-head"><div><h2>${brandMark(b,'sm')} Casse ${esc(b.l)} in Mastro<span class="count">${fmt(g.active)}</span></h2><p>Quando ${esc(b.pl)} sarà sincronizzato, qui vedrai quali di queste casse mancano sul portale.</p></div></div></div>`;
- return`<div class="card reveal gap-card" style="--i:9"><div class="card-head"><div><h2>${brandMark(b,'sm')} Casse ${esc(b.l)} in Mastro<span class="count">${fmt(g.active)}</span></h2><p>${list.length?`<b>${fmt(list.length)}</b> attive in Mastro non risultano su ${esc(b.pl)}: matricola diversa, cassa non ancora registrata o portale non sincronizzato.`:`Tutte le ${plur(g.active,'cassa attiva è presente su','casse attive sono presenti su')} ${esc(b.pl)}.`}</p></div>${list.length?`<button class="btn sm ghost" data-go="machines" data-mbrand-go="${b.k}">Vedi in Macchine ${icon('arrow')}</button>`:''}</div>
+ return`<div class="card reveal gap-card" style="--i:9"><div class="card-head"><div><h2>${brandMark(b,'sm')} Casse ${esc(b.l)} in Mastro<span class="count">${fmt(g.active)}</span></h2><p>${list.length?`<b>${fmt(list.length)}</b> attive in Mastro non sono iscritte a ${esc(b.pl)}: di solito il servizio non è stato attivato per quella cassa (a volte la matricola in Mastro è scritta diversa).`:`Tutte le ${plur(g.active,'cassa attiva è presente su','casse attive sono presenti su')} ${esc(b.pl)}.`}</p></div>${list.length?`<button class="btn sm ghost" data-go="machines" data-mbrand-go="${b.k}">Vedi in Macchine ${icon('arrow')}</button>`:''}</div>
   <div class="cov big"><i style="width:${g.active?Math.round(g.in/g.active*100):0}%"></i></div>
-  ${list.length?`<div class="gap-list">${list.slice(0,40).map(m=>`<button class="gap-row" data-device="${esc(m.serial||m.fiscalSerial||'')}"><span class="mono">${esc(m.serial||'—')}</span><span class="grow"><strong>${esc(m.client)}</strong><small>${esc(m.family)}${m.c?.city?' · '+esc(m.c.city):''}</small></span>${icon('chevron')}</button>`).join('')}</div>${list.length>40?`<p class="muted" style="font-size:12.5px;margin-top:8px">e altre ${fmt(list.length-40)}: elenco completo in Macchine → Non nei portali.</p>`:''}`:''}</div>`;
+  ${list.length?`<div class="gap-list">${list.slice(0,40).map(m=>`<button class="gap-row" data-device="${esc(m.serial||m.fiscalSerial||'')}"><span class="mono">${esc(m.serial||'—')}</span><span class="grow"><strong>${esc(m.client)}</strong><small>${esc(m.family)}${m.c?.city?' · '+esc(m.c.city):''}</small></span>${icon('chevron')}</button>`).join('')}</div>${list.length>40?`<p class="muted" style="font-size:12.5px;margin-top:8px">e altre ${fmt(list.length-40)}: elenco completo in Macchine → Non iscritte.</p>`:''}`:''}</div>`;
 }
 // fiscal detail and verification history in the device sheet
 function rtSection(m){
@@ -152,9 +152,7 @@ function portalAccess(){
  z.text=!zLast?'Mai sincronizzato':zd>3?`Ultima lettura ${plur(zd,'giorno','giorni')} fa: serve un nuovo accesso`:`Aggiornato ${dTime(zLast)}`;
  const portal=(k,name,st,act,hue,sub)=>{const s=st||{};return{k,name,mark:name.split(/[\s-]+/).filter(w=>w.length>2).map(w=>w[0]).join('').slice(0,2).toUpperCase(),hue,act,sub,
   state:s.error?'bad':!s.lastSync?'off':'ok',text:s.error?String(s.error):!s.lastSync?'Mai collegato':`Aggiornato ${dTime(s.lastSync)}`};};
- const axonN=(D?.machines||[]).filter(m=>m.active&&m.brand?.k==='axon').length;
- return[z,portal('dtr','DTR-Service',state.dtrStatus,'dtr',212,'Registratori DTR'),portal('ital','Ital Retail',state.italStatus,'ital',152,'Casse Ital Retail'),
-  {k:'axon',name:'Axon Micrelec',mark:'AM',hue:270,act:'',sub:`${plur(axonN,'cassa attiva','casse attive')} in Mastro`,state:'todo',text:'Portale da collegare: serve l’indirizzo dell’area rivenditori'}];
+ return[z,portal('dtr','DTR-Service',state.dtrStatus,'dtr',212,'Registratori DTR'),portal('ital','Ital Retail',state.italStatus,'ital',152,'Casse Ital Retail')];
 }
 function accessCard(onlyMissing){
  const list=portalAccess();const missing=list.filter(p=>p.state!=='ok');

@@ -505,13 +505,13 @@ function teamPage(){
  <div class="layout-2"><div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Utenti<span class="count">${usersData.users.length}</span></h2><p>${usersData.connected} dispositivi collegati in questo momento.</p></div></div>
   <div class="table-wrap"><table><thead><tr><th>Utente</th><th>Ruolo</th><th>Ultimo accesso</th><th>Stato</th><th></th></tr></thead><tbody>
   ${usersData.users.map(u=>`<tr><td><div class="who">${markEl(u.name,u.username)}<div><strong>${esc(u.name)}${u.username===me.username?' <span class="badge acc">tu</span>':''}</strong><small>${esc(u.username)}</small></div></div></td>
-   <td>${u.role==='owner'&&me.role!=='owner'?`<span class="role-pill r-owner">${icon('star')}Proprietario</span>`:`<select class="select" data-user-role="${esc(u.username)}">${(u.role==='owner'?[['owner','Proprietario']]:[]).concat([...(me?.role==='owner'?[['owner','Proprietario']]:[]),['admin','Amministratore'],['ufficio','Amministrazione'],['tecnico','Tecnico']].filter(([k])=>k!=='owner'||u.role!=='owner')).map(([k,l])=>`<option value="${k}"${u.role===k?' selected':''}>${l}</option>`).join('')}</select>`}</td>
+   <td>${roleCell(u)}</td>
    <td>${u.lastLogin?dTime(u.lastLogin):'<span class="muted">mai</span>'}</td><td>${u.disabled?'<span class="badge bad">Disattivato</span>':'<span class="badge ok">Attivo</span>'}</td>
    <td><div class="btn-row"><button class="icon-btn sm" data-user-name="${esc(u.username)}" data-tip="Cambia nome" aria-label="Cambia nome">${icon('edit')}</button>${u.username===me.username?'<button class="btn sm ghost" data-go="settings">La tua password</button>':`<button class="btn sm ghost" data-user-del="${esc(u.username)}" data-tip="Elimina utente" aria-label="Elimina utente">${icon('close')}</button><button class="btn sm ghost" data-action-local="resetPwd" data-u="${esc(u.username)}">Nuova password</button><button class="btn sm ghost" data-action-local="toggleUser" data-u="${esc(u.username)}" data-d="${u.disabled?0:1}">${u.disabled?'Riattiva':'Disattiva'}</button>`}</div></td></tr>`).join('')}
   </tbody></table></div></div>
   <div class="stack"><form class="card reveal" style="--i:3" id="new-user"><h2>Nuovo utente</h2><p class="sub">Comunica nome utente e password al collega: potrà cambiarla dalle Impostazioni.</p>
    <div style="display:grid;gap:10px;margin-top:14px"><label class="field">Nome e cognome<input class="input" name="name" required maxlength="80"></label><label class="field">Nome utente<input class="input" name="username" required autocapitalize="none" spellcheck="false" placeholder="es. mario.rossi"></label>
-   <label class="field">Ruolo<select class="select" name="role"><option value="tecnico">Tecnico</option><option value="ufficio">Amministrazione</option><option value="admin">Amministratore</option>${me.role==='owner'?'<option value="owner">Proprietario</option>':''}</select></label>
+   <div class="field">Ruolo<div class="role-choose" role="radiogroup" aria-label="Ruolo">${ROLE_DEF.slice().reverse().filter(([k])=>k!=='owner'||me.role==='owner').map(([k,ic,l,t])=>`<label class="role-opt r-${k}"><input type="radio" name="role" value="${k}"${k==='tecnico'?' checked':''}><span class="role-ic">${icon(ic)}</span><span class="grow"><strong>${l}</strong><small>${t}</small></span></label>`).join('')}</div></div>
    <label class="field">Password iniziale<div style="display:flex;gap:6px"><input class="input mono" name="password" required minlength="10" value="${esc(newPassword||(newPassword=genPassword()))}"><button type="button" class="btn sm" data-action-local="genPwd" data-tip="Genera un’altra password">${icon('sync')}</button><button type="button" class="btn sm" data-copy="${esc(newPassword)}" data-tip="Copia">${icon('copy')}</button></div></label>
    <button class="btn accent" type="submit">${icon('plus')}Crea utente</button></div></form>
   <div class="card reveal" style="--i:4"><h2>Postazione di sincronizzazione</h2><p class="sub">Il PC d’ufficio che legge MY Zucchetti e invia i dati al server. Usa una chiave dedicata, mai la password di un utente.</p>
@@ -637,7 +637,42 @@ document.addEventListener('submit',async e=>{
  if(e.target.id==='new-user'){e.preventDefault();const f=Object.fromEntries(new FormData(e.target));try{await post('/api/users',f);toast(`Utente ${f.name} creato`);newPassword='';usersData=null;render(false);}catch(x){toast(x.message,'alert');}}
  if(e.target.id==='pwd-form'){e.preventDefault();const f=Object.fromEntries(new FormData(e.target));try{const r=await post('/api/password',f);toast(r.message);setTimeout(()=>location.reload(),1500);}catch(x){toast(x.message,'alert');}}
 });
-document.addEventListener('change',async e=>{const u=e.target.dataset?.userRole;if(!u)return;try{await post('/api/users/'+encodeURIComponent(u),{role:e.target.value});toast('Ruolo aggiornato');usersData=null;render(false);}catch(x){toast(x.message,'alert');usersData=null;render(false);}});
+// ── role picker: a styled menu instead of the system drop-down. Your own row and the owners (for non-owners) are locked
+// here and on the server, which is the check that counts.
+const ROLE_DEF=[['owner','star','Proprietario','Tutto, compresa la gestione degli amministratori'],['admin','shield','Amministratore','Dati, utenti, dispositivi e impostazioni'],
+ ['ufficio','euro','Amministrazione','Tutto il lavoro e la contabilità, senza utenti'],['tecnico','tool','Tecnico','Clienti e interventi, senza contabilità']];
+const roleOf=k=>ROLE_DEF.find(r=>r[0]===k)||ROLE_DEF[3];
+function roleCell(u){const r=roleOf(u.role);
+ const locked=u.username===me.username?'Il tuo ruolo lo può cambiare solo un altro amministratore':u.role==='owner'&&me.role!=='owner'?'Solo un proprietario può modificare un proprietario':'';
+ if(locked)return`<span class="role-pill r-${u.role}" data-tip="${locked}">${icon(r[1])}${r[2]}<svg class="lock" aria-hidden="true"><use href="#i-key"/></svg></span>`;
+ return`<button type="button" class="role-pick r-${u.role}" data-role-pick="${esc(u.username)}" aria-haspopup="listbox" aria-expanded="false">${icon(r[1])}<span>${r[2]}</span><svg class="chev" aria-hidden="true"><use href="#i-chevron"/></svg></button>`;}
+function closeRoleMenu(){const m=document.querySelector('.role-menu');if(!m)return;document.querySelector('[data-role-pick][aria-expanded="true"]')?.setAttribute('aria-expanded','false');m.classList.add('out');setTimeout(()=>m.remove(),160);}
+function openRoleMenu(btn,tries=0){
+ closeRoleMenu();
+ // a button half out of view is brought into view first (scrolling closes the menu, so it opens once the scroll is done)
+ {const r=btn.getBoundingClientRect();if(tries<2&&(r.top<70||r.bottom>innerHeight-20)){openRoleMenu.quiet=Date.now()+500;btn.scrollIntoView({block:'center',behavior:'smooth'});setTimeout(()=>openRoleMenu(btn,tries+1),360);return;}}const u=usersData?.users.find(x=>x.username===btn.dataset.rolePick);if(!u)return;
+ const opts=ROLE_DEF.filter(([k])=>k!=='owner'||me.role==='owner');
+ const m=document.createElement('div');m.className='role-menu';m.setAttribute('role','listbox');m.setAttribute('aria-label','Ruolo di '+u.name);
+ m.innerHTML=opts.map(([k,ic,l,t])=>`<button type="button" role="option" class="role-opt r-${k}${k===u.role?' on':''}" aria-selected="${k===u.role}" data-role-set="${k}"><span class="role-ic">${icon(ic)}</span><span class="grow"><strong>${l}</strong><small>${t}</small></span>${k===u.role?icon('check'):''}</button>`).join('');
+ document.body.append(m);
+ const r=btn.getBoundingClientRect(),h=m.offsetHeight,w=m.offsetWidth;const below=innerHeight-r.bottom>h+12;
+ m.style.left=Math.max(8,Math.min(r.left,innerWidth-w-8))+'px';m.style.top=(below?r.bottom+6:Math.max(8,r.top-h-6))+'px';m.classList.toggle('up',!below);
+ btn.setAttribute('aria-expanded','true');(m.querySelector('.on')||m.firstElementChild)?.focus({preventScroll:true});
+ m.addEventListener('keydown',e=>{const o=[...m.querySelectorAll('.role-opt')];const i=o.indexOf(document.activeElement);
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();o[(i+(e.key==='ArrowDown'?1:o.length-1))%o.length].focus();}
+  else if(e.key==='Escape'||e.key==='Tab'){e.preventDefault();closeRoleMenu();btn.focus();}});
+ m.addEventListener('click',async e=>{const b=e.target.closest('[data-role-set]');if(!b)return;const k=b.dataset.roleSet;closeRoleMenu();if(k===u.role)return;
+  const to=roleOf(k),from=roleOf(u.role);
+  // more power always asks first; less power is immediate (and ends that person's sessions on the server)
+  if((k==='owner'||k==='admin')&&!(await ask({title:`${u.name} diventa ${to[2]}?`,text:k==='owner'?'Avrà poteri illimitati, compresa la gestione degli altri amministratori. Solo un proprietario potrà toglierglieli.':'Potrà gestire utenti, dispositivi e impostazioni del server.',ok:`Sì, rendi ${to[2]}`})))return;
+  btn.classList.add('loading');
+  try{await post('/api/users/'+encodeURIComponent(u.username),{role:k});toast(`${u.name}: ${from[2]} → ${to[2]}. Le sue sessioni aperte sono state chiuse.`,'check');}
+  catch(x){toast(x.message,'alert');}
+  usersData=null;render(false);});
+}
+document.addEventListener('click',e=>{const b=e.target.closest?.('[data-role-pick]');if(b){e.preventDefault();b.getAttribute('aria-expanded')==='true'?closeRoleMenu():openRoleMenu(b);return;}
+ if(!e.target.closest?.('.role-menu'))closeRoleMenu();});
+addEventListener('resize',closeRoleMenu);document.addEventListener('scroll',()=>{if(Date.now()>(openRoleMenu.quiet||0))closeRoleMenu();},true);
 
 // ───────────────────────── drawer (client card)
 function openClient(code,keep){const c=D.byCode.get(code);if(!c)return;if(!keep)remember('c',code);drawerCode=code;const d=$('#drawer');const wasOpen=!d.hidden;$('#drawer-backdrop').hidden=false;d.hidden=false;if(!keep&&!wasOpen){d.classList.remove('out');}d.classList.toggle('keep',!!keep);
@@ -709,10 +744,16 @@ function render(animate){
 }
 function go(p,keepQuery,fromHistory){if(!PAGES[p])return;const change=()=>{page=p;store.set('page',p);ui.p=1;ui.status='';ui.product='';ui.city='';ui.ostatus='';ui.ofam='';ui.tech='';if(!keepQuery)ui.q='';ui.sort={key:p==='orders'?'date':p==='clients'?'name':'exp',dir:p==='orders'?-1:1};render(true);};
  if(p!==page){if(!fromHistory)navHistory.push(p);transition(change,fromHistory?'back':'fwd');}else change();}
+// Phones (every browser): the new page rises into place inside the scrolling area, under the glass bars, card by card.
+// Nothing is snapshotted, so nothing can ever be drawn over the bottom bar (Chrome, Safari, Firefox, Samsung Internet).
+const PHONE=matchMedia('(max-width:760px)');
+function pageIn(dir){const main=$('#main');if(!main?.animate||main.querySelector('.reveal'))return; // pages with cards already rise card by card (.anim .reveal)
+ const kids=[...main.children].slice(0,7);const dx=dir==='back'?-14:0,dy=dir==='back'?0:12;
+ kids.forEach((el,i)=>el.animate([{opacity:0,transform:`translate(${dx}px,${dy}px)`},{opacity:1,transform:'none'}],{duration:340,delay:i*28,easing:'cubic-bezier(.22,1,.36,1)',fill:'backwards'}));}
 // View Transitions with graceful fallback: a new navigation skips the running one, and aborted transitions are silent.
 let vt=null;
 function transition(fn,dir='fwd'){const pre=()=>{const c=transition.cleanup;transition.cleanup=null;c?.();};
- if(!document.startViewTransition||reduced||document.hidden){pre();fn();return;}
+ if(!document.startViewTransition||reduced||document.hidden||PHONE.matches){pre();fn();if(!reduced&&!document.hidden)pageIn(dir);return;}
  // clip the page snapshot to the area the bars leave free (top glass bar, bottom tab bar on phones)
  {const m=$('#main'),tb=$('.topbar'),sb=$('.sidebar');if(m){const r=m.getBoundingClientRect(),t=tb?.getBoundingClientRect(),s=sb?.getBoundingClientRect();const root=document.documentElement.style;
   root.setProperty('--vt-top',Math.max(0,(t?t.bottom:r.top)-r.top)+'px');root.setProperty('--vt-bottom',(s&&s.width>=innerWidth-2&&s.top<r.bottom?Math.max(0,r.bottom-s.top):0)+'px');}}
@@ -847,8 +888,8 @@ function openMoreSheet(){if(document.querySelector('.more-sheet'))return;
  m.addEventListener('click',e=>{const b=e.target.closest('[data-more]');
   if(b&&b.dataset.more===page)close();
   else if(b){ // the sheet leaves inside the page change (no frozen glass): removed when the new page is drawn
-   const box=m.querySelector('.sheet-box');if(document.startViewTransition&&!reduced){box.style.viewTransitionName='more-sheet';m.style.viewTransitionName='more-dim';transition.cleanup=()=>m.remove();setTimeout(()=>m.isConnected&&m.remove(),600);go(b.dataset.more);}
-   else{m.remove();go(b.dataset.more);}}
+   const box=m.querySelector('.sheet-box');if(document.startViewTransition&&!reduced&&!PHONE.matches){box.style.viewTransitionName='more-sheet';m.style.viewTransitionName='more-dim';transition.cleanup=()=>m.remove();setTimeout(()=>m.isConnected&&m.remove(),600);go(b.dataset.more);}
+   else{close();go(b.dataset.more);}}
   else if(!e.target.closest('.sheet-box'))close();});
  document.addEventListener('keydown',function k(e){if(e.key==='Escape'){close();document.removeEventListener('keydown',k,true);}},true);
  // swipe down to close
