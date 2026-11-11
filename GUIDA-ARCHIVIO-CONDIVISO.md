@@ -141,7 +141,7 @@ La password è salvata **cifrata** sul server (Windows DPAPI): non è più visib
 
 Studio copia in **sola lettura** l'elenco dei registratori di DTR-Service (RT-Utility): matricola, cliente, giornale elettronico (GE) e scadenza, firmware, ultima chiusura Z e ultima comunicazione.
 
-1. Sulla **postazione di sincronizzazione** (o in archivio locale) apri **Registratori DTR → Collega DTR-Service**.
+1. Sulla **postazione di sincronizzazione** (o in archivio locale) apri **Portale DTR → Collega DTR-Service**.
 2. Nella finestra che si apre accedi tu con email e password DTR (Studio non le vede e non le salva; se Edge propone di ricordare la password, puoi accettare: il prossimo accesso sarà un clic).
 3. La lettura parte da sola. Poi puoi **nascondere** la finestra: resta collegata.
 
@@ -149,7 +149,17 @@ Da quel momento, a ogni avvio dell'app Windows la sessione riprende in backgroun
 
 Oltre all'elenco, Studio legge la **scheda di dettaglio** di ogni registratore (fino a 150 per giro, le più vecchie per prime: tutte si aggiornano più volte al giorno): intestatario e **partita IVA**, indirizzo di installazione, scadenza del **certificato**, ultima **verificazione periodica**, inizio del giornale elettronico, **chiusure rimanenti**, licenze RT-Utility, estensioni GE, ultimi **errori** e **interventi**, avvisi del portale.
 
-Ogni cassa è collegata al cliente di Studio per **matricola** (macchina importata da Mastro), poi per **partita IVA**, infine per nome. Nella pagina: GE da rinnovare, casse con errori, casse **silenziose** (nessuna comunicazione da oltre 7 giorni), certificati e licenze RT-Utility in scadenza, firmware da aggiornare, casse non presenti in Mastro e macchine di Mastro che DTR non conosce. Clic su una riga: scheda completa del registratore, con *Apri cliente* e *Nuovo intervento*. I dati DTR compaiono anche in **Macchine** e nella scheda cliente.
+Ogni cassa è collegata al cliente di Studio per **matricola** (macchina importata da Mastro), poi per **partita IVA**, infine per nome. Nella pagina: GE da rinnovare, casse con errori, casse **silenziose** (nessuna comunicazione da oltre 7 giorni), certificati e licenze RT-Utility in scadenza, firmware da aggiornare, casse non presenti in Mastro e macchine di Mastro che DTR non conosce. Clic su una riga: scheda completa del registratore, con *Apri cliente* e *Nuovo intervento*. I dati DTR compaiono anche in **Registratori di cassa → Tutti** e nella scheda cliente.
+
+## 7-ter. Portale RCH (RCH XDealer)
+
+Come per DTR, Studio copia in **sola lettura** i registratori dell'area rivenditore di RCH XDealer: matricola, modello, cliente e partita IVA, ultima **verificazione periodica** (la prossima è calcolata a 2 anni), **giornale elettronico** (DGFE, % libera), ultima **chiusura Z**, **certificato RT**, contratto di manutenzione, firmware e aggiornamenti disponibili.
+
+1. Sulla **postazione di sincronizzazione** apri **Portale RCH → Collega RCH XDealer**.
+2. Accedi tu nella finestra (Studio non vede e non salva la password).
+3. La lettura parte da sola; sessione controllata ogni 15 minuti, dati aggiornati ogni 2 ore. L'elenco si sostituisce solo con una lettura completa.
+
+Ogni registratore è collegato al cliente per **matricola**, poi **partita IVA**, poi nome. Nella pagina: Verificazioni, DGFE quasi pieni, Certificati, Senza chiusure (nessuna Z da oltre 10 giorni), Da aggiornare. Le verificazioni e i certificati RCH entrano nello scadenziario.
 
 ### Tenere sempre accesa la postazione
 
@@ -158,8 +168,9 @@ In **Impostazioni → Avvio automatico** scegli *Avvia con Windows*: Studio part
 ## Come è organizzato Studio
 
 - **Panoramica**: la scheda *Da fare oggi* mostra solo ciò che richiede attenzione (interventi aperti, promemoria, scadenze entro 7 giorni, casse con errori o silenziose, rate scadute, articoli sotto scorta); ogni riga apre la pagina giusta.
-- **Clienti e lavoro**: Clienti, Interventi, Attività, Scadenze. **Scadenze** è un'agenda unica: licenze Zucchetti, verificazioni, abbonamenti, giornali elettronici, certificati RT e licenze RT-Utility, filtrabile per tipo e per periodo (7, 30, 90 giorni).
-- **Parco installato**: Macchine, Registratori DTR, Licenze, Ordini.
+- **Lavoro**: Clienti, Interventi, Giro di oggi, Attività, Scadenze, Rinnovi. **Scadenze** è un'agenda unica: licenze Zucchetti, verificazioni, abbonamenti, giornali elettronici, certificati RT e licenze RT-Utility, filtrabile per tipo e per periodo (7, 30, 90 giorni).
+- **Registratori di cassa**: Tutti, Portale DTR, Portale Ital Retail, Portale RCH (una sezione per ogni portale online).
+- **Zucchetti**: Licenze, Ordini, PC e sistemi.
 - **Amministrazione**: Magazzino, Contabilità.
 - **Sistema**: Sincronizzazione, Impostazioni, Utenti.
 
@@ -171,7 +182,7 @@ App **nativa** (Kotlin + Jetpack Compose, Material 3) — File: `D:\TopCashSQL\a
 2. Al primo avvio l'indirizzo `192.168.1.220` è già inserito: premi **Collega**.
 3. Accedi con il tuo utente (resta connesso).
 
-**Registratori DTR** (in *Altro*: giornale elettronico, chiusure rimanenti, certificato, errori e interventi di ogni cassa, anche nella scheda cliente e nello scadenziario). Home con indicatori, Clienti con ricerca e scheda completa (chiama, email, mappa, preferiti, promemoria, note), Interventi (crea, modifica, stati e priorità, ricambi, rapportino con firma e invio PDF), Magazzino con scanner, Macchine e verificazioni, Scadenziario, Licenze, Ordini, tema chiaro/scuro. Si aggiorna in tempo reale e mostra gli ultimi dati anche senza rete.
+**Registratori di cassa, Portale DTR, Portale Ital Retail e Portale RCH** (in *Altro*; per DTR: giornale elettronico, chiusure rimanenti, certificato, errori e interventi di ogni cassa, anche nella scheda cliente e nello scadenziario). Home con indicatori, Clienti con ricerca e scheda completa (chiama, email, mappa, preferiti, promemoria, note), Interventi (crea, modifica, stati e priorità, ricambi, rapportino con firma e invio PDF), Magazzino con scanner, Macchine e verificazioni, Scadenziario, Licenze, Ordini, tema chiaro/scuro. Si aggiorna in tempo reale e mostra gli ultimi dati anche senza rete.
 
 Per ricompilare: `powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\android\build.ps1` (aggiungi `-Install` per installarla sul telefono collegato).
 **Conserva** `android\topcash-release.keystore` e `android\keystore-password.txt`: servono per gli aggiornamenti dell'app.
@@ -201,15 +212,15 @@ Lo script invia il codice, crea il pacchetto e la Release con i file da scaricar
 La prima volta accedi a GitHub con `D:\TopCashSQL\.tools\gh\bin\gh.exe auth login` (l'accesso è salvato in `.tools\gh-config`, fuori da Git).
 Il repository è pubblico: i colleghi scaricano i file dalla pagina *Releases* (https://github.com/lapob/tcs-sql/releases) senza account. I pacchetti contengono solo i programmi: per usarli serve comunque un utente del server Top Cash.
 
-## Macchine: marchi, modelli e portali
+## Registratori di cassa: marchi, modelli e portali
 
-La pagina **Macchine** riconosce il marchio dal modello scritto in Mastro e divide i registratori in quattro **sezioni**: **DTR**, **Ital Retail**, **Epson** e **Registratori di cassa** (tutti gli altri: RCH, Axon Micrelec, Custom, Olivetti… il marchio resta scritto nel modello). A parte: casse automatiche Cashmatic, software e licenze, stampanti, bilance. La scheda cliente usa le stesse sezioni, su PC e su Android.
+La pagina **Registratori di cassa → Tutti** riconosce il marchio dal modello scritto in Mastro e divide i registratori in quattro **sezioni**: **DTR**, **Ital Retail**, **Epson** e **Registratori di cassa** (tutti gli altri: RCH, Axon Micrelec, Olivetti… il marchio resta scritto nel modello). A parte: casse automatiche Cashmatic, software e licenze, stampanti, bilance. La scheda cliente usa le stesse sezioni, su PC e su Android.
 
-- **Edit, Ditron e derivati** (Smarty, Nina, Zero, Spot, Fly, Globe, Quadra, Flexy, Zip, Speedy, Mikropos, Seven, Buffetti One…) **non compaiono più** in Studio: restano solo in MastroSQL, che non viene toccato. Un modello scritto con "RCH" resta.
+- **Edit, Ditron, Custom e derivati** (Smarty, Nina, Zero, Spot, Fly, Globe, Quadra, Flexy, Zip, Speedy, Mikropos, Seven, Buffetti One…) **non compaiono più** in Studio: restano solo in MastroSQL, che non viene toccato. Un modello scritto con "RCH" resta.
 - **Sezioni**: una scheda per sezione con macchine attive, numero di modelli e, per DTR e Ital Retail, la **copertura del portale** (quante casse attive sono presenti sul portale e quante mancano). Clic su una sezione per filtrare, poi sui modelli.
 - **Non iscritte**: le casse DTR e Ital Retail attive in Mastro che non risultano iscritte al portale (di solito il servizio non è stato attivato per quella cassa; a volte la matricola in Mastro è scritta diversa). Se un portale non è mai stato sincronizzato le casse risultano *da sincronizzare*, non mancanti.
 - La colonna **Portale** e la scheda del registratore mostrano se la cassa è sul portale; nella scheda trovi anche i dati fiscali di Mastro e lo storico delle verificazioni.
-- In fondo alle pagine **Registratori DTR** e **Casse Ital Retail** c'è l'elenco delle casse di Mastro non iscritte a quel portale.
+- In fondo alle pagine **Portale DTR**, **Portale Ital Retail** e **Portale RCH** c'è l'elenco delle casse di Mastro non iscritte a quel portale.
 
 ## Scheda cliente e lavoro di tutti i giorni
 
@@ -245,7 +256,7 @@ I clienti **senza** dispositivi attivi, licenze in corso, tecnico, pagamenti ape
 
 ## Portali e accessi
 
-La scheda **Portali e accessi** (in Panoramica quando manca un accesso, sempre in *Sincronizzazione*) mostra lo stato di MY Zucchetti, DTR-Service e Ital Retail: verde collegato, giallo mai collegato, rosso accesso da rifare. Sulla postazione di sincronizzazione **Accedi di nuovo** apre la finestra del portale: accedi tu, Studio non salva le password e legge i dati in sola lettura.
+La scheda **Portali e accessi** (in Panoramica quando manca un accesso, sempre in *Sincronizzazione*) mostra lo stato di MY Zucchetti, DTR-Service, Ital Retail e RCH XDealer: verde collegato, giallo mai collegato, rosso accesso da rifare. Sulla postazione di sincronizzazione **Accedi di nuovo** apre la finestra del portale: accedi tu, Studio non salva le password e legge i dati in sola lettura.
 
 ## Fluidità automatica
 

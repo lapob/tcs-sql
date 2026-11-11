@@ -62,8 +62,6 @@ import it.topcash.studio.data.Archive
 import it.topcash.studio.data.Screen
 
 /** Scopes for shared-element transitions (list avatar → detail header). */
-private const val BACK_MS = 300
-private val BackEase = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0f, 0f, 1f)
 val LocalShared = compositionLocalOf<SharedTransitionScope?> { null }
 val LocalAnim = compositionLocalOf<AnimatedVisibilityScope?> { null }
 
@@ -134,7 +132,7 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
         bottomBar = {
             // leaving a tab the glass bar fades away at once (before the next page slides under it); it comes back softly
             // once the tab page has arrived: pages never pass through the bar half-way
-            AnimatedVisibility(topLevel, enter = fadeIn(tween(200, 140)) + slideInVertically(tween(280, 140, EmphasizedDecelerate)) { it / 3 }, exit = fadeOut(tween(90))) {
+            AnimatedVisibility(topLevel, enter = fadeIn(tween(220, 230)) + slideInVertically(tween(320, 230, EmphasizedDecelerate)) { it / 3 }, exit = fadeOut(tween(90))) {
                 // frosted glass: the pages scroll underneath and show through blurred
                 NavigationBar(Modifier.glass(haze, strong = true), containerColor = androidx.compose.ui.graphics.Color.Transparent, tonalElevation = androidx.compose.ui.unit.Dp(0f)) {
                     tabs.forEach { t ->
@@ -155,19 +153,16 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
             // frame of the back animation (that was the stutter); the bar itself still fades and slides in
             val barSpace = if (topLevel) androidx.compose.ui.unit.Dp(80f) else androidx.compose.ui.unit.Dp(0f)
             CompositionLocalProvider(LocalShared provides this, LocalAppHaze provides haze, LocalBottomBar provides barSpace) {
+                BackMotion.Attach()
                 NavHost(nav, startDestination = "home",
                     // Material 3 motion. Tabs: "fade through" (old fades out fast, new fades in).
                     // Details: "shared axis X", the new page slides in a short distance while fading.
-                    // Back follows the device: with predictive back (Android 13+, on in the manifest) the page follows the finger:
-                    // it slides right, shrinks a little and fades while the previous page comes forward; a cancelled gesture puts
-                    // everything back, and the system draws its own back-to-home animation. Linear timing tracks the finger 1:1.
-                    // Older devices play the same animation on the back key.
-                    enterTransition = { if (isTabSwitch()) fadeIn(tween(220, 60, EmphasizedDecelerate)) else slideInHorizontally(tween(320, easing = EmphasizedDecelerate)) { (it * 0.10f).toInt() } + fadeIn(tween(200, 60)) },
-                    exitTransition = { if (isTabSwitch()) fadeOut(tween(80)) else slideOutHorizontally(tween(320, easing = EmphasizedDecelerate)) { -(it * 0.10f).toInt() } + fadeOut(tween(110)) },
-                    // back (button or gesture): one smooth curve for both pages, so a button press glides instead of moving at
-                    // constant speed, and the predictive gesture still follows the finger (the transition is seekable).
-                    popEnterTransition = { if (isTabSwitch()) fadeIn(tween(220, 60, EmphasizedDecelerate)) else slideInHorizontally(tween(BACK_MS, easing = BackEase)) { -(it * 0.08f).toInt() } + fadeIn(tween(BACK_MS, easing = BackEase), initialAlpha = 0.6f) },
-                    popExitTransition = { if (isTabSwitch()) fadeOut(tween(80)) else slideOutHorizontally(tween(BACK_MS, easing = BackEase)) { (it * 0.22f).toInt() } + scaleOut(tween(BACK_MS, easing = BackEase), targetScale = 0.96f) + fadeOut(tween(BACK_MS, easing = BackEase)) },
+                    // Back: see BackMotion.kt (gesture = card that follows the finger, back key = shared axis).
+                    enterTransition = { BackMotion.forward(); if (isTabSwitch()) fadeIn(tween(220, 60, EmphasizedDecelerate)) else slideInHorizontally(tween(320, easing = EmphasizedDecelerate)) { (it * 0.10f).toInt() } + fadeIn(tween(200, 60)) },
+                    exitTransition = { BackMotion.forward(); if (isTabSwitch()) fadeOut(tween(80)) else slideOutHorizontally(tween(320, easing = EmphasizedDecelerate)) { -(it * 0.10f).toInt() } + fadeOut(tween(110)) },
+                    // back: finger-driven card with the predictive gesture, Material shared axis with the back key (BackMotion.kt)
+                    popEnterTransition = { if (isTabSwitch()) { BackMotion.forward(); fadeIn(tween(220, 60, EmphasizedDecelerate)) } else with(BackMotion) { enter() } },
+                    popExitTransition = { if (isTabSwitch()) { BackMotion.forward(); fadeOut(tween(80)) } else with(BackMotion) { exit() } },
                 ) {
                     fun screen(r: String, body: @Composable (Archive) -> Unit) = composable(r) {
                         CompositionLocalProvider(LocalAnim provides this) { Box(Modifier.navCard(this)) { if (a == null) LoadingArchive() else body(a) } }
@@ -178,6 +173,7 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
                     screen("machines") { MachinesScreen(it, nav) }
                     screen("dtr") { DtrScreen(it, nav) }
                     screen("ital") { ItalScreen(it, nav) }
+                    screen("rch") { RchScreen(it, nav) }
                     screen("inventory") { InventoryScreen(vm, it, nav) }
                     screen("renewals") { RenewalsScreen(vm, it, nav) }
                     screen("route") { RouteScreen(vm, it, nav) { id -> editor = EditorRequest(interventionId = id) } }
@@ -217,8 +213,6 @@ private val tabRoutes = setOf("home", "clients", "interventions", "warehouse", "
 private fun androidx.compose.animation.AnimatedContentTransitionScope<androidx.navigation.NavBackStackEntry>.isTabSwitch() =
     initialState.destination.route in tabRoutes && targetState.destination.route in tabRoutes
 
-/** Pages fill the screen; transitions are pure slide + fade (no card corners or shadow while moving). */
-@Composable private fun Modifier.navCard(@Suppress("UNUSED_PARAMETER") scope: AnimatedVisibilityScope): Modifier = this.fillMaxSize()
 fun NavHostController.switchTab(route: String) = navigate(route) {
     popUpTo(graph.startDestinationId) { saveState = true }; launchSingleTop = true; restoreState = true
 }

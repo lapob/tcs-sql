@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TopCash.Server</RootNamespace>
     <AssemblyName>TopCash.Server</AssemblyName>
-    <Version>2.8.1</Version>
+    <Version>2.8.2</Version>
     <Product>Top Cash Studio Server</Product>
     <Company>Top Cash Service S.r.l.</Company>
     <ApplicationIcon>..\src\topcash.ico</ApplicationIcon>
@@ -28,6 +28,7 @@
     <Compile Include="..\src\Email.cs" Link="Shared\Email.cs" />
     <Compile Include="..\src\Dtr.cs" Link="Shared\Dtr.cs" />
     <Compile Include="..\src\ItalRetail.cs" Link="Shared\ItalRetail.cs" />
+    <Compile Include="..\src\Rch.cs" Link="Shared\Rch.cs" />
     <Compile Include="..\src\Edits.cs" Link="Shared\Edits.cs" />
     <Compile Include="..\src\Work.cs" Link="Shared\Work.cs" />
     <Compile Include="..\src\Backup.cs" Link="Shared\Backup.cs" />

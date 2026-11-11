@@ -49,7 +49,7 @@ public partial class MainWindow : Window
   // Fit any screen: 92% of the work area, never above the design size (small laptops get a usable window).
   var area=SystemParameters.WorkArea;Width=Math.Min(1480,area.Width*0.92);Height=Math.Min(960,area.Height*0.92);MinWidth=Math.Min(MinWidth,area.Width);MinHeight=Math.Min(MinHeight,area.Height);
   pushTimer.Tick+=async(_,_)=>{pushTimer.Stop();if(pushPending){pushPending=false;await PushNow();}};
-  Loaded+=Initialize;Closed+=(_,_)=>{timer.Stop();pushTimer.Stop();updateTimer.Stop();portal?.Close();dtr?.Quit();ital?.Quit();if(!updateStarted&&Updater.ReadyVersion!=null)Updater.Apply(false,false);};
+  Loaded+=Initialize;Closed+=(_,_)=>{timer.Stop();pushTimer.Stop();updateTimer.Stop();portal?.Close();dtr?.Quit();ital?.Quit();rch?.Quit();if(!updateStarted&&Updater.ReadyVersion!=null)Updater.Apply(false,false);};
   updateTimer.Tick+=async(_,_)=>await UpdateTick();
   StateChanged+=(_,_)=>{try{if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.MemoryUsageTargetLevel=WindowState==WindowState.Minimized?CoreWebView2MemoryUsageTargetLevel.Low:CoreWebView2MemoryUsageTargetLevel.Normal;}catch{}};
  }
@@ -107,6 +107,7 @@ public partial class MainWindow : Window
    // DTR-Service: once connected on this PC the session is resumed in the background at every start
    if(DtrWindow.Configured&&(!ServerMode||syncToken.Length>0))OpenDtr(false);
    if(ItalRetailWindow.Configured&&(!ServerMode||syncToken.Length>0))OpenItal(false);
+   if(RchWindow.Configured&&(!ServerMode||syncToken.Length>0))OpenRch(false);
   }
   catch(Exception ex)
   {
@@ -135,7 +136,7 @@ public partial class MainWindow : Window
   if(r==MessageBoxResult.No){serverUrl="";SaveSettings();}Navigate();
   }finally{serverErrorOpen=false;}
  }
- static readonly HashSet<string> RemoteActions=["external","portal","syncPortal","disconnectServer","setSyncToken","hostInfo","mastroRead","setExternal","dtr","dtrSync","ital","italSync","autostart","applyUpdate","checkUpdate"];
+ static readonly HashSet<string> RemoteActions=["external","portal","syncPortal","disconnectServer","setSyncToken","hostInfo","mastroRead","setExternal","dtr","dtrSync","ital","italSync","rch","rchSync","autostart","applyUpdate","checkUpdate"];
  MastroBatch? lastMastro;
  static readonly JsonSerializerOptions jsonIn=new(){PropertyNameCaseInsensitive=true};
  /// Reads Mastro (read-only) on this PC and hands a preview to the page. Local mode keeps the batch for "mastroImport";
@@ -229,7 +230,7 @@ public partial class MainWindow : Window
      catch(Exception ex){await Notify("Server non raggiungibile: "+ex.Message);break;}
      serverUrl=url;activeServer=url;SaveSettings();portal?.Close();Navigate();break;
     case "disconnectServer":serverUrl="";serverExternal="";activeServer="";syncToken="";SaveSettings();portal?.Close();Navigate();break;
-    case "setSyncToken":syncToken=root.GetProperty("token").GetString()??"";SaveSettings();if(portal!=null)portal.Target=SyncTarget();if(dtr!=null)dtr.Target=SyncTarget();if(ital!=null)ital.Target=SyncTarget();
+    case "setSyncToken":syncToken=root.GetProperty("token").GetString()??"";SaveSettings();if(portal!=null)portal.Target=SyncTarget();if(dtr!=null)dtr.Target=SyncTarget();if(ital!=null)ital.Target=SyncTarget();if(rch!=null)rch.Target=SyncTarget();
      Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,portalOpen=portal!=null});await Notify(syncToken.Length>0?"Questo PC è ora la postazione di sincronizzazione.":"Postazione di sincronizzazione disattivata.");break;
     case "ready":await Push();break;
     case "scan":Scan(true);await Push();await Notify("Cartella controllata. Consulta il registro per i dettagli.");break;
@@ -266,6 +267,8 @@ public partial class MainWindow : Window
     case "dtr":if(CanSync())OpenDtr(true);break;
     case "ital":if(CanSync())OpenItal(true);break;
     case "italSync":if(CanSync()){OpenItal(false);if(ital!=null)await ital.StartSync();}break;
+    case "rch":if(CanSync())OpenRch(true);break;
+    case "rchSync":if(CanSync()){OpenRch(false);if(rch!=null)await rch.StartSync();}break;
     case "dtrSync":if(CanSync()){OpenDtr(false);if(dtr!=null)await dtr.StartSync();}break;
     case "syncPortal":if(CanSync()){OpenPortal();if(portal!=null)await portal.StartSync();}break;
     case "external":var ext=root.GetProperty("url").GetString()??"";if(SafeExternal(ext))Process.Start(new ProcessStartInfo(ext){UseShellExecute=true});break;
@@ -291,6 +294,17 @@ public partial class MainWindow : Window
  {
   get{try{using var k=Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKey);return k?.GetValue(RunName) is string v&&v.Contains(Environment.ProcessPath??"?",StringComparison.OrdinalIgnoreCase);}catch{return false;}}
   set{using var k=Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RunKey);if(value)k.SetValue(RunName,$"\"{Environment.ProcessPath}\" --minimized");else k.DeleteValue(RunName,false);}
+ }
+ RchWindow? rch;
+ void OpenRch(bool show)
+ {
+  if(rch==null)
+  {
+   rch=new RchWindow(SyncTarget(),async()=>await Push()){Owner=this};
+   rch.SignInRequired=()=>Dispatcher.InvokeAsync(async()=>{rch?.Reveal();await Notify("RCH XDealer chiede di accedere di nuovo: ho aperto la finestra di accesso.");});
+   if(show)rch.Reveal();else rch.StartHidden();
+  }
+  else if(show)rch.Reveal();
  }
  ItalRetailWindow? ital;
  void OpenItal(bool show)
@@ -344,7 +358,7 @@ public partial class MainWindow : Window
  }
  Task PushNow(){lastPush=DateTime.UtcNow;if(ServerMode)return Task.CompletedTask; // the shared server feeds the UI itself
   var mv=store.Mastro();
-  if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="state",records=store.Licenses(),licenseEdits=store.LicenseEdits(),licenseCleanup=store.LicenseCleanup(),clientEdits=store.ClientEdits(),clients=store.Clients(),orders=store.Orders(),mastroClients=mv.Clients,machines=mv.Machines,interventions=mv.Interventions,brandRule=mv.Excluded,assets=store.Assets(),renewals=store.Renewals(),deviceLinks=store.DeviceLinks(),rt=store.RtInfos(),sites=store.Sites(),riba=store.RibaList(),warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),syncRunning=portal?.Running??false,syncProgress=portal?.Progress??"",sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),dtr=store.DtrRegisters(),dtrStatus=store.DtrState(),ital=store.ItalDevices(),italOrders=store.ItalOrders(),italStatus=store.ItalState(),sourceFolder,dataFolder=store.Folder,autoImport=true,portalConnected=portal?.Authenticated??false},json));return Task.CompletedTask;}
+  if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="state",records=store.Licenses(),licenseEdits=store.LicenseEdits(),licenseCleanup=store.LicenseCleanup(),clientEdits=store.ClientEdits(),clients=store.Clients(),orders=store.Orders(),mastroClients=mv.Clients,machines=mv.Machines,interventions=mv.Interventions,brandRule=mv.Excluded,assets=store.Assets(),renewals=store.Renewals(),deviceLinks=store.DeviceLinks(),rt=store.RtInfos(),sites=store.Sites(),riba=store.RibaList(),warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),syncRunning=portal?.Running??false,syncProgress=portal?.Progress??"",sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),dtr=store.DtrRegisters(),dtrStatus=store.DtrState(),ital=store.ItalDevices(),italOrders=store.ItalOrders(),italStatus=store.ItalState(),rch=store.RchDevices(),rchStatus=store.RchState(),sourceFolder,dataFolder=store.Folder,autoImport=true,portalConnected=portal?.Authenticated??false},json));return Task.CompletedTask;}
  // In server mode the progress also reaches every browser through the server; locally it goes straight to the page.
  Task Notify(string message){Dashboard.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="toast",message},json));return Task.CompletedTask;}
 }

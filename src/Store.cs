@@ -29,7 +29,7 @@ public sealed partial class Store
   InitContabilita(c);
   InitSettings(c);
   InitDtr(c);
-  InitItal(c);
+  InitItal(c);InitRch(c);
   InitEdits(c);InitWork(c);
  }
  public List<ClientRecord> Clients(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM clients";using var r=q.ExecuteReader();var list=new List<ClientRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<ClientRecord>(r.GetString(0))!);return list;}
@@ -88,6 +88,10 @@ public sealed partial class Store
    case "italstatus":
     if(headers.Count<2)throw new InvalidDataException("Stato Ital Retail incompleto.");
     ItalHeartbeat(headers[0]=="1",headers[1],headers.Count>2&&int.TryParse(headers[2],out var itot)?itot:0);return "Ital Retail: stato aggiornato";
+   case "rch":return ApplyRch(headers,rows,capturedAt,source.Replace("Zucchetti","RCH XDealer"));
+   case "rchstatus":
+    if(headers.Count<2)throw new InvalidDataException("Stato RCH incompleto.");
+    RchHeartbeat(headers[0]=="1",headers[1],headers.Count>2&&int.TryParse(headers[2],out var rtot)?rtot:0);return "RCH XDealer: stato aggiornato";
    default:throw new InvalidDataException("Tipo di elenco sconosciuto: "+kind);
   }
  }
@@ -272,6 +276,12 @@ public sealed partial class Store
   if(store.ItalOrders().Single().Date!="2026-11-03"||store.ItalOrders()[0].Client!="")throw new Exception("Ital Retail: ordini");
   store.ApplyPortalList("italstatus","ITAL","Stato",["0","Accesso richiesto"],[],"t","test");if(store.ItalState().Connected||store.ItalState().Error.Length==0)throw new Exception("Ital Retail: sessione scaduta non segnalata");
   store.ApplyPortalList("italstatus","ITAL","Stato",["1","Collegato","7"],[],"t","test");if(!store.ItalState().Connected||store.ItalState().Error.Length>0)throw new Exception("Ital Retail: ripresa sessione");
+  var rj="{\"Serial\":\"80IEQ012345\",\"PortalId\":\"77\",\"Type\":\"Print!F\",\"Client\":\"BAR SPORT\",\"Vat\":\"01234567890\",\"Contract\":true,\"Update\":\"8.1\",\"DgfeFree\":7,\"LastVerification\":\"2025-03-04 10:00:00\",\"CertDue\":\"2031-01-02 00:00:00\"}";
+  store.ApplyPortalList("rch","RCH","Dispositivi RCH",Store.RchHeaders.ToList(),[["80IEQ012345",rj],["ALTRA",rj]],"2026-11-11T10:00:00+01:00","test");
+  var rd=store.RchDevices().Single();if(rd.Client!="BAR SPORT"||!rd.Contract||rd.DgfeFree!=7||rd.LastVerification!="2025-03-04"||rd.CertDue!="2031-01-02"||rd.Update!="8.1")throw new Exception("RCH XDealer: elenco");
+  try{store.ApplyPortalList("rch","RCH","x",Store.RchHeaders.ToList(),[],"t","test");throw new Exception("RCH XDealer: elenco vuoto accettato");}catch(InvalidDataException){}
+  store.ApplyPortalList("rchstatus","RCH","Stato",["0","Accesso richiesto"],[],"t","test");if(store.RchState().Connected||store.RchState().Error.Length==0)throw new Exception("RCH XDealer: sessione scaduta");
+  store.ApplyPortalList("rchstatus","RCH","Stato",["1","Collegato","1"],[],"t","test");if(!store.RchState().Connected||store.RchState().Error.Length>0)throw new Exception("RCH XDealer: ripresa sessione");
   // Administrator edits: customers created / changed / deleted, licences corrected or hidden, portal cleanup rules
   var nc=store.SaveClient("",new ClientEdit(Name:"Bar Nuovo",Vat:"it 01234567890",Email:"Info@Bar.it"),"test");
   var ce=store.ClientEdits()[nc];if(!ce.Created||ce.Vat!="IT01234567890"||ce.Email!="info@bar.it")throw new Exception("Clienti: creazione");
@@ -301,6 +311,6 @@ public sealed partial class Store
   store.SaveDeviceLink("ab123","M15","test");if(store.DeviceLinks()["AB123"]!="M15")throw new Exception("Abbinamenti: salvataggio");
   store.SaveDeviceLink("AB123","","test");if(store.DeviceLinks().Count!=0)throw new Exception("Abbinamenti: rimozione");
   store.MergeClient("X1","M15","test");if(store.ClientEdits()["X1"].MergedInto!="M15")throw new Exception("Unione clienti");
-  store.Backup(Path.Combine(folder,"backup.sqlite"));Console.WriteLine("PASS: upsert, deduplicazione, validazione atomica, note, magazzino, rapportini, email, contabilità, backup esterni, DTR-Service, Ital Retail, modifiche amministratore, marche escluse, inventario, rinnovi, unioni.");
+  store.Backup(Path.Combine(folder,"backup.sqlite"));Console.WriteLine("PASS: upsert, deduplicazione, validazione atomica, note, magazzino, rapportini, email, contabilità, backup esterni, DTR-Service, Ital Retail, RCH XDealer, modifiche amministratore, marche escluse, inventario, rinnovi, unioni.");
  }
 }

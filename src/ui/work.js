@@ -133,6 +133,7 @@ function routeStops(){
  for(const m of D.machines)if(m.active&&m.verDays!==null&&m.verDays<=30)add(m.c,'Verificazione',m.verDays<0?'bad':'due',`${m.model||'Macchina'} · ${m.serial} · ${rel(m.verDays)}`,m.code?`data-client="${esc(m.code)}"`:'');
  if(typeof DT!=='undefined'&&DT)for(const r of DT.errors||[])add(r.c,'Errore DTR','bad',`${r.serial} · ${r.model||'cassa'}`,`data-dtr="${esc(r.serial)}"`);
  if(typeof IT!=='undefined'&&IT)for(const r of IT.low||[])add(r.c,'DGFE quasi pieno','bad',`${r.serial} · ${r.d?.dgfeFree}% libero`,`data-ital="${esc(r.serial)}"`);
+ if(typeof RC!=='undefined'&&RC)for(const r of RC.low||[])add(r.c,'DGFE quasi pieno','bad',`${r.serial} · ${r.dgfeFree}% libero`,`data-rch="${esc(r.serial)}"`);
  return stops;
 }
 function routePage(){
@@ -159,7 +160,8 @@ function dataIssues(){
  for(const [k,set] of by){if(set.size<2)continue;const arr=[...set];const id=arr.map(c=>c.code).sort().join('|');if(seen.has(id))continue;seen.add(id);dups.push({why:k.startsWith('v:')?'Stessa P.IVA / codice fiscale':'Stesso nome',list:arr});}
  const vat=D.clients.filter(c=>c.mastro&&c.records.length&&idk(c.mastro.vat).length>=11&&c.records.some(r=>idk(r.vat).length>=11&&idk(r.vat)!==idk(c.mastro.vat)));
  const devs=[...(typeof DT!=='undefined'&&DT?DT.regs.filter(r=>!r.c).map(r=>({src:'DTR',serial:r.serial,label:r.client||'',attr:`data-dtr="${esc(r.serial)}"`})):[]),
-  ...(typeof IT!=='undefined'&&IT?IT.devs.filter(r=>!r.c).map(r=>({src:'Ital Retail',serial:r.serial,label:r.label||'',attr:`data-ital="${esc(r.serial)}"`})):[])];
+  ...(typeof IT!=='undefined'&&IT?IT.devs.filter(r=>!r.c).map(r=>({src:'Ital Retail',serial:r.serial,label:r.label||'',attr:`data-ital="${esc(r.serial)}"`})):[]),
+  ...(typeof RC!=='undefined'&&RC?RC.devs.filter(r=>!r.c&&!r.off).map(r=>({src:'RCH',serial:r.serial,label:r.label||'',attr:`data-rch="${esc(r.serial)}"`})):[])];
  const noContact=D.clients.filter(c=>(c.active.length||c.machines.some(m=>m.active))&&!c.phones.length&&!c.emails.length&&!c.phone&&!c.email);
  return{dups,vat,devs,noContact};
 }

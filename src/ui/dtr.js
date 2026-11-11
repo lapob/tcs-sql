@@ -89,7 +89,7 @@ function dtrPage(){
  if(!['client','serial','ge','seen','fw','cert'].includes(ui.sort.key))ui.sort={key:tab==='silent'?'seen':tab==='cert'?'cert':'ge',dir:1};
  list=sortBy(list,{client:r=>r.client.toLowerCase(),serial:r=>r.serial,ge:r=>r.lowZ?'0000':r.geDue||'9999',seen:r=>r.lastSync||'0000',fw:r=>fwNum(r.firmware),cert:r=>r.d?.certDue||'9999'});
  const rows=pageOf(list,18);
- return`${hero('I <span class="grad">registratori telematici</span>.','Il parco RT su DTR-Service: giornale elettronico, certificato, verificazione, licenze, errori e interventi di ogni cassa, sempre aggiornati.','')}
+ return`${hero('Il portale <span class="grad">DTR</span>.','Il parco RT su DTR-Service: giornale elettronico, certificato, verificazione, licenze, errori e interventi di ogni cassa, sempre aggiornati.','')}
  ${dtrStatusCard()}
  ${explain('dtr','Copia in <strong>sola lettura</strong> di DTR-Service → RT-Utility. Ogni cassa è collegata al cliente di Studio per <strong>matricola</strong> (macchina di Mastro), poi per <strong>partita IVA</strong>, infine per nome. Una cassa è <strong>silenziosa</strong> se non comunica da più di '+DTR_SILENT+' giorni; il <strong>GE</strong> (giornale elettronico) va rinnovato prima della scadenza o quando le chiusure rimanenti sono poche. Clicca una riga per la scheda completa.')}
  ${all.length?`<div class="kpis dtr-kpis">${kpi('Registratori',all.length,`${fmt(DT.bySerial)} per matricola · ${fmt(DT.byVat)} per P.IVA · ${fmt(DT.linked-DT.bySerial-DT.byVat)} per nome`,'register','','dtr',2)}${kpi('GE da rinnovare',DT.geSoon.length,`Scadenza entro ${DTR_GE_SOON} giorni o meno di ${DTR_LOW_Z} chiusure`,'calendar','t-due','dtr',3)}${kpi('Con errori',DT.errors.length,'Errori o avvisi negli ultimi 7 giorni','alert',DT.errors.length?'t-bad':'','dtr',4)}
@@ -146,7 +146,7 @@ function openDtr(serial){
 /* Section in the client panel */
 function dtrClientSection(c){
  if(!c.dtr?.length)return'';
- return`<div class="d-section"><h3>Registratori DTR <span>${c.dtr.length}</span></h3>${c.dtr.map(r=>`<div class="lic" data-dtr="${esc(r.serial)}" style="cursor:pointer"><div class="lic-top"><strong class="mono">${esc(r.serial)}${r.m?` <small class="muted">${esc(r.m.model||'')}</small>`:''}</strong>${flags(r)||'<span class="badge ok">regolare</span>'}</div>
+ return`<div class="d-section"><h3>Portale DTR <span>${c.dtr.length}</span></h3>${c.dtr.map(r=>`<div class="lic" data-dtr="${esc(r.serial)}" style="cursor:pointer"><div class="lic-top"><strong class="mono">${esc(r.serial)}${r.m?` <small class="muted">${esc(r.m.model||'')}</small>`:''}</strong>${flags(r)||'<span class="badge ok">regolare</span>'}</div>
   <small>GE ${r.geNumber||'—'} · scade ${dShort(parseDate(r.geDue))} (${rel(r.ge)||'—'})${r.remaining!==null?` · ${plur(r.remaining,'chiusura rimanente','chiusure rimanenti')}`:''} · firmware ${esc(r.firmware||'—')} · ultima comunicazione ${r.lastSync?dtTime(r.lastSync):'mai'}${r.d?.certDue?' · certificato '+dShort(parseDate(r.d.certDue)):''}${r.d?.lastVp?' · VP '+dShort(parseDate(r.d.lastVp)):''}${r.d?.address?' · '+esc(r.d.address.replace(/\s+IT$/,'')):''}</small></div>`).join('')}</div>`;
 }
 

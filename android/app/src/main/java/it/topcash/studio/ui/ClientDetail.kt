@@ -177,12 +177,16 @@ import java.time.ZoneOffset
         }
         if (shown.isEmpty()) item(key = "m-empty") { CardBox(Modifier.padding(top = 12.dp)) { Text(if (off > 0) "Solo dispositivi dismessi: attiva l'interruttore qui sopra per vederli." else "Nessun dispositivo: importa il parco macchine da MastroSQL.", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
         if (c.registers.isNotEmpty()) {
-            item(key = "dtr-title") { SectionTitle("Registratori DTR (${c.registers.size})") }
+            item(key = "dtr-title") { SectionTitle("Portale DTR (${c.registers.size})") }
             c.registers.forEach { r -> item(key = "dtr" + r.r.serial) { RegisterCard(r, Modifier.padding(bottom = 8.dp), showClient = false) } }
         }
         if (c.italDevices.isNotEmpty()) {
-            item(key = "ital-title") { SectionTitle("Casse Ital Retail (${c.italDevices.size})") }
+            item(key = "ital-title") { SectionTitle("Portale Ital Retail (${c.italDevices.size})") }
             c.italDevices.forEach { r -> item(key = "ital" + r.r.serial) { ItalCard(r, Modifier.padding(bottom = 8.dp), showClient = false) } }
+        }
+        if (c.rchDevices.isNotEmpty()) {
+            item(key = "rch-title") { SectionTitle("Portale RCH (${c.rchDevices.size})") }
+            c.rchDevices.forEach { r -> item(key = "rch" + r.r.serial) { RchCard(r, Modifier.padding(bottom = 8.dp), showClient = false) } }
         }
         item(key = "assets") { ClientAssets(vm, a, c) }
         }
@@ -250,9 +254,9 @@ import java.time.ZoneOffset
 }
 
 /** Kind of device from the model written in Mastro: registers, automatic cash (Cashmatic), software, printers, scales. */
-private val devGroups = listOf("Registratori di cassa", "Casse automatiche · Cashmatic", "Software e app", "Stampanti", "Bilance", "Registratori DTR", "Ital Retail", "Epson")
+private val devGroups = listOf("Registratori di cassa", "Casse automatiche · Cashmatic", "Software e app", "Stampanti", "Bilance", "Registratori DTR", "Ital Retail", "Epson", "RCH")
 /** Order on screen: DTR, Ital Retail and Epson on their own, then every other register, then the other kinds. */
-private val devOrder = listOf(5, 6, 7, 0, 1, 2, 3, 4)
+private val devOrder = listOf(5, 6, 8, 7, 0, 1, 2, 3, 4)
 private val softRe = Regex("LICENZA|\\bAPP\\b|APP\\.|SOFTWARE|RISTOQUICK|POSBY"); private val printRe = Regex("^STAMP|STAMPANTE")
 private fun devCat(model: String): Int { val s = model.uppercase(); return when { "CASHMATIC" in s -> 1; softRe.containsMatchIn(s) -> 2; printRe.containsMatchIn(s) -> 3; "BILANCIA" in s -> 4; else -> rtSection(s) } }
-private fun rtSection(s: String) = when { Regex("\\bDTR\\b|\\bDRT|^D(CASH|FLEX|PALM)\\b").containsMatchIn(s) -> 5; Regex("ITAL ?RETAIL|\\bNICE\\b|\\bSPICE\\b|ITAL ?START|^NEXT\\b").containsMatchIn(s) -> 6; Regex("EPSON|\\bFP[- ]?\\d").containsMatchIn(s) -> 7; else -> 0 }
+private fun rtSection(s: String) = when { Regex("\\bDTR\\b|\\bDRT|^D(CASH|FLEX|PALM)\\b").containsMatchIn(s) -> 5; Regex("ITAL ?RETAIL|\\bNICE\\b|\\bSPICE\\b|ITAL ?START|^NEXT\\b").containsMatchIn(s) -> 6; Regex("\\bRCH\\b|PRINT!|\\bONDA\\b|WALL ?E\\b|\\bAPE ?\\d|\\bASSO\\b|LDP-?\\d").containsMatchIn(s) -> 8; Regex("EPSON|\\bFP[- ]?\\d").containsMatchIn(s) -> 7; else -> 0 }

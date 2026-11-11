@@ -7,7 +7,7 @@ public partial class App : Application
   base.OnStartup(e);
   if(e.Args.FirstOrDefault(a=>a.StartsWith("--selftest=")) is string test)
   {
-   var folder=test[11..];try{Store.SelfTest(folder);File.WriteAllText(Path.Combine(folder,"result.txt"),"PASS: upsert, deduplicazione, validazione atomica, note, magazzino, rapportini, email, contabilità, backup interni ed esterni, DTR-Service, Ital Retail, modifiche amministratore, inventario e rinnovi.");Shutdown(0);}
+   var folder=test[11..];try{Store.SelfTest(folder);File.WriteAllText(Path.Combine(folder,"result.txt"),"PASS: upsert, deduplicazione, validazione atomica, note, magazzino, rapportini, email, contabilità, backup interni ed esterni, DTR-Service, Ital Retail, RCH XDealer, modifiche amministratore, inventario e rinnovi.");Shutdown(0);}
    catch(Exception ex){Directory.CreateDirectory(folder);File.WriteAllText(Path.Combine(folder,"result.txt"),"FAIL: "+ex);Shutdown(1);}return;
   }
   // "--aggiorna=http://server:porta/": checks the office server, downloads the new version and installs it, without opening the window

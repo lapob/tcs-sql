@@ -2,19 +2,17 @@
 // ───────────────────────── Registers: brand / model / category of every machine, portal coverage, Mastro fiscal detail.
 // Mastro keeps the model as free text ("DRTCASH+", "DTR DRTCASH", "EPSON FP-81 II RT"): brands are recognised here,
 // then each register of a brand that has a portal (DTR-Service, Ital Retail) is checked against that portal's list.
-// Edit (E.D.IT.), Ditron and their models are no longer followed: they are left out of the whole app (Mastro keeps them).
+// Edit (E.D.IT.), Ditron, Custom and their models are no longer followed: they are left out of the whole app (Mastro keeps them).
 // A model written with "RCH" stays: RCH sold some of the same names.
-const RT_DROP=/DITRON|SWEDA|\bE\.?D\.?IT\b|\bEDIT\b|\bZERO ?(5|7|55|8|TOP|\+)|\bZERO5|\bZERO7|\bZERO55|^SPOT\b|SPOT ZERO|SMARTY|\bNINA\b|\bFLY\b|GLOBE|QUADR|FLEXY|\bZIP\b|SPEEDY|MIKROPOS|^DREAM\b|SEVENT?\b|BUFFETTI|^POINT$|^VELVET|^MASTER\b|\bFLEA\b|PULSAR|NESSO|SUPREMA|^ONE$|EDIT ONE/;
+const RT_DROP=/DITRON|\bCUSTOM\b|SWEDA|\bE\.?D\.?IT\b|\bEDIT\b|\bZERO ?(5|7|55|8|TOP|\+)|\bZERO5|\bZERO7|\bZERO55|^SPOT\b|SPOT ZERO|SMARTY|\bNINA\b|\bFLY\b|GLOBE|QUADR|FLEXY|\bZIP\b|SPEEDY|MIKROPOS|^DREAM\b|SEVENT?\b|BUFFETTI|^POINT$|^VELVET|^MASTER\b|\bFLEA\b|PULSAR|NESSO|SUPREMA|^ONE$|EDIT ONE/;
 const rtDropped=model=>{const s=String(model||'').toUpperCase().trim();return RT_DROP.test(s)&&!/\bRCH\b/.test(s);};
 // sections: the brands with a portal (DTR, Ital Retail) and Epson on their own, every other register together
 const RT_BRANDS=[
  {k:'dtr',l:'DTR',portal:'dtr',pl:'DTR-Service',hue:212,re:/\bDTR\b|\bDRT|DRT ?CASH|DRT ?PALM|DRT ?FRONT|^D(CASH|FLEX|PALM)\b/},
  {k:'ital',l:'Ital Retail',portal:'ital',pl:'Ital Retail',hue:152,re:/ITAL ?RETAIL|\bNICE\b|\bSPICE\b|ITAL ?START|^NEXT\b/},
- {k:'rch',l:'RCH',hue:4,re:/\bRCH\b|PRINT!|\bONDA\b|WALL ?E\b|\bAPE ?\d|\bASSO\b|LDP-?\d/},
+ {k:'rch',l:'RCH',portal:'rch',pl:'RCH XDealer',hue:4,re:/\bRCH\b|PRINT!|\bONDA\b|WALL ?E\b|\bAPE ?\d|\bASSO\b|LDP-?\d/},
  {k:'epson',l:'Epson',hue:228,re:/EPSON|\bFP[- ]?\d/},
  {k:'axon',l:'Axon Micrelec',hue:270,re:/AXON|\bDADO\b|WY ?CASH|\bAURA\b|MICRELEC|HYDRA/},
- {k:'ditron',l:'Ditron',hue:28,re:/DITRON/},
- {k:'custom',l:'Custom',hue:190,re:/\bCUSTOM\b/},
  {k:'olivetti',l:'Olivetti',hue:340,re:/OLIVETTI|NETTUN/},
  {k:'sarema',l:'Sarema',hue:300,re:/SAREMA/},
  {k:'cashmatic',l:'Cashmatic',cat:'cash',hue:96,re:/CASHMATIC/},
@@ -23,8 +21,8 @@ const RT_BRANDS=[
  {k:'scale',l:'Bilance',cat:'scale',hue:120,re:/BILANCIA/},
 ];
 const RT_OTHER={k:'other',l:'Registratori di cassa',hue:220};
-const RT_OWN=new Set(['dtr','ital','epson']);
-const secOrd=k=>{const i=['dtr','ital','epson','other'].indexOf(k);return i<0?9:i;};
+const RT_OWN=new Set(['dtr','ital','rch','epson']);
+const secOrd=k=>{const i=['dtr','ital','rch','epson','other'].indexOf(k);return i<0?9:i;};
 const RT_CATS={rt:'Registratori di cassa',cash:'Casse automatiche',soft:'Software e licenze',printer:'Stampanti',scale:'Bilance'};
 let RG=null;
 function rtBrand(model){const s=String(model||'').toUpperCase();return RT_BRANDS.find(b=>b.re.test(s))||RT_OTHER;}
@@ -36,13 +34,13 @@ function deriveRegisters(){
  if(!D){RG=null;return;}
  const rt=new Map((state.rt||[]).map(r=>[r.machineId,r]));
  // a portal never synchronised says nothing about its registers: they are not "missing", the list is just not there yet
- const synced={dtr:(state.dtr||[]).length>0,ital:(state.ital||[]).length>0};
+ const synced={dtr:(state.dtr||[]).length>0,ital:(state.ital||[]).length>0,rch:(state.rch||[]).length>0};
  const brands=new Map();
  for(const m of D.machines){
   const b0=rtBrand(m.model);const b=b0.cat||RT_OWN.has(b0.k)?b0:RT_OTHER;m.maker=b0.cat||b0.k==='other'?'':b0.l;
   m.brand=b;m.cat=b.cat||'rt';m.family=(m.maker&&b===RT_OTHER?m.maker+' ':'')+rtModel(m.model,b0);m.rt=rt.get(m.id)||null;
-  m.fw=m.rt?.fields?.['Firmware']||m.dtr?.firmware||m.ital?.d?.firmware||'';
-  m.portal=b.portal?(!synced[b.portal]?'nosync':(b.portal==='dtr'?m.dtr:m.ital)?'in':'out'):'none';
+  m.fw=m.rt?.fields?.['Firmware']||m.dtr?.firmware||m.ital?.d?.firmware||m.rch?.firmware||'';
+  m.portal=b.portal?(!synced[b.portal]?'nosync':m[b.portal]?'in':'out'):'none';
   if(!brands.has(b.k))brands.set(b.k,{...b,cat:b.cat||'rt',synced:b.portal?synced[b.portal]:true,all:0,active:0,in:0,out:0,models:new Map()});
   const g=brands.get(b.k);g.all++;if(m.active){g.active++;if(m.portal==='in')g.in++;else if(m.portal==='out')g.out++;const f=g.models.get(m.family)||{name:m.family,n:0};f.n++;g.models.set(m.family,f);}
  }
@@ -65,7 +63,7 @@ function brandGrid(){
   return`<button class="brand-card reveal${ui.mbrand===b.k?' on':''}" style="--i:${i};--h:${b.hue}" data-mbrand="${b.k}" aria-pressed="${ui.mbrand===b.k}">
    <div class="brand-top">${brandMark(b)}<div class="grow"><strong>${esc(b.l)}</strong><small>${plur(b.active,'attiva','attive')} · ${plur(b.models.length,'modello','modelli')}</small></div>${b.portal?`<span class="brand-portal">${esc(b.pl)}</span>`:''}</div>
    ${b.portal&&!b.synced?`<small class="cov-txt">${icon('clock')} ${esc(b.pl)} non ancora sincronizzato: collegalo dall’app Windows per il confronto</small>`:cov!==null?`<div class="cov"><i style="width:${cov}%"></i></div><small class="cov-txt"><b>${fmt(b.in)}</b> nel portale${b.out?` · <span class="warn">${fmt(b.out)} non iscritte</span>`:' · tutte iscritte'}</small>`:`<small class="cov-txt muted">${b.models.slice(0,3).map(x=>esc(x.name)).join(' · ')}</small>`}</button>`;};
- return`<div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Sezioni</h2><p>DTR, Ital Retail ed Epson hanno la loro sezione; tutti gli altri sono in Registratori di cassa. Per i marchi con un portale controllo se ogni cassa attiva è presente sul portale.${D.dropped?` <span class="muted">${plur(D.dropped,'macchina Edit/Ditron esclusa','macchine Edit/Ditron escluse')}.</span>`:''}</p></div>${ui.mbrand?`<button class="btn sm ghost" data-mbrand="">${icon('close')}Tutti i marchi</button>`:''}</div>
+ return`<div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Sezioni</h2><p>DTR, Ital Retail e RCH (che hanno un portale) ed Epson hanno la loro sezione; tutti gli altri sono in Registratori di cassa. Per i marchi con un portale controllo se ogni cassa attiva è iscritta al portale.${D.dropped?` <span class="muted">${plur(D.dropped,'macchina Edit, Ditron o Custom esclusa','macchine Edit, Ditron o Custom escluse')}.</span>`:''}</p></div>${ui.mbrand?`<button class="btn sm ghost" data-mbrand="">${icon('close')}Tutti i marchi</button>`:''}</div>
   <div class="brand-grid">${rt.map(card).join('')}</div>
   ${other.length?`<div class="cat-row">${other.map((b,i)=>`<button class="chip${ui.mbrand===b.k?' on':''}" data-mbrand="${b.k}">${brandMark(b,'xs')}${esc(RT_CATS[b.cat]||b.l)}<em>${fmt(b.active)}</em></button>`).join('')}</div>`:''}</div>`;
 }
@@ -83,7 +81,7 @@ function machinesPage(){
  list=sortBy(list,{client:m=>m.client,model:m=>(m.brand?.l||'')+' '+m.family,ver:m=>m.verNext?+m.verNext:Infinity,end:m=>m.end?+m.end:Infinity});
  const rows=pageOf(list,16);const dueCls=n=>n===null?'':n<0?'bad':n<=60?'due':'';
  const act=D.machines.filter(m=>m.active).length;
- return`${hero('Il <span class="grad">parco macchine</span>.','Registratori di cassa e dispositivi presso i clienti, divisi per marchio e modello, con presenza nei portali, verificazioni e abbonamenti.','')}
+ return`${hero('Tutti i <span class="grad">registratori di cassa</span>.','Registratori e dispositivi presso i clienti, divisi per marchio e modello, con presenza nei portali, verificazioni e abbonamenti.','')}
  ${D.machines.length?'':`<div class="banner reveal" style="--i:1"><span class="orb">${icon('register')}</span><div class="grow"><h3>Importa il parco macchine da MastroSQL</h3><p>Da Impostazioni → Importa da MastroSQL, su un PC dove Mastro è installato.</p></div><button class="btn" data-go="settings">Vai alle impostazioni ${icon('arrow')}</button></div>`}
  <div class="kpis" style="grid-template-columns:repeat(4,1fr)">${kpi('Macchine attive',act,`${fmt(D.machines.length)} in archivio`,'register','','machines',1)}${kpi('Non iscritte ai portali',RG?.missing.length||0,'Attive in Mastro, assenti da DTR-Service / Ital Retail','alert',RG?.missing.length?'t-due':'','machines',2)}${kpi('Verificazioni entro 60 gg',D.verDue.length,RG?.verifications?`${plur(RG.verifications,'verifica nello storico','verifiche nello storico')}`:'Comprese quelle già scadute','shield','t-due','machines',3)}${kpi('Abbonamenti in scadenza',D.contractDue.length,`${fmt(D.machines.filter(m=>m.subscribed).length)} in abbonamento`,'calendar','t-info','machines',4)}</div>
  ${RG&&D.machines.length?brandGrid():''}
@@ -133,6 +131,7 @@ const fmtMoney=n=>Number(n||0).toLocaleString('it-IT',{minimumFractionDigits:2,m
 // the DTR and Ital Retail sections gain the coverage card at the bottom
 if(typeof dtrPage==='function'){const base=dtrPage;dtrPage=function(){return base()+portalGapCard('dtr');};}
 if(typeof italPage==='function'){const base=italPage;italPage=function(){return base()+portalGapCard('ital');};}
+if(typeof rchPage==='function'){const base=rchPage;rchPage=function(){return base()+portalGapCard('rch');};}
 document.addEventListener('click',e=>{
  const t=e.target.closest?.('[data-mbrand],[data-mmodel],[data-mbrand-go]');if(!t)return;
  if('mbrandGo' in t.dataset){ui.mbrand=t.dataset.mbrandGo;ui.mtab='gap';ui.mmodel='';ui.p=1;return;}
@@ -152,7 +151,7 @@ function portalAccess(){
  z.text=!zLast?'Mai sincronizzato':zd>3?`Ultima lettura ${plur(zd,'giorno','giorni')} fa: serve un nuovo accesso`:`Aggiornato ${dTime(zLast)}`;
  const portal=(k,name,st,act,hue,sub)=>{const s=st||{};return{k,name,mark:name.split(/[\s-]+/).filter(w=>w.length>2).map(w=>w[0]).join('').slice(0,2).toUpperCase(),hue,act,sub,
   state:s.error?'bad':!s.lastSync?'off':'ok',text:s.error?String(s.error):!s.lastSync?'Mai collegato':`Aggiornato ${dTime(s.lastSync)}`};};
- return[z,portal('dtr','DTR-Service',state.dtrStatus,'dtr',212,'Registratori DTR'),portal('ital','Ital Retail',state.italStatus,'ital',152,'Casse Ital Retail')];
+ return[z,portal('dtr','DTR-Service',state.dtrStatus,'dtr',212,'Portale DTR'),portal('ital','Ital Retail',state.italStatus,'ital',152,'Portale Ital Retail'),portal('rch','RCH XDealer',state.rchStatus,'rch',4,'Portale RCH')];
 }
 function accessCard(onlyMissing){
  const list=portalAccess();const missing=list.filter(p=>p.state!=='ok');

@@ -4,10 +4,10 @@
    Loaded after app.js, registers.js and report.js. */
 
 let CT={code:'',t:'sum',off:false};
-const DEV_GROUPS=[['dtr','Registratori DTR','register'],['ital','Ital Retail','register'],['epson','Epson','register'],['rt','Registratori di cassa','register'],['cash','Casse automatiche · Cashmatic','euro'],['soft','Software e app','grid'],['printer','Stampanti','print'],['scale','Bilance','box']];
+const DEV_GROUPS=[['dtr','Registratori DTR','register'],['ital','Ital Retail','register'],['rch','RCH','register'],['epson','Epson','register'],['rt','Registratori di cassa','register'],['cash','Casse automatiche · Cashmatic','euro'],['soft','Software e app','grid'],['printer','Stampanti','print'],['scale','Bilance','box']];
 const devCat=m=>m.cat&&DEV_GROUPS.some(g=>g[0]===m.cat)?m.cat:'rt';
 // section in the client card: DTR, Ital Retail and Epson on their own, every other register together
-const devSec=m=>{const c=devCat(m);return c==='rt'&&['dtr','ital','epson'].includes(m.brand?.k)?m.brand.k:c;};
+const devSec=m=>{const c=devCat(m);return c==='rt'&&['dtr','ital','rch','epson'].includes(m.brand?.k)?m.brand.k:c;};
 const devName=m=>m.brand&&m.cat==='rt'&&m.brand.k!=='other'?`${m.brand.l} ${m.family||''}`.trim():(m.model||'Dispositivo');
 
 function clientCard(c,fact){
@@ -90,7 +90,7 @@ function devCard(m){
 function devicesTab(c,off){
  const list=c.machines.filter(m=>CT.off||m.active).slice().sort((a,b)=>(b.active-a.active)||devName(a).localeCompare(devName(b)));
  const groups=DEV_GROUPS.map(([k,l,ic])=>[k,l,ic,list.filter(m=>devSec(m)===k)]).filter(g=>g[3].length);
- const portals=(typeof dtrClientSection==='function'?dtrClientSection(c):'')+(typeof italClientSection==='function'?italClientSection(c):'');
+ const portals=(typeof dtrClientSection==='function'?dtrClientSection(c):'')+(typeof italClientSection==='function'?italClientSection(c):'')+(typeof rchClientSection==='function'?rchClientSection(c):'');
  return`${off?`<label class="switch-row"><input type="checkbox" data-coff ${CT.off?'checked':''}><span class="sw"></span><span>Mostra anche le dismesse <em>${fmt(off)}</em></span></label>`:''}
  ${groups.map(([k,l,ic,ms])=>`<div class="d-section dev-group"><h3>${icon(ic)} ${l} <span>${fmt(ms.filter(m=>m.active).length)}${ms.some(m=>!m.active)?` + ${fmt(ms.filter(m=>!m.active).length)} dismesse`:''}</span></h3><div class="dev-list">${ms.map(devCard).join('')}</div></div>`).join('')
   ||`<div class="d-section">${empty('register','Nessun dispositivo attivo',off?'Ci sono solo dispositivi dismessi: attiva la spunta qui sopra per vederli.':'Importa il parco macchine da MastroSQL.')}</div>`}

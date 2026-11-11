@@ -61,6 +61,19 @@ class URegister(val r: DtrRegister, val client: UClient?, val machine: UMachine?
     val search = norm(listOf(r.serial, r.client, r.alias, r.tags, r.detail?.holder, r.detail?.vat, r.detail?.address, client?.name, machine?.m?.model).joinToString(" "))
     companion object { private val remainingRe = Regex("CHIUSURE RIMANENTI\\s*:?\\s*(\\d+)", RegexOption.IGNORE_CASE) }
 }
+/** An RCH XDealer device linked to the app's customer: by Mastro machine serial, then the customer's VAT number, then the name. */
+class URch(val r: RchDevice, val client: UClient?, val machine: UMachine?, val via: String) {
+    val verNext = Dates.parse(r.lastVerification)?.plusYears(2); val verDays = Dates.daysFromToday(verNext)
+    val certDue = Dates.parse(r.certDue); val certDays = Dates.daysFromToday(certDue)
+    val zDate = Dates.parse(r.zDate); val zDays = Dates.daysFromToday(zDate)
+    val off = Regex("dismess|disattiv|sostitu", RegexOption.IGNORE_CASE).containsMatchIn(r.state)
+    val lowDgfe = r.dgfeFree in 0..15
+    val verSoon = !off && verDays != null && verDays <= 60
+    val certSoon = !off && certDays != null && certDays <= 90
+    val silent = !off && zDays != null && zDays < -10
+    val name get() = client?.name ?: r.client.ifBlank { r.serial }
+    val search = norm(listOf(r.serial, r.part, r.type, r.client, r.vat, r.city, r.note, r.labels, r.firmware, client?.name, machine?.m?.model).joinToString(" "))
+}
 /** An Ital Retail device linked to the app's customer: by Mastro machine serial, else by the label written on the portal. */
 class UItal(val r: ItalDevice, val client: UClient?, val machine: UMachine?, val via: String, val orders: List<ItalOrder>) {
     val d get() = r.detail
@@ -93,6 +106,7 @@ class UClient(
     val machines = mutableListOf<UMachine>()
     val registers = mutableListOf<URegister>()
     val italDevices = mutableListOf<UItal>()
+    val rchDevices = mutableListOf<URch>()
     var pec = ""; var contact = ""; var category = ""
     var edit: ClientEdit? = null
     val interventions = mutableListOf<UIntervention>()
@@ -111,7 +125,7 @@ class UClient(
     /** Nothing to work on (no active device, licence, technician, recent activity…): kept out of the list, found by search. */
     val dormant: Boolean by lazy {
         val since = LocalDate.now().minusYears(3)
-        machines.none { it.m.active } && active.isEmpty() && tech.isBlank() && registers.isEmpty() && italDevices.isEmpty() && assets.isEmpty() &&
+        machines.none { it.m.active } && active.isEmpty() && tech.isBlank() && registers.isEmpty() && italDevices.isEmpty() && rchDevices.isEmpty() && assets.isEmpty() &&
             interventions.none { (it.i.source == "app" && it.i.status != "Chiuso") || it.date?.isAfter(since) == true } &&
             orders.none { it.date?.isAfter(LocalDate.now().minusYears(2)) == true } && edit?.created != true && !meta.favorite && note.isBlank()
     }
@@ -147,6 +161,7 @@ class Archive(val state: ArchiveState) {
     val machines: List<UMachine>
     val registers: List<URegister>
     val ital: List<UItal>
+    val rch: List<URch>
     val assets: List<UAsset>
     /** Duplicates merged into another customer by the administrator. */
     val merged: List<UClient>
@@ -228,6 +243,13 @@ class Archive(val state: ArchiveState) {
             val c = cLink ?: m?.client ?: cName
             UItal(r, c, m, when { cLink != null -> "abbinata a mano"; m?.client != null -> "matricola"; cName != null -> "nome"; else -> "" }, italOrders[r.serial].orEmpty().sortedByDescending { it.date }).also { c?.italDevices?.add(it) }
         }
+        // RCH XDealer devices → Mastro machine by serial, else the customer's VAT number, else the name written on the portal
+        rch = state.rch.map { r ->
+            val m = bySerial[serKey(r.serial)]; val cVat = idKey(r.vat).takeIf { it.length >= 11 }?.let { byVat[it] }; val cName = nameTo[nameKey(r.client)]
+            val cLink = state.deviceLinks[r.serial.uppercase()]?.let { map[it] }
+            val c = cLink ?: m?.client ?: cVat ?: cName
+            URch(r, c, m, when { cLink != null -> "abbinata a mano"; m?.client != null -> "matricola"; cVat != null -> "partita IVA"; cName != null -> "nome"; else -> "" }).also { c?.rchDevices?.add(it) }
+        }
         // administrator's changes: they win over the synchronised data; a customer created by hand exists only here
         val gone = mutableListOf<UClient>()
         for ((code, e) in state.clientEdits) {
@@ -254,7 +276,7 @@ class Archive(val state: ArchiveState) {
             if (e.mergedInto.isBlank() || e.deleted) continue
             val c = map[code] ?: continue; val t = map[e.mergedInto] ?: continue
             if (c === t) continue
-            t.licenses += c.licenses; c.machines.forEach { it.client = t }; t.machines += c.machines; t.registers += c.registers; t.italDevices += c.italDevices
+            t.licenses += c.licenses; c.machines.forEach { it.client = t }; t.machines += c.machines; t.registers += c.registers; t.italDevices += c.italDevices; t.rchDevices += c.rchDevices
             t.interventions += c.interventions; t.orders += c.orders
             c.phones.filter { it !in t.phones }.forEach(t.phones::add); c.emails.filter { it !in t.emails }.forEach(t.emails::add)
             if (t.vat.isBlank()) t.vat = c.vat; if (t.taxCode.isBlank()) t.taxCode = c.taxCode; if (t.mastro == null) t.mastro = c.mastro; t.mastroCodes += c.mastroCodes
@@ -288,6 +310,11 @@ class Archive(val state: ArchiveState) {
     val italUpdate by lazy { ital.filter { it.r.update.isNotBlank() } }
     val italNoSub by lazy { ital.filter { it.noSub } }
     val italLow by lazy { ital.filter { it.lowDgfe } }
+    val rchLive by lazy { rch.filter { !it.off } }
+    val rchVer by lazy { rchLive.filter { it.verSoon } }
+    val rchLow by lazy { rchLive.filter { it.lowDgfe } }
+    val rchSilent by lazy { rchLive.filter { it.silent } }
+    val rchUpdate by lazy { rchLive.filter { it.r.update.isNotBlank() } }
     fun licenseEdit(id: String) = state.licenseEdits[id]
     val assetsDue by lazy { assets.filter { it.due } }
     val technicians by lazy { interventions.map { it.i.technician }.filter { it.isNotBlank() }.distinct().sorted() }
@@ -306,6 +333,10 @@ class Archive(val state: ArchiveState) {
         ital.forEach { r ->
             if (r.subTo != null && r.subDays != null && r.d?.autoRenew != true && r.subDays in fromDays..toDays) add(Deadline("Abbonamento Ital Retail", r.subTo, r.subDays, r.client, r.name, "${r.r.type.ifBlank { "Cassa" }} · ${r.r.serial}", "isub|${r.r.type.ifBlank { "Cassa" }} · ${r.r.serial}|${r.subTo}"))
             if (r.certDue != null && r.certDays != null && r.certDays in fromDays..toDays) add(Deadline("Certificato RT", r.certDue, r.certDays, r.client, r.name, "Ital Retail · ${r.r.serial}", "icert|Ital Retail · ${r.r.serial}|${r.certDue}"))
+        }
+        rchLive.forEach { r ->
+            if (r.machine == null && r.verNext != null && r.verDays != null && r.verDays in fromDays..toDays) add(Deadline("Verificazione", r.verNext, r.verDays, r.client, r.name, "RCH ${r.r.type} · ${r.r.serial}", "rver|${r.r.serial}|${r.verNext}"))
+            if (r.certDue != null && r.certDays != null && r.certDays in fromDays..toDays) add(Deadline("Certificato RT", r.certDue, r.certDays, r.client, r.name, "RCH · ${r.r.serial}", "rcert|RCH · ${r.r.serial}|${r.certDue}"))
         }
         assets.forEach { x ->
             if (!x.a.active) return@forEach
@@ -340,5 +371,5 @@ fun serviceKind(m: Machine): String? {
 }
 
 /** Edit (E.D.IT.), Ditron and their models are no longer followed: left out of the app (Mastro keeps them). A model written with "RCH" stays. */
-private val rtDropRe = Regex("DITRON|SWEDA|\\bE\\.?D\\.?IT\\b|\\bEDIT\\b|\\bZERO ?(5|7|55|8|TOP|\\+)|\\bZERO5|\\bZERO7|\\bZERO55|^SPOT\\b|SPOT ZERO|SMARTY|\\bNINA\\b|\\bFLY\\b|GLOBE|QUADR|FLEXY|\\bZIP\\b|SPEEDY|MIKROPOS|^DREAM\\b|SEVENT?\\b|BUFFETTI|^POINT$|^VELVET|^MASTER\\b|\\bFLEA\\b|PULSAR|NESSO|SUPREMA|^ONE$|EDIT ONE")
+private val rtDropRe = Regex("DITRON|\\bCUSTOM\\b|SWEDA|\\bE\\.?D\\.?IT\\b|\\bEDIT\\b|\\bZERO ?(5|7|55|8|TOP|\\+)|\\bZERO5|\\bZERO7|\\bZERO55|^SPOT\\b|SPOT ZERO|SMARTY|\\bNINA\\b|\\bFLY\\b|GLOBE|QUADR|FLEXY|\\bZIP\\b|SPEEDY|MIKROPOS|^DREAM\\b|SEVENT?\\b|BUFFETTI|^POINT$|^VELVET|^MASTER\\b|\\bFLEA\\b|PULSAR|NESSO|SUPREMA|^ONE$|EDIT ONE")
 fun rtDropped(model: String): Boolean { val s = model.uppercase().trim(); return rtDropRe.containsMatchIn(s) && !Regex("\\bRCH\\b").containsMatchIn(s) }

@@ -71,6 +71,7 @@ import kotlinx.serialization.Serializable
     val features: Features = Features(),
     val dtr: List<DtrRegister> = emptyList(), val dtrStatus: DtrStatus = DtrStatus(),
     val ital: List<ItalDevice> = emptyList(), val italOrders: List<ItalOrder> = emptyList(), val italStatus: DtrStatus = DtrStatus(),
+    val rch: List<RchDevice> = emptyList(), val rchStatus: DtrStatus = DtrStatus(),
     val clientEdits: Map<String, ClientEdit> = emptyMap(), val licenseEdits: Map<String, LicenseEdit> = emptyMap(), val licenseCleanup: LicenseCleanup = LicenseCleanup(),
     val assets: List<Asset> = emptyList(), val renewals: Map<String, RenewalMark> = emptyMap(), val deviceLinks: Map<String, String> = emptyMap(),
     val version: Long = 0,
@@ -112,6 +113,12 @@ object Catalog {
     val followups = listOf("", "Da contattare", "In attesa", "Completato")
 }
 
+/** RCH XDealer (dealer area): read-only copy kept by the sync station, with the data the registers send. Dates are ISO. */
+@Serializable data class RchDevice(val serial: String = "", val portalId: String = "", val part: String = "", val type: String = "", val state: String = "",
+    val client: String = "", val vat: String = "", val city: String = "", val province: String = "", val phone: String = "", val email: String = "", val note: String = "", val labels: String = "",
+    val contract: Boolean = false, val update: String = "", val firmware: String = "", val dgfeFree: Int = -1, val dgfeNumber: Int = 0,
+    val lastVerification: String = "", val zDate: String = "", val zNumber: Int = 0, val certFrom: String = "", val certDue: String = "",
+    val activated: String = "", val registered: String = "", val capturedAt: String = "")
 /** Ital Retail OnePlus (dealer area): read-only copy kept by the sync station. Dates are ISO. */
 @Serializable data class ItalDevice(val serial: String = "", val portalId: String = "", val type: String = "", val update: String = "", val subscribed: Boolean = false,
     val client: String = "", val note: String = "", val detail: ItalDetail? = null)

@@ -51,7 +51,7 @@ function italPage(){
  if(!['client','serial','sub','free','fw','cert'].includes(ui.sort.key))ui.sort={key:'client',dir:1};
  list=sortBy(list,{client:r=>(r.c?.name||r.label).toLowerCase(),serial:r=>r.serial,sub:r=>r.noSub?'0000':r.d?.subTo||'9999',free:r=>r.d&&r.d.dgfeFree>=0?r.d.dgfeFree:999,fw:r=>fwNum(r.d?.firmware),cert:r=>r.d?.certDue||'9999'});
  const rows=pageOf(list,18);
- return`${hero('Le casse <span class="grad">Ital Retail</span>.','L’area rivenditore OnePlus: abbonamenti, aggiornamenti firmware, giornale elettronico, certificato e ordini di ogni dispositivo, sempre aggiornati.','')}
+ return`${hero('Il portale <span class="grad">Ital Retail</span>.','L’area rivenditore OnePlus: abbonamenti, aggiornamenti firmware, giornale elettronico, certificato e ordini di ogni dispositivo, sempre aggiornati.','')}
  ${italStatusCard()}
  ${explain('ital','Copia in <strong>sola lettura</strong> di Ital Retail OnePlus → Gestione dispositivi. Ogni cassa è collegata al cliente di Studio per <strong>matricola</strong> (macchina di Mastro) oppure per nome, dall’etichetta scritta sul portale. Studio non compra, non rinnova e non aggiorna nulla sul portale: ti dice solo cosa richiede attenzione. Clicca una riga per la scheda completa.')}
  ${all.length?`<div class="kpis dtr-kpis">${kpi('Dispositivi',all.length,`${fmt(IT.linked)} collegati a un cliente`,'register','','ital',2)}${kpi('Da aggiornare',IT.update.length,'Nuovo firmware disponibile','download',IT.update.length?'t-due':'','ital',3)}${kpi('Senza abbonamento',IT.noSub.length,'Aggiornamenti non compresi','alert',IT.noSub.length?'t-bad':'','ital',4)}
@@ -109,7 +109,7 @@ function openItal(serial){
 function italMini(r){return`<span class="dtr-mini">Ital Retail · ${r.noSub?'<b style="color:var(--bad)">senza abbonamento</b>':'abbonamento '+(r.d?.subTo?dShort(parseDate(r.d.subTo)):'attivo')}${r.d?.firmware?' · fw '+esc(r.d.firmware):''}${r.update?` · <b style="color:var(--due)">agg. ${esc(r.update)}</b>`:''}${r.low?' · <b style="color:var(--bad)">DGFE quasi pieno</b>':''}</span>`;}
 function italClientSection(c){
  if(!c.ital?.length)return'';
- return`<div class="d-section"><h3>Casse Ital Retail <span>${c.ital.length}</span></h3>${c.ital.map(r=>`<div class="lic" data-ital="${esc(r.serial)}" style="cursor:pointer"><div class="lic-top"><strong class="mono">${esc(r.serial)} <small class="muted">${esc(r.type||'')}</small></strong>${itFlags(r)||'<span class="badge ok">regolare</span>'}</div>
+ return`<div class="d-section"><h3>Portale Ital Retail <span>${c.ital.length}</span></h3>${c.ital.map(r=>`<div class="lic" data-ital="${esc(r.serial)}" style="cursor:pointer"><div class="lic-top"><strong class="mono">${esc(r.serial)} <small class="muted">${esc(r.type||'')}</small></strong>${itFlags(r)||'<span class="badge ok">regolare</span>'}</div>
   <small>${r.noSub?'Abbonamento non attivo':'Abbonamento'+(r.d?.subTo?' fino al '+dShort(parseDate(r.d.subTo)):' attivo')+(r.d?.autoRenew?' (rinnovo automatico)':'')}${r.d?.firmware?' · firmware '+esc(r.d.firmware):''}${r.d&&r.d.dgfeFree>=0?' · DGFE libero '+r.d.dgfeFree+'%':''}${r.d?.certDue?' · certificato '+dShort(parseDate(r.d.certDue)):''}</small></div>`).join('')}</div>`;
 }
 

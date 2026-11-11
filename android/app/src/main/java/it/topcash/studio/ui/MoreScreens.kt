@@ -1,5 +1,6 @@
 package it.topcash.studio.ui
 
+import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Euro
 import it.topcash.studio.data.AccountingView
 import androidx.compose.foundation.background
@@ -108,16 +109,17 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
         item(key = "update") { UpdateCard(vm) }
         item(key = "items") {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                MoreRow(Icons.Rounded.PointOfSale, "Parco macchine", "${a.machines.count { it.m.active }} attive · ${a.verificationsDue.size} verificazioni entro 60 gg", Modifier.appear(0)) { nav.navigate("machines") }
-                MoreRow(Icons.Rounded.Router, "Registratori DTR", if (a.registers.isEmpty()) "Si collegano dall'app Windows dell'ufficio" else "${a.registers.size} casse · ${a.dtrErrors.size} con errori · ${a.dtrSilent.size} silenziose", Modifier.appear(0)) { nav.navigate("dtr") }
-                MoreRow(Icons.Rounded.PointOfSale, "Casse Ital Retail", if (a.ital.isEmpty()) "Si collegano dall'app Windows dell'ufficio" else "${a.ital.size} casse · ${a.italUpdate.size} da aggiornare · ${a.italNoSub.size} senza abbonamento", Modifier.appear(0)) { nav.navigate("ital") }
+                MoreRow(Icons.Rounded.PointOfSale, "Registratori di cassa", "Tutti · ${a.machines.count { it.m.active }} attivi · ${a.verificationsDue.size} verificazioni entro 60 gg", Modifier.appear(0)) { nav.navigate("machines") }
+                MoreRow(Icons.Rounded.Router, "Portale DTR", if (a.registers.isEmpty()) "Si collegano dall'app Windows dell'ufficio" else "${a.registers.size} casse · ${a.dtrErrors.size} con errori · ${a.dtrSilent.size} silenziose", Modifier.appear(0)) { nav.navigate("dtr") }
+                MoreRow(Icons.Rounded.PointOfSale, "Portale Ital Retail", if (a.ital.isEmpty()) "Si collega dall'app Windows dell'ufficio" else "${a.ital.size} casse · ${a.italUpdate.size} da aggiornare · ${a.italNoSub.size} senza abbonamento", Modifier.appear(0)) { nav.navigate("ital") }
+                MoreRow(Icons.Rounded.Print, "Portale RCH", if (a.rch.isEmpty()) "Si collega dall'app Windows dell'ufficio" else "${a.rchLive.size} registratori · ${a.rchVer.size} verificazioni · ${a.rchLow.size} DGFE quasi pieni", Modifier.appear(0)) { nav.navigate("rch") }
                 MoreRow(Icons.Rounded.Route, "Giro di oggi", "Interventi e verificazioni per località, con il percorso", Modifier.appear(1)) { nav.navigate("route") }
                 MoreRow(Icons.Rounded.Call, "Rinnovi", "Chi chiamare, chi ha rinnovato, chi sollecitare", Modifier.appear(1)) { nav.navigate("renewals") }
-                MoreRow(Icons.Rounded.Computer, "PC e sistemi", if (a.assets.isEmpty()) "Inventario dei PC, stampanti e rete dei clienti" else "${a.assets.count { it.a.active }} in uso · ${a.assetsDue.size} garanzie o scadenze vicine", Modifier.appear(1)) { nav.navigate("inventory") }
                 if (me?.seesAccounting != false) MoreRow(Icons.Rounded.Euro, "Contabilità", if (a.acc.hasData) "${AccountingView.money0(a.acc.toCollect)} da incassare · ${a.acc.overdue.size} rate scadute" else "Fatture, incassi e pagamenti da MastroSQL", Modifier.appear(0)) { nav.navigate("accounting") }
                 MoreRow(Icons.Rounded.CalendarMonth, "Scadenziario", "${a.deadlines(0, 120).size} scadenze nei prossimi 120 giorni", Modifier.appear(0)) { nav.navigate("deadlines") }
                 MoreRow(Icons.Rounded.Key, "Licenze Zucchetti", "${a.currentLicenses.size} correnti · ${a.licenses.size - a.currentLicenses.size} storiche", Modifier.appear(1)) { nav.navigate("licenses") }
                 MoreRow(Icons.Rounded.ShoppingBag, "Ordini web", "${a.orders.size} ordini in archivio", Modifier.appear(2)) { nav.navigate("orders") }
+                MoreRow(Icons.Rounded.Computer, "PC e sistemi", if (a.assets.isEmpty()) "Inventario dei PC, stampanti e rete dei clienti" else "${a.assets.count { it.a.active }} in uso · ${a.assetsDue.size} garanzie o scadenze vicine", Modifier.appear(2)) { nav.navigate("inventory") }
                 if (me?.isAdmin == true) {
                     MoreRow(Icons.Rounded.AccountCircle, "Utenti", "Crea, modifica ed elimina gli accessi, compreso il tuo", Modifier.appear(3)) { nav.navigate("users") }
                     if (a.deleted.isNotEmpty()) MoreRow(Icons.Rounded.AccountCircle, "Clienti eliminati", "${a.deleted.size} da ripristinare", Modifier.appear(3)) { nav.navigate("deleted") }
