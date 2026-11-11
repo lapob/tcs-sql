@@ -42,18 +42,23 @@ public static class Backups
    var day = DateTime.Now.ToString("yyyyMMdd");
    var name = now ? $"TopCash-{day}-{DateTime.Now:HHmmss}.sqlite" : $"TopCash-{day}.sqlite";
    var local = Path.Combine(dir, name);
-   if (!File.Exists(local))
+   // today's backup is renewed (at most hourly, by the timer) when the archive changed after it: an import made
+   // in the afternoon reaches the backups the same day instead of the next night
+   var exists = File.Exists(local);
+   var refresh = !now && exists && (lastStamp.Db != s.DatabasePath ? Stamp(s) > File.GetLastWriteTimeUtc(local).AddMinutes(2) : Stamp(s) != lastStamp.At);
+   if (!exists || refresh)
    {
-    s.Backup(local); SqliteConnection.ClearAllPools();
-    Check(local);
+    var tmp = local + ".new";   // the old copy stays until the new one is verified
+    try { s.Backup(tmp); SqliteConnection.ClearAllPools(); Check(tmp); File.Move(tmp, local, true); }
+    finally { if (File.Exists(tmp)) File.Delete(tmp); }
     foreach (var old in new DirectoryInfo(dir).GetFiles("TopCash-*.sqlite").OrderByDescending(f => f.Name).Skip(Math.Max(7, cfg.KeepLocal))) old.Delete();
     st = st with { LastLocal = DateTimeOffset.Now.ToString("O") };
-    s.Log("backup", now ? $"Backup creato da {who}." : "Backup automatico giornaliero creato.");
+    if (!refresh) s.Log("backup", now ? $"Backup creato da {who}." : "Backup automatico giornaliero creato.");
    }
    if (cfg.External.Length > 0)
    {
     var target = Path.Combine(cfg.External, name);
-    if (!File.Exists(target) || now)
+    if (!File.Exists(target) || now || refresh)
     {
      try
      {
@@ -67,7 +72,7 @@ public static class Backups
       foreach (var old in new DirectoryInfo(cfg.External).GetFiles("TopCash-*.sqlite").OrderByDescending(f => f.Name).Skip(Math.Max(7, cfg.KeepExternal))) old.Delete();
       var hadError = st.Error.Length > 0;
       st = st with { LastExternal = DateTimeOffset.Now.ToString("O"), LastExternalFile = target, Error = "", ErrorAt = "" };
-      s.Log("backup", hadError ? $"Copia esterna dei backup di nuovo riuscita ({cfg.External})." : $"Backup copiato in {cfg.External}.");
+      if (hadError || !refresh) s.Log("backup", hadError ? $"Copia esterna dei backup di nuovo riuscita ({cfg.External})." : $"Backup copiato in {cfg.External}.");
      }
      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
      {
@@ -80,9 +85,19 @@ public static class Backups
    }
    else if (st.Error.Length > 0) st = st with { Error = "", ErrorAt = "" };
    s.SetSetting("backup.status", st);
+   lastStamp = (s.DatabasePath, Stamp(s));   // taken after our own status write, so it alone never looks like a change
    return st;
   }
   finally { Gate.Release(); }
+ }
+
+ static (string Db, DateTime At) lastStamp;
+ /// Last write to the archive (main file or its WAL journal).
+ static DateTime Stamp(Store s)
+ {
+  var t = File.GetLastWriteTimeUtc(s.DatabasePath); var wal = s.DatabasePath + "-wal";
+  if (File.Exists(wal)) { var w = File.GetLastWriteTimeUtc(wal); if (w > t) t = w; }
+  return t;
  }
 
  /// A backup that SQLite cannot read is worse than none: verify it before trusting it.

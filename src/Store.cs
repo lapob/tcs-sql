@@ -128,7 +128,7 @@ public sealed partial class Store
  /// Sign-ins, blocked attempts, devices and user changes: for administrators only.
  public List<SyncEvent> SecurityEvents(int limit=60){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT time,kind,message FROM events WHERE kind='users' ORDER BY id DESC LIMIT $n";q.Parameters.AddWithValue("$n",limit);using var r=q.ExecuteReader();var list=new List<SyncEvent>();while(r.Read())list.Add(new(r.GetString(0),r.GetString(1),r.GetString(2)));return list;}
  public void Log(string kind,string message){using var c=Open();using var q=c.CreateCommand();q.CommandText="INSERT INTO events(time,kind,message) VALUES($t,$k,$m)";q.Parameters.AddWithValue("$t",DateTimeOffset.Now.ToString("O"));q.Parameters.AddWithValue("$k",kind);q.Parameters.AddWithValue("$m",message);q.ExecuteNonQuery();}
- public void Backup(string path){using var source=Open();using var destination=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=path}.ToString());destination.Open();source.BackupDatabase(destination);}
+ public void Backup(string path){using var source=Open();using var destination=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=path}.ToString());destination.Open();source.BackupDatabase(destination);using var j=destination.CreateCommand();j.CommandText="PRAGMA journal_mode=DELETE";j.ExecuteScalar();} // one self-contained file (no -wal beside it on the backup drive)
 #if !TOPCASH_SERVER
  /// A handwriting-like stroke rendered to PNG (WPF), used only by the self-test.
  static byte[] TestSignature()
@@ -230,6 +230,13 @@ public sealed partial class Store
   var ext=Path.Combine(folder,"esterno");
   Backups.Save(store,ext,"test");var bs=Backups.Run(store,folder);
   if(bs.LastExternal.Length==0||bs.Error.Length>0||Directory.GetFiles(ext,"TopCash-*.sqlite").Length!=1||Directory.GetFiles(Path.Combine(folder,"backups"),"TopCash-*.sqlite").Length!=1)throw new Exception("Backup esterno");
+  // today's backup follows the changes made during the day (and only those: our own status write is not one)
+  var day1=Directory.GetFiles(ext,"TopCash-*.sqlite").Single();var t0=File.GetLastWriteTimeUtc(day1);
+  bs=Backups.Run(store,folder);if(File.GetLastWriteTimeUtc(day1)!=t0)throw new Exception("Backup rifatto senza modifiche");
+  Thread.Sleep(30);store.Log("test","modifica dopo il backup");bs=Backups.Run(store,folder);
+  if(File.GetLastWriteTimeUtc(day1)==t0||bs.Error.Length>0||Directory.GetFiles(ext,"TopCash-*.sqlite").Length!=1||Directory.GetFiles(Path.Combine(folder,"backups"),"TopCash-*.sqlite*").Length!=1)throw new Exception("Backup del giorno non aggiornato");
+  {using var bc=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=day1,Mode=SqliteOpenMode.ReadOnly,Pooling=false}.ToString());bc.Open();using var bq=bc.CreateCommand();bq.CommandText="SELECT count(*) FROM events WHERE message='modifica dopo il backup'";if(Convert.ToInt64(bq.ExecuteScalar())!=1)throw new Exception("Backup del giorno senza l'ultima modifica");}
+  t0=File.GetLastWriteTimeUtc(day1);bs=Backups.Run(store,folder);if(File.GetLastWriteTimeUtc(day1)!=t0)throw new Exception("Backup rifatto senza modifiche");
   var missing=Enumerable.Range('K',16).Select(l=>(char)l+@":\").First(d=>!Directory.Exists(d));
   Backups.Save(store,missing+"Backup","test");bs=Backups.Run(store,folder,true,"test");
   if(bs.Error.Length==0||Directory.GetFiles(Path.Combine(folder,"backups"),"TopCash-*.sqlite").Length!=2)throw new Exception("Disco esterno assente non segnalato");
