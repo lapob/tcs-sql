@@ -973,6 +973,8 @@ $('#alerts').addEventListener('click',()=>go('expiry'));
 $('#theme-toggle').addEventListener('click',toggleTheme);
 addEventListener('resize',moveIndicator);
 // glass top bar gets its hairline + shadow as soon as the page scrolls under it
+// the scrollbar's real width (classic bars on Windows, 0 for overlay bars on phones and Mac): top bar and bottom fade end before it
+{const m=$('#main'),sh=$('.shell');if(m&&sh){let last=-1;const sbw=()=>{const w=Math.max(0,m.offsetWidth-m.clientWidth);if(w!==last){last=w;sh.style.setProperty('--sbw',w+'px');}};sbw();if('ResizeObserver' in window)new ResizeObserver(sbw).observe(m);else addEventListener('resize',sbw);}}
 {const m=$('#main'),tb=$('.topbar');let raf=0;m.addEventListener('scroll',()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;tb.classList.toggle('scrolled',m.scrollTop>4);});},{passive:true});}
 // overlay scrollbars: the thumb shows on the area that is scrolling and fades out shortly after it stops (theme.css)
 {const live=new Map();document.addEventListener('scroll',e=>{const el=e.target===document?document.documentElement:e.target;if(!el.classList)return;el.classList.add('is-scrolling');clearTimeout(live.get(el));live.set(el,setTimeout(()=>{el.classList.remove('is-scrolling');live.delete(el);},900));},{capture:true,passive:true});}
