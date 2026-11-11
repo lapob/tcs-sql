@@ -66,6 +66,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
+import androidx.compose.animation.animateContentSize
+import androidx.compose.ui.semantics.contentDescription
 
 /** Springy press feedback: the element sinks slightly and bounces back. */
 fun Modifier.pressScale(source: MutableInteractionSource): Modifier = composed {
@@ -191,23 +193,25 @@ val LocalAreaSwitch = androidx.compose.runtime.staticCompositionLocalOf<(@Compos
 
 /** "Interventi | Contabilità": a pill with a sliding thumb, like the site and the Windows app. */
 @Composable fun AreaSwitch(area: String, onSelect: (String) -> Unit) {
+    // compact: the active area shows icon + name, the other one only its icon (the page title keeps its room)
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val items = listOf("ops" to ("Interventi" to androidx.compose.material.icons.Icons.Rounded.Build), "acc" to ("Contabilità" to androidx.compose.material.icons.Icons.Rounded.Euro))
-    val idx = if (area == "acc") 1 else 0
-    val thumb by androidx.compose.animation.core.animateFloatAsState(idx.toFloat(), androidx.compose.animation.core.spring(dampingRatio = 0.78f, stiffness = 520f), label = "area")
-    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.padding(end = 8.dp).width(220.dp).height(38.dp).clip(RoundedCornerShape(13.dp))
-        .background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(3.dp)) {
-        val w = maxWidth / 2
-        Box(Modifier.offset(x = w * thumb).width(w).fillMaxHeight().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surface))
-        Row(Modifier.fillMaxSize()) {
-            items.forEachIndexed { i, (key, v) ->
-                val on = i == idx
-                val tint by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant, label = "t")
-                Row(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(10.dp)).clickable { if (!on) haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick); onSelect(key) }
-                    .semantics { role = androidx.compose.ui.semantics.Role.Tab; selected = on },
-                    horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.Icon(v.second, null, Modifier.size(16.dp), tint = if (on) (if (key == "acc") LocalStatus.current.ok else MaterialTheme.colorScheme.primary) else tint)
-                    Text("  " + v.first, style = MaterialTheme.typography.labelLarge, color = tint, maxLines = 1)
+    val spring = androidx.compose.animation.core.spring<androidx.compose.ui.unit.IntSize>(dampingRatio = 0.85f, stiffness = 500f)
+    Row(Modifier.padding(end = 8.dp).height(40.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(3.dp)
+        .animateContentSize(spring), verticalAlignment = Alignment.CenterVertically) {
+        items.forEach { (key, v) ->
+            val on = key == area
+            val accent = if (key == "acc") LocalStatus.current.ok else MaterialTheme.colorScheme.primary
+            val bg by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.surface else androidx.compose.ui.graphics.Color.Transparent, label = "bg")
+            val tint by androidx.compose.animation.animateColorAsState(if (on) accent else MaterialTheme.colorScheme.onSurfaceVariant, label = "t")
+            Row(Modifier.fillMaxHeight().clip(RoundedCornerShape(11.dp)).background(bg)
+                .clickable(onClickLabel = v.first) { if (!on) { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick); onSelect(key) } }
+                .semantics { role = androidx.compose.ui.semantics.Role.Tab; selected = on; contentDescription = v.first }
+                .padding(horizontal = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.Icon(v.second, null, Modifier.size(18.dp), tint = tint)
+                androidx.compose.animation.AnimatedVisibility(on, enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(180, 60)) + androidx.compose.animation.expandHorizontally(),
+                    exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90)) + androidx.compose.animation.shrinkHorizontally()) {
+                    Text(v.first, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, modifier = Modifier.padding(start = 7.dp))
                 }
             }
         }

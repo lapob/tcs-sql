@@ -274,6 +274,8 @@ Come MastroSQL è diviso in Mastro e Contabilità, Top Cash Studio ha due aree. 
   - Il Riepilogo mostra le cifre, il grafico mensile e le cose da guardare oggi: rate da sollecitare, pagamenti entro 30 giorni e migliori clienti.
 - Ogni area ricorda l'ultima pagina aperta. Passando da un'area all'altra cambiano il menu e la barra in basso, con un solo movimento morbido.
 - I tecnici vedono solo Interventi: per loro il selettore non compare.
+- Su telefono il pannello **Altro** del sito è diviso nelle stesse sezioni del menu: Lavoro, Registratori di cassa, Zucchetti, Ufficio e Sistema (in Contabilità: Contabilità e Sistema). Nell'app Android il selettore delle aree è compatto: l'area attiva mostra icona e nome, l'altra solo l'icona.
+- Dopo un aggiornamento del server il sito si aggiorna da solo su tutti i dispositivi, anche dietro tcsql.it: non serve svuotare la cache. Se hai un modulo aperto, la pagina si ricarica solo quando torni a guardarla.
 
 ## Cosa arriva da MastroSQL (sola lettura)
 

@@ -122,12 +122,30 @@ app.Use(async(ctx,next)=>
  await next();
 });
 app.UseResponseCompression();
+// The page asks for app.js?v=… (version of the UI files): a proxy in front (Cloudflare keeps .js/.css for hours and tells
+// browsers to do the same) can never hand an old script to a phone after an update, because every update changes the URLs.
+var uiStamp=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(string.Join("|",
+ Directory.EnumerateFiles(uiDir).Where(f=>f.EndsWith(".js")||f.EndsWith(".css")||f.EndsWith(".html")).OrderBy(f=>f,StringComparer.Ordinal).Select(f=>Path.GetFileName(f)+File.GetLastWriteTimeUtc(f).Ticks)))),0,6).ToLowerInvariant();
+var indexRx=new System.Text.RegularExpressions.Regex("(src|href)=\"([A-Za-z0-9_./-]+\\.(?:js|css))\"",System.Text.RegularExpressions.RegexOptions.Compiled);
+string? indexHtml=null;
+app.Use(async(ctx,next)=>
+{
+ var p=ctx.Request.Path.Value??"";
+ if(HttpMethods.IsGet(ctx.Request.Method)&&(p=="/"||p.Equals("/index.html",StringComparison.OrdinalIgnoreCase)))
+ {
+  indexHtml??=indexRx.Replace(await File.ReadAllTextAsync(Path.Combine(uiDir,"index.html")),m=>$"{m.Groups[1].Value}=\"{m.Groups[2].Value}?v={uiStamp}\"");
+  ctx.Response.ContentType="text/html; charset=utf-8";ctx.Response.Headers.CacheControl="no-cache";ctx.Response.Headers["CDN-Cache-Control"]="no-store";
+  await ctx.Response.WriteAsync(indexHtml);return;
+ }
+ await next();
+});
 app.UseDefaultFiles(new DefaultFilesOptions{FileProvider=new PhysicalFileProvider(uiDir)});
 app.UseStaticFiles(new StaticFileOptions
 {
  FileProvider=new PhysicalFileProvider(uiDir),
  ContentTypeProvider=new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider{Mappings={[".webmanifest"]="application/manifest+json"}},
- OnPrepareResponse=c=>c.Context.Response.Headers.CacheControl=c.File.Name.EndsWith(".png")?"public, max-age=604800":"no-cache" // code always revalidated: updates reach every device at once
+ // code always revalidated (and never stored by a proxy in front): updates reach every device at once
+ OnPrepareResponse=c=>{var h=c.Context.Response.Headers;if(c.File.Name.EndsWith(".png"))h.CacheControl="public, max-age=604800";else{h.CacheControl="no-cache";h["CDN-Cache-Control"]="no-store";}}
 });
 app.UseAuthentication();app.UseRateLimiter();app.UseAuthorization();
 

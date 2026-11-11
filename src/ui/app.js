@@ -923,10 +923,19 @@ $('#cmd-open').addEventListener('click',openCmd);
 $('#drawer-backdrop').addEventListener('click',closeDrawer);
 // phone: 4 main sections in the bottom bar, the rest in the "Altro" sheet
 $('#nav-more').addEventListener('click',openMoreSheet);
+// the sheet keeps the same sections as the side menu (Lavoro, Registratori, Zucchetti, Ufficio, Sistema)
+// short names in the sheet: the section title already says what they are
+const MORE_SHORT={machines:'Registratori',dtr:'DTR',ital:'Ital Retail',rch:'RCH',sync:'Sincronizza',apps:'App'};
+function moreGroups(items){const groups=[];let cur=null,i=0;
+ for(const el of $$('#nav > *')){
+  if(el.classList.contains('nav-caption')){cur={title:el.textContent,items:[]};groups.push(cur);continue;}
+  if(!items.includes(el))continue;if(!cur){cur={title:'',items:[]};groups.push(cur);}cur.items.push(el);
+ }
+ return groups.filter(g=>g.items.length).map(g=>`<section class="more-group">${g.title?`<h3>${esc(g.title)}</h3>`:''}<div class="more-grid">${g.items.map(b=>{const em=b.querySelector('em.hot')?.textContent||'';const label=MORE_SHORT[b.dataset.page]||b.querySelector('span').textContent;return`<button class="more-item${b.dataset.page===page?' on':''}" data-more="${b.dataset.page}" style="--i:${i++}">${b.querySelector('svg').outerHTML}<span>${esc(label)}</span>${em?`<em>${esc(em)}</em>`:''}</button>`;}).join('')}</div></section>`).join('');}
 function openMoreSheet(){if(document.querySelector('.more-sheet'))return;
  const items=$$('.nav-item[data-page]').filter(b=>!MAIN_TABS.includes(b.dataset.page)&&!(b.dataset.page==='team'&&!(WEB&&(me?.role==='admin'||me?.role==='owner')))&&!(b.dataset.page==='warehouse'&&!isAdmin())&&!(b.dataset.page==='check'&&!isAdmin())&&!(ACC_PAGES.includes(b.dataset.page)&&!canAccounting())&&[curArea(),'both'].includes(b.dataset.area||'ops')&&b.dataset.page!==undefined);
  const m=document.createElement('div');m.className='modal more-sheet';
- m.innerHTML=`<div class="sheet-box" role="dialog" aria-label="Altre sezioni"><i class="grip"></i><div class="more-grid">${items.map((b,i)=>{const em=b.querySelector('em.hot')?.textContent||'';return`<button class="more-item${b.dataset.page===page?' on':''}" data-more="${b.dataset.page}" style="--i:${i}">${b.querySelector('svg').outerHTML}<span>${b.querySelector('span').textContent}</span>${em?`<em>${esc(em)}</em>`:''}</button>`;}).join('')}</div></div>`;
+ m.innerHTML=`<div class="sheet-box" role="dialog" aria-label="Altre sezioni"><i class="grip"></i>${moreGroups(items)}</div>`;
  document.body.append(m);
  const close=()=>{m.classList.add('out');setTimeout(()=>m.remove(),260);};
  m.addEventListener('click',e=>{const b=e.target.closest('[data-more]');
@@ -1077,7 +1086,14 @@ function showDevice(status,code){
 function startWeb(){$('#auth').hidden=true;applyRole();etag='';raw=null;loadState();openStream();if(host)host.postMessage({action:'hostInfo'});learnPublic();}
 async function logout(){try{await post('/api/logout');}catch{}try{await caches.delete('tcs-api');}catch{}me=null;location.reload();}
 async function bootWeb(){
- if('serviceWorker' in navigator&&isSecureContext)navigator.serviceWorker.register('sw.js').catch(()=>{});
+ if('serviceWorker' in navigator&&isSecureContext){
+  // sw.js never from the HTTP cache (a proxy may keep it for hours); checked again whenever the page comes back to the front
+  const had=!!navigator.serviceWorker.controller;let reloading=false;
+  navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(reg=>{document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')reg.update().catch(()=>{});});}).catch(()=>{});
+  // a new version took over: reload once, but never under an open form (then at the next return to the page)
+  const swap=()=>{if(reloading)return;if(document.querySelector('.modal:not(.out),.drawer:not(.out) form')){document.addEventListener('visibilitychange',function v(){if(document.visibilityState==='visible'){document.removeEventListener('visibilitychange',v);swap();}});return;}reloading=true;location.reload();};
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{if(had)swap();});
+ }
  // the three first requests leave together: one round trip instead of three (it counts outside the office, through the tunnel)
  earlyState=fetch('/api/state',{credentials:'same-origin',cache:'no-store'}).catch(()=>null);
  const hello=post('/api/device/hello',{name:deviceName(),platform:devicePlatform()}).catch(()=>null),session=api('/api/session');session.catch(()=>{});
