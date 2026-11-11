@@ -228,7 +228,7 @@ La scheda cliente (PC, browser e Android) si apre con i **contatti rapidi** (Chi
 
 - **Riepilogo**: anagrafica, sedi e punti vendita, **note e promemoria** del team, dati Mastro (chiusi in un riquadro).
 - **Dispositivi**: divisi per tipo — **registratori di cassa**, **casse automatiche Cashmatic**, **software e app**, stampanti, bilance. Prima le **attive**; l'interruttore *Mostra anche le dismesse* fa comparire le altre. Ogni cassa mostra marchio e modello, matricola, presenza sul portale, verificazione, giornale elettronico e abbonamento; un tocco apre la scheda completa. Poi i dati dei portali (DTR, Ital Retail) e PC e sistemi.
-- **Licenze**: licenze Zucchetti in corso (le storiche in un riquadro a parte), con i **commenti** in un riquadro separato, e gli ordini web.
+- **Licenze**: licenze Zucchetti in corso (le storiche in un riquadro a parte), con i **commenti** in un riquadro separato, e gli ordini web. Dai 60 giorni prima della scadenza c'è il tasto **Già rinnovata** (dalla 2.8.12, anche nell'elenco Licenze, in Scadenze e sull'app Android): la licenza diventa *Rinnovata*, esce dai conteggi "in scadenza" e risulta rinnovata anche nella pagina Rinnovi. Si annulla con un tocco e vale solo per quella scadenza: quando il portale riporta la nuova data, la licenza torna normale da sola.
 - **Interventi**: da fare, chiusi e storico Mastro.
 - **Contabilità** (non per i tecnici).
 
@@ -388,10 +388,13 @@ Altro dominio: `collega-esterno.ps1 -Dominio altro.it`. Se preferisci creare il 
 - **Da fuori ufficio** un PC, telefono o browser nuovo mostra un **codice** (es. `K7Q-4M2`) e resta in attesa: un amministratore lo autorizza in **Utenti → Dispositivi** (controllando che il codice sia quello che gli detta il collega). Serve una volta sola per dispositivo; un dispositivo già usato in ufficio è già autorizzato. Finché non è autorizzato non può nemmeno provare la password. Gli amministratori vedono il numero di richieste su **Utenti** e un avviso quando ne arriva una nuova. (Dalla 2.8.11; tra la 2.7.5 e la 2.8.10 il codice non veniva chiesto e i dispositivi usati in quel periodo restano autorizzati: controllali nell'elenco.)
 - **Protezione anti-tentativi** (solo da fuori ufficio): 5 password sbagliate in 15 minuti sospendono quell'utente da fuori per 15 minuti (il tempo raddoppia a ogni nuova sospensione, fino a 24 ore); 20 errori in un'ora dallo stesso indirizzo sospendono quell'indirizzo per un'ora. In ufficio si entra sempre, così nessuno può bloccare i colleghi dalla loro scrivania.
 - **Utenti → Dispositivi** elenca ogni PC, telefono e browser che ha fatto accesso, con ultimo utente, ultimo accesso e indirizzo IP; **Blocca** chiude subito l'accesso da fuori a un telefono perso o di un ex collaboratore (che vedrà il proprio codice, es. `K7Q-4M2`), **Sblocca** lo riapre.
+- **Cambiare il nome utente** (dalla 2.8.12): in **Utenti** la matita apre nome e cognome e *Nome utente per accedere*. La password resta la stessa; quella persona deve rientrare con il nuovo nome su tutti i dispositivi. Con la 2.8.12 Lapo è diventato **Bardi** e Andrea **Chiti**.
 - **Utenti → Accessi e sicurezza** mostra gli accessi da fuori ufficio, le sospensioni per troppi tentativi e le modifiche a utenti e dispositivi; è visibile solo agli amministratori, come gli indirizzi IP dell'ufficio.
 
 ### Sui dispositivi
 
+- **Tasto Scarica l'app nella pagina di accesso** (dalla 2.8.12): sotto il modulo di accesso compare l'app giusta per il dispositivo (Android → app per telefono, Windows → Studio per PC, iPhone → come aggiungerla alla Home). In ufficio si vede subito; da fuori solo dopo che il dispositivo è stato autorizzato.
+- **Tastiera sul telefono** (dalla 2.8.12): con la tastiera aperta fogli, finestre e accesso salgono sopra la tastiera, così il campo in cui scrivi resta sempre visibile.
 - **Scarica le app** (solo sul sito, ad esempio `https://tcsql.it`): pagina con l'app Android, Studio per Windows e le istruzioni per installare il sito come app su iPhone e browser; il dispositivo in uso viene riconosciuto e la sua app è proposta per prima.
 - **Aggiornamenti più leggeri**: dalla 2.7.6 sito e app Android scaricano solo le parti dell'archivio cambiate (di solito pochi KB), non tutto l'archivio a ogni modifica.
 
