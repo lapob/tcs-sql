@@ -26,13 +26,11 @@ import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.PointOfSale
 import androidx.compose.material.icons.rounded.Router
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ShoppingBag
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -70,7 +68,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
                 (n.isEmpty() || norm(m.clientName + " " + m.m.model + " " + m.m.serial + " " + m.m.fiscalSerial).contains(n))
         }.sortedBy { if (tab == "Abbonamenti") it.contractEnd ?: java.time.LocalDate.MAX else it.nextVerification ?: java.time.LocalDate.MAX }
     }
-    Page(null, "Macchine", "${a.machines.count { it.m.active }} attive · ${a.verificationsDue.size} verificazioni entro 60 gg", onBack = { nav.popBackStack() }) {
+    Page(null, "Registratori di cassa", "Tutti · ${a.machines.count { it.m.active }} attivi · ${a.verificationsDue.size} verificazioni entro 60 gg", onBack = { nav.popBackStack() }) {
         item(key = "search") { SearchField(q, { q = it }, "Cerca cliente o matricola") }
         item(key = "tabs") { ChoiceChips(mtabs, tab, { tab = it }, Modifier.padding(vertical = 10.dp)) }
         if (a.machines.isEmpty()) item(key = "none") { Empty(Icons.Rounded.PointOfSale, "Nessuna macchina in archivio", "Importa il parco macchine da MastroSQL dall'app Windows (Impostazioni → Importa da MastroSQL).") }

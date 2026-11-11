@@ -320,7 +320,19 @@ class Archive(val state: ArchiveState) {
     val technicians by lazy { interventions.map { it.i.technician }.filter { it.isNotBlank() }.distinct().sorted() }
 
     /** Licences, periodic verifications and contracts in one chronological list. */
-    fun deadlines(fromDays: Long = -30, toDays: Long = 120): List<Deadline> = buildList {
+    private val deadlineCache = java.util.concurrent.ConcurrentHashMap<Long, List<Deadline>>()
+    /** Same window, same list: computed once per archive (the menus and the home ask for it on every frame). */
+    fun deadlines(fromDays: Long = -30, toDays: Long = 120): List<Deadline> = deadlineCache.getOrPut(fromDays * 100_000 + toDays) { buildDeadlines(fromDays, toDays) }
+
+    /** Runs the heavy derived views off the main thread right after loading, so no screen pays for them on its first frame. */
+    fun warm() {
+        acc; wh; currentLicenses; due30; overdue; openInterventions; verificationsDue; contractsDue
+        dtrErrors; dtrSilent; dtrGeSoon; dtrCertSoon; italUpdate; italNoSub; italLow
+        rchLive; rchVer; rchLow; rchSilent; rchUpdate; assetsDue; technicians
+        deadlines(-7, 60); deadlines(0, 120); deadlines(-60, 180); deadlines(-90, 120)
+    }
+
+    private fun buildDeadlines(fromDays: Long, toDays: Long): List<Deadline> = buildList {
         currentLicenses.forEach { l -> if (l.expiry != null && l.days != null && l.days in fromDays..toDays) add(Deadline("Licenza", l.expiry, l.days, byCode[l.r.clientCode], l.r.client, "${Catalog.family(l.family)} · ${l.r.serial}", "lic|${l.r.id}|${l.expiry}")) }
         machines.forEach { m ->
             if (m.m.active && m.nextVerification != null && m.verDays != null && m.verDays in fromDays..toDays) add(Deadline("Verificazione", m.nextVerification, m.verDays, m.client, m.clientName, "${m.m.model} · ${m.m.serial}", "ver|${m.m.id}|${m.nextVerification}"))
@@ -371,5 +383,5 @@ fun serviceKind(m: Machine): String? {
 }
 
 /** Edit (E.D.IT.), Ditron and their models are no longer followed: left out of the app (Mastro keeps them). A model written with "RCH" stays. */
-private val rtDropRe = Regex("DITRON|\\bCUSTOM\\b|SWEDA|\\bE\\.?D\\.?IT\\b|\\bEDIT\\b|\\bZERO ?(5|7|55|8|TOP|\\+)|\\bZERO5|\\bZERO7|\\bZERO55|^SPOT\\b|SPOT ZERO|SMARTY|\\bNINA\\b|\\bFLY\\b|GLOBE|QUADR|FLEXY|\\bZIP\\b|SPEEDY|MIKROPOS|^DREAM\\b|SEVENT?\\b|BUFFETTI|^POINT$|^VELVET|^MASTER\\b|\\bFLEA\\b|PULSAR|NESSO|SUPREMA|^ONE$|EDIT ONE")
+private val rtDropRe = Regex("DITRON|\\bCUSTOM\\b|\\bQ3X|\\bX ?KUBE|\\bKUBE\\b|SWEDA|\\bE\\.?D\\.?IT\\b|\\bEDIT\\b|\\bZERO ?(5|7|55|8|TOP|\\+)|\\bZERO5|\\bZERO7|\\bZERO55|^SPOT\\b|SPOT ZERO|SMARTY|\\bNINA\\b|\\bFLY\\b|GLOBE|QUADR|FLEXY|\\bZIP\\b|SPEEDY|MIKROPOS|^DREAM\\b|SEVENT?\\b|BUFFETTI|^POINT$|^VELVET|^MASTER\\b|\\bFLEA\\b|PULSAR|NESSO|SUPREMA|^ONE$|EDIT ONE")
 fun rtDropped(model: String): Boolean { val s = model.uppercase().trim(); return rtDropRe.containsMatchIn(s) && !Regex("\\bRCH\\b").containsMatchIn(s) }

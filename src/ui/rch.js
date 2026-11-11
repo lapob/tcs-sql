@@ -106,7 +106,6 @@ function openRch(serial){
 }
 
 /* compact line under a Mastro machine and section in the client panel */
-function rchMini(r){return`<span class="dtr-mini">RCH XDealer${r.lastVerification?' · verificata '+dShort(parseDate(r.lastVerification)):''}${r.firmware?' · fw '+esc(r.firmware):''}${r.update?` · <b style="color:var(--due)">agg. ${esc(r.update)}</b>`:''}${r.low?' · <b style="color:var(--bad)">DGFE quasi pieno</b>':''}</span>`;}
 function rchClientSection(c){
  if(!c.rch?.length)return'';
  return`<div class="d-section"><h3>Portale RCH <span>${c.rch.length}</span></h3>${c.rch.map(r=>`<div class="lic" data-rch="${esc(r.serial)}" style="cursor:pointer"><div class="lic-top"><strong class="mono">${esc(r.serial)} <small class="muted">${esc(r.type||'')}</small></strong>${rcFlags(r)||'<span class="badge ok">regolare</span>'}</div>

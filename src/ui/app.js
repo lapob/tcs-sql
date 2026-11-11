@@ -906,6 +906,8 @@ $('#theme-toggle').addEventListener('click',toggleTheme);
 addEventListener('resize',moveIndicator);
 // glass top bar gets its hairline + shadow as soon as the page scrolls under it
 {const m=$('#main'),tb=$('.topbar');let raf=0;m.addEventListener('scroll',()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;tb.classList.toggle('scrolled',m.scrollTop>4);});},{passive:true});}
+// overlay scrollbars: the thumb shows on the area that is scrolling and fades out shortly after it stops (theme.css)
+{const live=new Map();document.addEventListener('scroll',e=>{const el=e.target===document?document.documentElement:e.target;if(!el.classList)return;el.classList.add('is-scrolling');clearTimeout(live.get(el));live.set(el,setTimeout(()=>{el.classList.remove('is-scrolling');live.delete(el);},900));},{capture:true,passive:true});}
 
 // ───────────────────────── performance profile
 // "auto" measures the real frame rate at startup and picks the lighter profile on slow or low-memory PCs.

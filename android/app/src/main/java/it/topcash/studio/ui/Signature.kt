@@ -30,7 +30,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -82,7 +81,7 @@ private fun exportPng(strokes: List<List<Offset>>, size: IntSize, strokePx: Floa
 
 /** Customer signs the intervention report with a finger; the signed report gets its yearly number on the server. */
 @Composable fun SignatureSheet(vm: AppViewModel, iv: Intervention, clientName: String, emails: List<String> = emptyList(), mailOn: Boolean = false, onDismiss: () -> Unit, onSigned: (Intervention) -> Unit) {
-    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheet = rememberSheet()
     val scope = rememberCoroutineScope()
     val strokes = remember { mutableStateListOf<List<Offset>>() }
     var current by remember { mutableStateOf<List<Offset>>(emptyList()) }

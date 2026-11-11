@@ -61,8 +61,6 @@ const tone=(n,soon)=>n===null?'':n<0?'bad':n<=soon?'due':'';
 const dueSmall=(n,soon)=>n===null?'':`<br><small style="color:var(--${tone(n,soon)||'text-3'})">${rel(n)}</small>`;
 const dtTime=v=>v?`${dShort(parseDate(v))}${v.length>10?' '+v.slice(11,16):''}`:'—';
 /* compact DTR line under a Mastro machine (machines page) */
-function dtrMini(r){const g=tone(r.ge,DTR_GE_SOON);
- return`<span class="dtr-mini">DTR · <b style="${g?`color:var(--${g})`:''}">GE ${dShort(parseDate(r.geDue))}</b> · <span style="${r.silent?'color:var(--bad)':''}">chiusura ${r.lastSync?rel(r.seen):'mai'}</span>${r.cert!==null?` · cert. ${dShort(parseDate(r.d.certDue))}`:''}${r.warn?' · <b style="color:var(--bad)">errori</b>':''}</span>`;}
 const viaBadge=r=>r.via==='serial'?`<span class="link-tag ok" data-tip="Abbinato per matricola alla macchina di Mastro">${icon('check')}${esc(r.m.model||'Mastro')}</span>`
  :r.via==='vat'?`<span class="link-tag ok" data-tip="Abbinato per partita IVA">${icon('check')}P.IVA</span>`
  :r.via==='name'?'<span class="link-tag" data-tip="Abbinato per nome: un collegamento certo arriva con la matricola in Mastro o con la partita IVA">per nome</span>':'<span class="link-tag bad">non collegato</span>';

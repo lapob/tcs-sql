@@ -31,7 +31,6 @@ import androidx.compose.material.icons.rounded.Email
 import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Verified
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
@@ -39,7 +38,6 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -54,7 +52,6 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -174,7 +171,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
     var mailDialog by remember { mutableStateOf(false) }
     val mailOn = a.state.features.mail
     val clientEmails = (a.byCode[existing?.client?.code ?: req.clientCode.orEmpty()]?.emails.orEmpty())
-    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheet = rememberSheet()
     val scope = rememberCoroutineScope()
     var clientCode by remember { mutableStateOf(existing?.client?.code ?: req.clientCode.orEmpty()) }
     var clientQuery by remember { mutableStateOf(a.byCode[clientCode]?.name.orEmpty()) }
@@ -195,8 +192,8 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
-            Text(if (signed) "Rapportino n. ${existing!!.i.reportNo}" else if (ro) "Intervento dallo storico Mastro" else if (existing != null) "Modifica intervento" else "Nuovo intervento", style = MaterialTheme.typography.headlineSmall)
-            if (signed) existing!!.i.let { e ->
+            Text(if (signed) "Rapportino n. ${existing.i.reportNo}" else if (ro) "Intervento dallo storico Mastro" else if (existing != null) "Modifica intervento" else "Nuovo intervento", style = MaterialTheme.typography.headlineSmall)
+            if (signed) existing.i.let { e ->
                 Row(Modifier.fillMaxWidth().padding(top = 10.dp).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.primaryContainer).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.Verified, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                     Text("  Firmato da ${e.signer} il ${Dates.short(Dates.parse(e.signedAt.take(10)))}${if (e.hours.isNotBlank()) " · " + e.hours.replace('.', ',') + " h" else ""}. Non è più modificabile.",
@@ -247,18 +244,18 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp)) }
             Gap(16.dp)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (signed && me?.role != "tecnico") TextButton({ vm.unsignIntervention(existing!!.i.id); close() }) { Text("Annulla firma", color = MaterialTheme.colorScheme.error) }
+                if (signed && me?.role != "tecnico") TextButton({ vm.unsignIntervention(existing.i.id); close() }) { Text("Annulla firma", color = MaterialTheme.colorScheme.error) }
                 if (existing != null && !ro && me?.role != "tecnico") TextButton({ confirmDelete = true }) { Icon(Icons.Rounded.Delete, null, tint = MaterialTheme.colorScheme.error); Text(" Elimina", color = MaterialTheme.colorScheme.error) }
                 if (clientCode.isNotEmpty()) TextButton({ onOpenClient(clientCode) }) { Text("Apri cliente") }
                 Box(Modifier.weight(1f))
-                if (signed) OutlinedButton({ vm.shareReport(existing!!.i, ctx) }, shape = MaterialTheme.shapes.medium) { Icon(Icons.Rounded.Share, null); Text("  Condividi") }
+                if (signed) OutlinedButton({ vm.shareReport(existing.i, ctx) }, shape = MaterialTheme.shapes.medium) { Icon(Icons.Rounded.Share, null); Text("  Condividi") }
                 else if (ro) Button(close) { Text("Chiudi") }
                 else Button({
                     saving = true
                     vm.saveIntervention(current()) { saving = false; close() }.invokeOnCompletion { saving = false }
                 }, enabled = !saving && clientCode.isNotEmpty() && title.isNotBlank(), shape = MaterialTheme.shapes.medium) { Text(if (saving) "Salvataggio…" else "Salva") }
             }
-            if (signed) existing!!.i.let { e ->
+            if (signed) existing.i.let { e ->
                 if (e.sentAt.isNotBlank()) Text("PDF inviato a ${e.sentTo} il ${Dates.short(Dates.parse(e.sentAt.take(10)))}", style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
                 Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {

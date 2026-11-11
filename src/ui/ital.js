@@ -106,7 +106,6 @@ function openItal(serial){
 }
 
 /* compact line under a Mastro machine (machines page) and section in the client panel */
-function italMini(r){return`<span class="dtr-mini">Ital Retail · ${r.noSub?'<b style="color:var(--bad)">senza abbonamento</b>':'abbonamento '+(r.d?.subTo?dShort(parseDate(r.d.subTo)):'attivo')}${r.d?.firmware?' · fw '+esc(r.d.firmware):''}${r.update?` · <b style="color:var(--due)">agg. ${esc(r.update)}</b>`:''}${r.low?' · <b style="color:var(--bad)">DGFE quasi pieno</b>':''}</span>`;}
 function italClientSection(c){
  if(!c.ital?.length)return'';
  return`<div class="d-section"><h3>Portale Ital Retail <span>${c.ital.length}</span></h3>${c.ital.map(r=>`<div class="lic" data-ital="${esc(r.serial)}" style="cursor:pointer"><div class="lic-top"><strong class="mono">${esc(r.serial)} <small class="muted">${esc(r.type||'')}</small></strong>${itFlags(r)||'<span class="badge ok">regolare</span>'}</div>

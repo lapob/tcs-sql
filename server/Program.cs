@@ -71,6 +71,8 @@ builder.Services.AddAuthorization(o=>
  o.AddPolicy("accounting",p=>p.RequireRole(Roles.Admin,Roles.Office));
  o.AddPolicy("owner",p=>p.RequireRole(Roles.Owner));
  o.AddPolicy("admin",p=>p.RequireRole(Roles.Admin));
+ // closed by default: an endpoint without its own rule needs a signed-in user (the public ones say AllowAnonymous)
+ o.FallbackPolicy=new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
 });
 builder.Services.AddRateLimiter(o=>
 {
@@ -150,14 +152,14 @@ app.MapGet("/api/session",(HttpContext ctx)=>
 {
  var name=ctx.User.Identity?.IsAuthenticated==true?ctx.User.Identity.Name:null;var u=name==null?null:users.Get(name);
  return Results.Ok(new{setupNeeded=!users.Any(),user=u==null?null:Me(u.Value.User),version=hub.Version,publicUrl=u==null?"":PublicUrl()});
-});
+}).AllowAnonymous();
 app.MapPost("/api/setup",async(HttpContext ctx,SetupRequest r)=>
 {
  if(users.Any())return Results.Conflict(new{error="Configurazione già completata."});
  try{users.Create(r.Username,r.Name,Roles.Owner,r.Password);}catch(InvalidDataException ex){return Bad(ex.Message);}
  var u=users.Get(r.Username)!.Value;await SignIn(ctx,u.User,u.Stamp,true);store.Log("users",$"Primo amministratore creato: {u.User.Name}.");hub.Changed();
  return Results.Ok(Me(u.User));
-}).RequireRateLimiting("login");
+}).RequireRateLimiting("login").AllowAnonymous();
 app.MapPost("/api/login",async(HttpContext ctx,LoginRequest r)=>
 {
  var remote=IsRemote(ctx);var uname=(r.Username??"").Trim();
@@ -182,8 +184,8 @@ app.MapPost("/api/login",async(HttpContext ctx,LoginRequest r)=>
   }catch(InvalidDataException){}
  }
  return Results.Ok(Me(v.Value.User));
-}).RequireRateLimiting("login");
-app.MapPost("/api/logout",async(HttpContext ctx)=>{await ctx.SignOutAsync();return Results.Ok();});
+}).RequireRateLimiting("login").AllowAnonymous();
+app.MapPost("/api/logout",async(HttpContext ctx)=>{await ctx.SignOutAsync();return Results.Ok();}).AllowAnonymous();
 app.MapPost("/api/password",(HttpContext ctx,PasswordRequest r)=>
 {
  if(users.Verify(ctx.User.Identity!.Name!,r.Current??"")==null)return Bad("La password attuale non è corretta.");
@@ -211,7 +213,7 @@ app.MapPost("/api/device/hello",(HttpContext ctx,DeviceHello r)=>
  // no approval step any more: credentials are the gate, a blocked device stays blocked
  if(dev!=null&&dev.Status==Devices.Pending){devices.SetStatus(dev.Id,Devices.Approved,who==""?"automatico":who);dev=devices.Find(key);}
  return Results.Ok(new{status=dev?.Status??(remote?"unknown":"office"),code=dev?.Id??"",remote,name=dev?.Name??""});
-}).RequireRateLimiting("login");
+}).RequireRateLimiting("login").AllowAnonymous();
 app.MapPost("/api/devices/{id}/{action}",(HttpContext ctx,string id,string action,DeviceRename? r)=>
 {
  try
@@ -437,9 +439,9 @@ app.MapPost("/api/sync/batch",(HttpContext ctx,BatchRequest b)=>
  if(b.Rows.Count>200_000)return Bad("Elenco troppo grande.");
  try{var msg=store.ApplyPortalList(b.Kind,b.Product,b.Scope,b.Headers,b.Rows,b.CapturedAt,"Zucchetti · postazione di sincronizzazione");hub.Changed();return Results.Ok(msg);}
  catch(InvalidDataException ex){store.Log("error",b.Scope+": "+ex.Message);hub.Changed();return Bad(ex.Message);}
-}).RequireRateLimiting("sync");
-app.MapPost("/api/sync/log",(HttpContext ctx,LogRequest r)=>{if(!Station(ctx))return Results.Unauthorized();store.Log(r.Kind is "error" or "portal" or "check"?r.Kind:"portal",r.Message.Length>2000?r.Message[..2000]:r.Message);hub.Changed();return Results.Ok();}).RequireRateLimiting("sync");
-app.MapPost("/api/sync/progress",(HttpContext ctx,ProgressRequest r)=>{if(!Station(ctx))return Results.Unauthorized();hub.SetProgress(r.Running,r.Connected,r.Text.Length>300?r.Text[..300]:r.Text);return Results.Ok();}).RequireRateLimiting("sync");
+}).RequireRateLimiting("sync").AllowAnonymous();
+app.MapPost("/api/sync/log",(HttpContext ctx,LogRequest r)=>{if(!Station(ctx))return Results.Unauthorized();store.Log(r.Kind is "error" or "portal" or "check"?r.Kind:"portal",r.Message.Length>2000?r.Message[..2000]:r.Message);hub.Changed();return Results.Ok();}).RequireRateLimiting("sync").AllowAnonymous();
+app.MapPost("/api/sync/progress",(HttpContext ctx,ProgressRequest r)=>{if(!Station(ctx))return Results.Unauthorized();hub.SetProgress(r.Running,r.Connected,r.Text.Length>300?r.Text[..300]:r.Text);return Results.Ok();}).RequireRateLimiting("sync").AllowAnonymous();
 // addresses other devices of the office use to open Studio in the browser (physical adapters only: no VirtualBox, WSL, VPN)
 // office addresses (private IPs, PC name) only for administrators: everyone else just gets the public address
 app.MapGet("/api/lan",(HttpContext ctx)=>{
@@ -453,18 +455,18 @@ app.MapGet("/api/lan",(HttpContext ctx)=>{
  var urls=ips.Select(i=>$"http://{i}:{port}").Append($"http://{host}:{port}").ToList();
  return Results.Ok(new{host,port,urls,publicUrl=PublicUrl()});
 }).RequireAuthorization();
-app.MapGet("/api/health",()=>Results.Ok(new{ok=true,version=hub.Version,server=typeof(Hub).Assembly.GetName().Version?.ToString(3)}));
+app.MapGet("/api/health",()=>Results.Ok(new{ok=true,version=hub.Version,server=typeof(Hub).Assembly.GetName().Version?.ToString(3)})).AllowAnonymous();
 
 // ───────────────────────── app updates over the network: the administrator uploads a build once, every PC and phone picks it up.
 // Downloads are open (same files as the public GitHub release, no data inside); only an administrator can upload.
-app.MapGet("/api/update/info",(HttpContext ctx)=>{ctx.Response.Headers.CacheControl="no-store";return Results.Ok(updates.Info());});
+app.MapGet("/api/update/info",(HttpContext ctx)=>{ctx.Response.Headers.CacheControl="no-store";return Results.Ok(updates.Info());}).AllowAnonymous();
 app.MapGet("/api/update/{kind}",(string kind)=>
 {
  if(kind is not("windows" or "android"))return Results.NotFound();
  var f=updates.FilePath(kind);var v=(kind=="android"?updates.Info().Android:updates.Info().Windows)?.Version??"";
  if(!File.Exists(f))return Results.NotFound();
  return Results.File(f,kind=="android"?"application/vnd.android.package-archive":"application/zip",kind=="android"?$"TopCash-Studio-{v}.apk":$"TopCash-Studio-Windows-{v}.zip",enableRangeProcessing:true);
-});
+}).AllowAnonymous();
 app.MapPost("/api/update/upload",async(HttpContext ctx,string kind,string version,string? notes)=>
 {
  var lim=ctx.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();if(lim is{IsReadOnly:false})lim.MaxRequestBodySize=400_000_000;

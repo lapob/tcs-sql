@@ -26,8 +26,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.CallMade
-import androidx.compose.material.icons.rounded.CallReceived
+import androidx.compose.material.icons.automirrored.rounded.CallMade
+import androidx.compose.material.icons.automirrored.rounded.CallReceived
 import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Remove
@@ -52,9 +52,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -168,8 +166,8 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
         }
         item(key = "actions") {
             Row(Modifier.fillMaxWidth().padding(top = 12.dp).appear(1), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                FilledTonalButton({ onMovement("carico", x.a.code) }, Modifier.weight(1f).height(56.dp), shape = MaterialTheme.shapes.medium) { Icon(Icons.Rounded.CallReceived, null, Modifier.size(18.dp)); Text(" Carico") }
-                FilledTonalButton({ onMovement("scarico", x.a.code) }, Modifier.weight(1f).height(56.dp), shape = MaterialTheme.shapes.medium) { Icon(Icons.Rounded.CallMade, null, Modifier.size(18.dp)); Text(" Scarico") }
+                FilledTonalButton({ onMovement("carico", x.a.code) }, Modifier.weight(1f).height(56.dp), shape = MaterialTheme.shapes.medium) { Icon(Icons.AutoMirrored.Rounded.CallReceived, null, Modifier.size(18.dp)); Text(" Carico") }
+                FilledTonalButton({ onMovement("scarico", x.a.code) }, Modifier.weight(1f).height(56.dp), shape = MaterialTheme.shapes.medium) { Icon(Icons.AutoMirrored.Rounded.CallMade, null, Modifier.size(18.dp)); Text(" Scarico") }
                 FilledTonalButton({ onMovement("trasferimento", x.a.code) }, Modifier.weight(1f).height(56.dp), shape = MaterialTheme.shapes.medium, contentPadding = PaddingValues(4.dp)) { Icon(Icons.Rounded.SwapHoriz, null, Modifier.size(18.dp)); Text(" Trasf.") }
             }
         }
@@ -226,7 +224,7 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
 @Composable fun MovementSheet(vm: AppViewModel, a: Archive, initialType: String, articleCode: String?, onDismiss: () -> Unit) {
     val wh = a.wh; val me by vm.me.collectAsStateWithLifecycle()
     val myVan = wh.vanOf(me?.name)
-    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true); val scope = rememberCoroutineScope()
+    val sheet = rememberSheet(); val scope = rememberCoroutineScope()
     var type by remember { mutableStateOf(initialType) }
     var article by remember { mutableStateOf(articleCode?.let { wh.byCode[it.uppercase()] }) }
     var query by remember { mutableStateOf(article?.a?.name.orEmpty()) }

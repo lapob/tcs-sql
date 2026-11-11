@@ -168,7 +168,6 @@ document.addEventListener('change',e=>{if(e.target.matches?.('#drawer [data-coff
 // ───────────────────────── words that follow the numbers: "1 licenza scaduta", "3 licenze", "nessuna"
 const plur=(n,one,many,none)=>n===0&&none!==undefined?none:`${fmt(n)} ${n===1?one:many}`;
 const daysPhrase=(n,future,past)=>n===null?'':n===0?`${future} oggi`:n===1?`${future} domani`:n===-1?`${past} ieri`:n>0?`${future} tra ${fmt(n)} giorni`:`${past} ${fmt(-n)} giorni fa`;
-const listIt=a=>a.length<2?(a[0]||''):a.slice(0,-1).join(', ')+' e '+a[a.length-1];
 const euro=n=>'€ '+Number(n||0).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2});
 
 // ───────────────────────── service conditions from Mastro (lis_macc.SERVIZIO → servizi), technician, payments

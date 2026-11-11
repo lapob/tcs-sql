@@ -91,7 +91,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun loadCache() = withContext(Dispatchers.Default) {
         if (!cacheFile.exists()) return@withContext
-        runCatching { _archive.value = Archive(json.decodeFromString<ArchiveState>(cacheFile.readText())); etag = etagFile.takeIf { it.exists() }?.readText() }
+        runCatching { val ar = Archive(json.decodeFromString<ArchiveState>(cacheFile.readText())); _archive.value = ar; etag = etagFile.takeIf { it.exists() }?.readText(); ar.warm() } // shown at once, the rest is prepared here in the background
     }
 
     fun refresh(userInitiated: Boolean = false) {
@@ -124,7 +124,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             else { val full = api.state(null)!!; body = full.first; tag = full.second; o2 = json.parseToJsonElement(body) as kotlinx.serialization.json.JsonObject } // saved copy unreadable: whole archive
                         }
                         hashes = (o2["hashes"] as? kotlinx.serialization.json.JsonObject)?.entries?.joinToString(",") { (k, v) -> k + "=" + (v as kotlinx.serialization.json.JsonPrimitive).content }.orEmpty()
-                        Archive(json.decodeFromString<ArchiveState>(body))
+                        Archive(json.decodeFromString<ArchiveState>(body)).also { it.warm() }
                     }
                     _archive.value = parsed; etag = tag
                     withContext(Dispatchers.IO) { cacheFile.writeText(body); tag?.let { etagFile.writeText(it) }; hashFile.writeText(hashes) }

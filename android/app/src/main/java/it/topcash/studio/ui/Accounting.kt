@@ -34,7 +34,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -204,7 +203,7 @@ fun LazyListScope.clientAccounting(a: Archive, c: UClient, onDue: (String) -> Un
 }
 
 @Composable fun DueSheet(vm: AppViewModel, d: UDue, nav: NavHostController?, onDismiss: () -> Unit) {
-    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true); val scope = rememberCoroutineScope()
+    val sheet = rememberSheet(); val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
     var status by remember { mutableStateOf(d.note?.status.orEmpty()) }
     var note by remember { mutableStateOf(d.note?.note.orEmpty()) }

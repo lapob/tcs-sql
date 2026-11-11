@@ -15,7 +15,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Group
@@ -36,7 +35,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -80,7 +78,7 @@ private fun current(c: UClient, k: String) = when (k) { "name" -> c.name; "vat" 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun ClientEditSheet(vm: AppViewModel, c: UClient?, onDismiss: () -> Unit, onCreated: (String) -> Unit = {}) {
     val isAdmin = vm.me.collectAsState().value?.isAdmin == true
-    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true); val scope = rememberCoroutineScope()
+    val sheet = rememberSheet(); val scope = rememberCoroutineScope()
     val e = c?.edit ?: ClientEdit(); val manual = c == null || e.created
     val values = remember { clientFields.associate { (k, _) -> k to mutableStateOf(e.get(k)) } }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -93,7 +91,7 @@ private fun current(c: UClient, k: String) = when (k) { "name" -> c.name; "vat" 
             clientFields.forEach { (k, label) ->
                 val v = values.getValue(k)
                 OutlinedTextField(v.value, { if (it.length <= 200) v.value = it }, Modifier.fillMaxWidth().padding(top = 6.dp), label = { Text(label) }, singleLine = true,
-                    placeholder = { if (!manual && c != null) Text(current(c, k), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    placeholder = { if (!manual) Text(current(c, k), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     keyboardOptions = KeyboardOptions(keyboardType = when (k) { "phone" -> KeyboardType.Phone; "email", "pec" -> KeyboardType.Email; else -> KeyboardType.Text }))
             }
             Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -121,7 +119,7 @@ private fun current(c: UClient, k: String) = when (k) { "name" -> c.name; "vat" 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun LicenseEditSheet(vm: AppViewModel, a: Archive, l: ULicense, onDismiss: () -> Unit) {
-    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true); val scope = rememberCoroutineScope()
+    val sheet = rememberSheet(); val scope = rememberCoroutineScope()
     val e = a.licenseEdit(l.r.id) ?: LicenseEdit()
     var expiry by remember { mutableStateOf(Dates.parse(e.expiry) ?: l.expiry) }
     var note by remember { mutableStateOf(e.note) }
@@ -221,7 +219,7 @@ private fun genPassword(): String { val a = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLM
 @Composable private fun UserSheet(vm: AppViewModel, u: UserRow, self: Boolean, onDismiss: () -> Unit) {
     val meOwner = vm.me.collectAsState().value?.isOwner == true
     val locked = u.role == "owner" && !meOwner
-    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true); val scope = rememberCoroutineScope()
+    val sheet = rememberSheet(); val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf(u.name) }; var role by remember { mutableStateOf(u.role) }
     var newPwd by remember { mutableStateOf<String?>(null) }; var confirmDelete by remember { mutableStateOf(false) }
     var current by remember { mutableStateOf("") }; var mine by remember { mutableStateOf("") }
@@ -276,7 +274,7 @@ private fun genPassword(): String { val a = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLM
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun NewUserSheet(vm: AppViewModel, onDismiss: () -> Unit) {
     val meOwner = vm.me.collectAsState().value?.isOwner == true
-    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true); val scope = rememberCoroutineScope()
+    val sheet = rememberSheet(); val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }; var user by remember { mutableStateOf("") }; var role by remember { mutableStateOf("ufficio") }; var pwd by remember { mutableStateOf(genPassword()) }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     fun close() = scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss() }

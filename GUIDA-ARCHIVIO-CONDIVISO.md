@@ -258,6 +258,11 @@ I clienti **senza** dispositivi attivi, licenze in corso, tecnico, pagamenti ape
 
 La scheda **Portali e accessi** (in Panoramica quando manca un accesso, sempre in *Sincronizzazione*) mostra lo stato di MY Zucchetti, DTR-Service, Ital Retail e RCH XDealer: verde collegato, giallo mai collegato, rosso accesso da rifare. Sulla postazione di sincronizzazione **Accedi di nuovo** apre la finestra del portale: accedi tu, Studio non salva le password e legge i dati in sola lettura.
 
+## Animazioni e scorrimento
+
+- **Android**: un solo movimento per azione. Aprendo una sezione la pagina entra da destra sopra quella precedente, che si scurisce e scorre un po' a sinistra; tornando indietro avviene l'esatto contrario, uguale con il gesto (la pagina segue il dito) e con il tasto. Le schede in basso cambiano con una dissolvenza.
+- **Sito e app Windows**: barre di scorrimento sottili che compaiono solo quando passi sopra un'area o mentre scorri, nel colore del tema chiaro o scuro.
+
 ## Fluidità automatica
 
 Studio sceglie da solo il profilo grafico per ogni dispositivo (*Impostazioni → Prestazioni → Automatico*): misura la fluidità all'avvio e **continua a controllarla durante l'uso**. Passa da solo alla modalità leggera se lo schermo scatta, con il risparmio dati attivo, con la batteria sotto il 20% (finché non lo metti in carica) o se il sistema chiede trasparenze ridotte; rispetta "riduci movimento" e il contrasto elevato. Su touch i tocchi sono immediati e i pulsanti più grandi.
@@ -280,7 +285,8 @@ Il servizio si ferma per pochi secondi; dati, utenti e sessioni restano invariat
 
 ## Sicurezza e dati
 
-- Password salvate solo in forma cifrata (PBKDF2-SHA256, 210.000 iterazioni); accessi limitati contro i tentativi ripetuti.
+- Password salvate solo in forma cifrata (PBKDF2-SHA256, 600.000 iterazioni, come raccomanda OWASP); accessi limitati contro i tentativi ripetuti.
+- Il server è **chiuso per impostazione predefinita**: ogni funzione richiede l'accesso, tranne le poche pubbliche (accesso, stato del server, download degli aggiornamenti).
 - Protezione CSRF, sessioni che scadono dopo 14 giorni di inattività, intestazioni di sicurezza.
 - **Backup automatico ogni giorno**, verificato con il controllo di integrità di SQLite:
   - in `D:\TopCashSQL\data\backups` (ultimi 30);

@@ -4,7 +4,7 @@
 // then each register of a brand that has a portal (DTR-Service, Ital Retail) is checked against that portal's list.
 // Edit (E.D.IT.), Ditron, Custom and their models are no longer followed: they are left out of the whole app (Mastro keeps them).
 // A model written with "RCH" stays: RCH sold some of the same names.
-const RT_DROP=/DITRON|\bCUSTOM\b|SWEDA|\bE\.?D\.?IT\b|\bEDIT\b|\bZERO ?(5|7|55|8|TOP|\+)|\bZERO5|\bZERO7|\bZERO55|^SPOT\b|SPOT ZERO|SMARTY|\bNINA\b|\bFLY\b|GLOBE|QUADR|FLEXY|\bZIP\b|SPEEDY|MIKROPOS|^DREAM\b|SEVENT?\b|BUFFETTI|^POINT$|^VELVET|^MASTER\b|\bFLEA\b|PULSAR|NESSO|SUPREMA|^ONE$|EDIT ONE/;
+const RT_DROP=/DITRON|\bCUSTOM\b|\bQ3X|\bX ?KUBE|\bKUBE\b|SWEDA|\bE\.?D\.?IT\b|\bEDIT\b|\bZERO ?(5|7|55|8|TOP|\+)|\bZERO5|\bZERO7|\bZERO55|^SPOT\b|SPOT ZERO|SMARTY|\bNINA\b|\bFLY\b|GLOBE|QUADR|FLEXY|\bZIP\b|SPEEDY|MIKROPOS|^DREAM\b|SEVENT?\b|BUFFETTI|^POINT$|^VELVET|^MASTER\b|\bFLEA\b|PULSAR|NESSO|SUPREMA|^ONE$|EDIT ONE/;
 const rtDropped=model=>{const s=String(model||'').toUpperCase().trim();return RT_DROP.test(s)&&!/\bRCH\b/.test(s);};
 // sections: the brands with a portal (DTR, Ital Retail) and Epson on their own, every other register together
 const RT_BRANDS=[

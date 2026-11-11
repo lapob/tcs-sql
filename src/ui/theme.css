@@ -142,7 +142,12 @@ html[data-nav="back"] .anim .reveal{animation-name:fadein;animation-delay:0s}
 
 /* ── scrollbars & selection */
 ::selection{background:color-mix(in srgb,var(--accent) 28%,transparent)}
-*{scrollbar-color:var(--line-2) transparent}
+/* overlay scrollbars like macOS / Windows 11: thin, hidden at rest, shown while the pointer is over the area or while it scrolls */
+:root{--sb:color-mix(in srgb,var(--text) 24%,transparent);--sb-on:color-mix(in srgb,var(--text) 42%,transparent)}
+*{scrollbar-width:thin;scrollbar-color:transparent transparent;transition:scrollbar-color .35s ease}
+:hover{scrollbar-color:var(--sb) transparent}
+.is-scrolling{scrollbar-color:var(--sb-on) transparent!important}
+@media (hover:none){*{scrollbar-color:var(--sb) transparent}}
 
 @media (prefers-reduced-motion:reduce){.hero h1 .grad{animation:none}.card::before{display:none}.tick-up,.tick-down,.card.live,.pop{animation:none}}
 @media (max-width:860px){body::before{background-size:32px 32px;opacity:.4}}

@@ -11,15 +11,9 @@ import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.scaleOut
-import androidx.compose.ui.unit.dp
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,7 +23,6 @@ import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.MoreHoriz
-import androidx.compose.material.icons.rounded.PointOfSale
 import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -50,7 +43,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -155,14 +147,14 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
             CompositionLocalProvider(LocalShared provides this, LocalAppHaze provides haze, LocalBottomBar provides barSpace) {
                 BackMotion.Attach()
                 NavHost(nav, startDestination = "home",
-                    // Material 3 motion. Tabs: "fade through" (old fades out fast, new fades in).
-                    // Details: "shared axis X", the new page slides in a short distance while fading.
-                    // Back: see BackMotion.kt (gesture = card that follows the finger, back key = shared axis).
-                    enterTransition = { BackMotion.forward(); if (isTabSwitch()) fadeIn(tween(220, 60, EmphasizedDecelerate)) else slideInHorizontally(tween(320, easing = EmphasizedDecelerate)) { (it * 0.10f).toInt() } + fadeIn(tween(200, 60)) },
-                    exitTransition = { BackMotion.forward(); if (isTabSwitch()) fadeOut(tween(80)) else slideOutHorizontally(tween(320, easing = EmphasizedDecelerate)) { -(it * 0.10f).toInt() } + fadeOut(tween(110)) },
-                    // back: finger-driven card with the predictive gesture, Material shared axis with the back key (BackMotion.kt)
+                    // Tabs: "fade through". Pages: one motion per action, the same for swipe and key (BackMotion.kt):
+                    // open = slides in from the right over the dimmed page, back = the reverse, following the finger with the gesture.
+                    enterTransition = { if (isTabSwitch()) { BackMotion.forward(); fadeIn(tween(220, 60, EmphasizedDecelerate)) } else with(BackMotion) { pushEnter() } },
+                    exitTransition = { if (isTabSwitch()) { BackMotion.forward(); fadeOut(tween(80)) } else with(BackMotion) { pushExit() } },
                     popEnterTransition = { if (isTabSwitch()) { BackMotion.forward(); fadeIn(tween(220, 60, EmphasizedDecelerate)) } else with(BackMotion) { enter() } },
                     popExitTransition = { if (isTabSwitch()) { BackMotion.forward(); fadeOut(tween(80)) } else with(BackMotion) { exit() } },
+                    predictivePopEnterTransition = { edge -> if (isTabSwitch()) { BackMotion.forward(); fadeIn(tween(220, 60, EmphasizedDecelerate)) } else with(BackMotion) { gestureEnter(edge) } },
+                    predictivePopExitTransition = { edge -> if (isTabSwitch()) { BackMotion.forward(); fadeOut(tween(80)) } else with(BackMotion) { gestureExit(edge) } },
                 ) {
                     fun screen(r: String, body: @Composable (Archive) -> Unit) = composable(r) {
                         CompositionLocalProvider(LocalAnim provides this) { Box(Modifier.navCard(this)) { if (a == null) LoadingArchive() else body(a) } }

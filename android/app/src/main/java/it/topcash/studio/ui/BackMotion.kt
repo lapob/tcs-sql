@@ -6,21 +6,14 @@ import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,8 +22,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import androidx.navigationevent.NavigationEvent
@@ -39,31 +35,34 @@ import androidx.navigationevent.NavigationEventTransitionState
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 
 /**
- * Going back has two characters, like the system apps on Android 15/16:
- *  - predictive gesture (gradual): the page turns into a card that shrinks, rounds its corners and follows the finger
- *    towards the edge it was swiped from, while the previous page comes up from underneath, darker, then lit.
- *    The timeline is linear because NavHost moves it with the finger; letting go finishes it, cancelling puts it back.
- *  - back key / button (instant): Material 3 "shared axis X": the page slides away accelerating and fades out fast,
- *    the previous page arrives from the left decelerating (emphasized easing), its shade lifting.
+ * One motion per action, the same whether you swipe or press back (no scaling, no rounded card, no cross-fades):
+ *  - open a page: it slides in whole from the right edge with a soft shadow on its border,
+ *    the page underneath drifts a quarter to the left and dims (parallax);
+ *  - back: the exact reverse. With the predictive gesture the page follows the finger (linear timeline that
+ *    NavHost seeks; letting go finishes it, cancelling puts it back), with the key it runs on its own (emphasized decelerate).
  * The gesture is read from the same dispatcher NavHost listens to, without intercepting it.
  */
 internal object BackMotion {
-    const val GESTURE_MS = 400
-    private val Accelerate = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)   // Material 3 emphasized accelerate
+    const val GESTURE_MS = 360
+    const val PUSH_MS = 380
+    const val POP_MS = 340
+    const val PARALLAX = 0.25f
+    const val DIM = 0.28f
     private var dispatcher: NavigationEventDispatcher? = null
     private var lastGestureEnd = 0L
     private var sawGesture = false
-    /** state read by every page to draw corners and shade */
+    /** read by every page to draw the dim and the edge shadow */
     var popping by mutableStateOf(false)
     var gesture by mutableStateOf(false)
-    private var edgeSign = 1   // +1: the page leaves to the right (swipe from the left edge), -1: to the left
+    /** +1: the top page moves on the right edge (normal), -1: swiped from the right edge, it leaves to the left */
+    var edgeSign by mutableStateOf(1)
 
     @Composable fun Attach() {
         val d = LocalNavigationEventDispatcherOwner.current?.navigationEventDispatcher
         dispatcher = d
         LaunchedEffect(d) {
             d?.transitionState?.collect { s ->
-                // set before NavHost composes the page underneath, so its first frame is already shaded
+                // set before NavHost composes the page underneath, so its first frame is already dimmed
                 if (s is NavigationEventTransitionState.InProgress) {
                     if (!sawGesture) { popping = true; gesture = true; edgeSign = if (s.latestEvent.swipeEdge == NavigationEvent.EDGE_RIGHT) -1 else 1 }
                     sawGesture = true
@@ -79,60 +78,54 @@ internal object BackMotion {
         val live = s is NavigationEventTransitionState.InProgress
         // NavHost may re-evaluate the spec right after the finger lifts: that is still the gesture's animation
         val g = live || SystemClock.uptimeMillis() - lastGestureEnd < 120
-        if (live) edgeSign = if ((s as NavigationEventTransitionState.InProgress).latestEvent.swipeEdge == NavigationEvent.EDGE_RIGHT) -1 else 1
+        edgeSign = if (live && s.latestEvent.swipeEdge == NavigationEvent.EDGE_RIGHT) -1 else if (g) edgeSign else 1
         gesture = g; popping = true
     }
-    fun forward() { popping = false; gesture = false }
+    fun forward() { popping = false; gesture = false; edgeSign = 1 }
 
-    fun AnimatedContentTransitionScope<NavBackStackEntry>.enter(): EnterTransition {
-        begin()
-        return if (gesture)
-            slideInHorizontally(tween(GESTURE_MS, easing = LinearEasing)) { -(it * 0.10f * edgeSign).toInt() } +
-                scaleIn(tween(GESTURE_MS, easing = LinearEasing), initialScale = 0.95f)
-        else
-            slideInHorizontally(tween(420, easing = EmphasizedDecelerate)) { -(it * 0.08f).toInt() } +
-                fadeIn(tween(300, 60, EmphasizedDecelerate))
-    }
+    private fun push(): FiniteAnimationSpec<IntOffset> = tween(PUSH_MS, easing = EmphasizedDecelerate)
+    private fun pop(): FiniteAnimationSpec<IntOffset> = if (gesture) tween(GESTURE_MS, easing = LinearEasing) else tween(POP_MS, easing = EmphasizedDecelerate)
 
-    fun AnimatedContentTransitionScope<NavBackStackEntry>.exit(): ExitTransition {
-        begin()
-        return if (gesture)
-            slideOutHorizontally(tween(GESTURE_MS, easing = LinearEasing)) { (it * 0.55f * edgeSign).toInt() } +
-                scaleOut(tween(GESTURE_MS, easing = LinearEasing), targetScale = 0.86f) +
-                // stays solid while the finger holds it, fades only once it is on its way out
-                fadeOut(keyframes { durationMillis = GESTURE_MS; 1f at 0; 1f at (GESTURE_MS * 0.5f).toInt(); 0f at GESTURE_MS })
-        else
-            slideOutHorizontally(tween(260, easing = Accelerate)) { (it * 0.14f).toInt() } +
-                scaleOut(tween(260, easing = Accelerate), targetScale = 0.97f) +
-                fadeOut(tween(170, easing = Accelerate))
-    }
+    /** opening: new page from the right edge, the old one drifts left */
+    fun AnimatedContentTransitionScope<NavBackStackEntry>.pushEnter(): EnterTransition { forward(); return slideInHorizontally(push()) { it } }
+    fun AnimatedContentTransitionScope<NavBackStackEntry>.pushExit(): ExitTransition { forward(); return slideOutHorizontally(push()) { -(it * PARALLAX).toInt() } }
+
+    /** back: the page leaves whole towards the edge, the previous one returns from its parallax position */
+    fun AnimatedContentTransitionScope<NavBackStackEntry>.enter(): EnterTransition { begin(); return slideInHorizontally(pop()) { -(it * PARALLAX * edgeSign).toInt() } }
+    fun AnimatedContentTransitionScope<NavBackStackEntry>.exit(): ExitTransition { begin(); return slideOutHorizontally(pop()) { it * edgeSign } }
+
+    /** NavHost's own slot for the predictive gesture (its default would shrink the page to 70%): same motion, driven by the finger */
+    private fun gestureFrom(edge: Int) { popping = true; gesture = true; edgeSign = if (edge == NavigationEvent.EDGE_RIGHT) -1 else 1 }
+    fun AnimatedContentTransitionScope<NavBackStackEntry>.gestureEnter(edge: Int): EnterTransition { gestureFrom(edge); return slideInHorizontally(pop()) { -(it * PARALLAX * edgeSign).toInt() } }
+    fun AnimatedContentTransitionScope<NavBackStackEntry>.gestureExit(edge: Int): ExitTransition { gestureFrom(edge); return slideOutHorizontally(pop()) { it * edgeSign } }
 }
 
-/** Every page: opaque, so the leaving card hides what is under it; rounded while it follows the finger;
- *  the page coming back starts shaded and lights up. Everything is read in the draw phase: no recomposition per frame. */
+/** Every page: opaque; the page underneath is dimmed while another one covers it, the page on top casts a soft shadow
+ *  on its moving edge. Read in the draw phase only: no recomposition per frame. */
 @Composable fun Modifier.navCard(scope: AnimatedVisibilityScope): Modifier {
     val t = scope.transition
     val popping = BackMotion.popping
     val gesture = BackMotion.gesture
-    val corner = t.animateDp(transitionSpec = { tween(if (gesture) BackMotion.GESTURE_MS / 3 else 1, easing = LinearEasing) }, label = "corner") {
-        if (it == EnterExitState.PostExit && popping && gesture) 30.dp else 0.dp
-    }
-    val shade = t.animateFloat(transitionSpec = {
-        if (gesture) tween(BackMotion.GESTURE_MS, easing = LinearEasing) else tween(420, easing = EmphasizedDecelerate)
-    }, label = "shade") { if (it == EnterExitState.PreEnter && popping) (if (gesture) 0.42f else 0.22f) else 0f }
+    val dim = t.animateFloat(transitionSpec = {
+        when { !popping -> tween(BackMotion.PUSH_MS, easing = EmphasizedDecelerate); gesture -> tween(BackMotion.GESTURE_MS, easing = LinearEasing); else -> tween(BackMotion.POP_MS, easing = EmphasizedDecelerate) }
+    }, label = "dim") { s -> if ((s == EnterExitState.PostExit && !popping) || (s == EnterExitState.PreEnter && popping)) BackMotion.DIM else 0f }
+    val shadowColor = Color.Black
     return this.fillMaxSize()
-        .graphicsLayer {
-            val r = corner.value.toPx()
-            if (r > 0.5f) { shape = RoundedCornerShape(r); clip = true } else clip = false
-        }
         .background(MaterialTheme.colorScheme.background)
         .drawWithContent {
             drawContent()
-            val a = shade.value
-            if (a > 0.005f) drawRect(Color.Black.copy(alpha = a))
-            // the card in the hand gets a hairline of light along its rounded edge: it reads as a sheet, even dark on dark
-            val r = corner.value.toPx()
-            if (r > 0.5f) drawRoundRect(Color.White.copy(alpha = 0.10f * (r / 30.dp.toPx()).coerceAtMost(1f)),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(r), style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
+            val a = dim.value
+            if (a > 0.004f) drawRect(Color.Black.copy(alpha = a))
+            // top page while it moves: a soft shadow just outside its leading edge
+            val moving = t.currentState != t.targetState
+            val top = moving && ((!popping && t.targetState == EnterExitState.Visible) || (popping && t.targetState == EnterExitState.PostExit))
+            if (top) {
+                val w = 14.dp.toPx()
+                val left = BackMotion.edgeSign > 0
+                drawRect(
+                    Brush.horizontalGradient(if (left) listOf(Color.Transparent, shadowColor.copy(alpha = 0.22f)) else listOf(shadowColor.copy(alpha = 0.22f), Color.Transparent),
+                        startX = if (left) -w else size.width, endX = if (left) 0f else size.width + w),
+                    topLeft = Offset(if (left) -w else size.width, 0f), size = Size(w, size.height))
+            }
         }
 }

@@ -44,7 +44,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -121,7 +120,7 @@ private fun renTone(s: String) = when (s) { "Rinnovato" -> Tone.Ok; "Perso" -> T
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun AssetSheet(vm: AppViewModel, a: Archive, asset: Asset?, client: UClient?, fixedClient: Boolean = false, onDismiss: () -> Unit) {
-    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true); val scope = rememberCoroutineScope()
+    val sheet = rememberSheet(); val scope = rememberCoroutineScope()
     fun close() = scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss() }
     val x = asset ?: Asset(clientCode = client?.code.orEmpty())
     var who by remember { mutableStateOf(client) }; var clientQ by remember { mutableStateOf(client?.name.orEmpty()) }; var pickOpen by remember { mutableStateOf(false) }
@@ -241,7 +240,7 @@ private fun renTone(s: String) = when (s) { "Rinnovato" -> Tone.Ok; "Perso" -> T
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun RenewalSheet(vm: AppViewModel, a: Archive, d: Deadline, nav: NavHostController, onDismiss: () -> Unit) {
-    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true); val scope = rememberCoroutineScope(); val ctx = LocalContext.current
+    val sheet = rememberSheet(); val scope = rememberCoroutineScope(); val ctx = LocalContext.current
     fun close(after: () -> Unit = {}) = scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss(); after() }
     val m = a.state.renewals[d.key]
     var status by remember { mutableStateOf(m?.status?.ifBlank { null } ?: "Da contattare") }

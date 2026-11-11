@@ -3,9 +3,7 @@ package it.topcash.studio.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -50,9 +48,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -179,11 +177,16 @@ fun hueColor(key: String, dark: Boolean = false): Color { var h = 0; key.forEach
     }
 }
 
+/** Modal sheets open straight to full height (no half-way stop): Material 3 state API. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable fun rememberSheet(): androidx.compose.material3.SheetState = androidx.compose.material3.rememberBottomSheetState(
+    androidx.compose.material3.SheetValue.Hidden, setOf(androidx.compose.material3.SheetValue.Hidden, androidx.compose.material3.SheetValue.Expanded))
+
 /** Label/value row; long-press copies the value. */
 @Composable fun Fact(label: String, value: String, modifier: Modifier = Modifier) {
-    val clip = LocalClipboardManager.current; val haptic = LocalHapticFeedback.current
+    val clip = androidx.compose.ui.platform.LocalClipboard.current; val haptic = LocalHapticFeedback.current; val copyScope = rememberCoroutineScope()
     Column(modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-        .combinedClickable(enabled = value.isNotBlank(), onClick = {}, onLongClick = { clip.setText(AnnotatedString(value)); haptic.performHapticFeedback(HapticFeedbackType.LongPress) })
+        .combinedClickable(enabled = value.isNotBlank(), onClick = {}, onLongClick = { copyScope.launch { clip.setClipEntry(androidx.compose.ui.platform.ClipEntry(android.content.ClipData.newPlainText(label, value))) }; haptic.performHapticFeedback(HapticFeedbackType.LongPress) })
         .padding(vertical = 8.dp, horizontal = 4.dp)) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value.ifBlank { "—" }, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
