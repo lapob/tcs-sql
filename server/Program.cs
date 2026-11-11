@@ -154,6 +154,7 @@ app.UseStaticFiles(new StaticFileOptions
 app.UseAuthentication();app.UseRateLimiter();app.UseAuthorization();
 
 string Who(HttpContext c)=>c.User.FindFirstValue("display")??c.User.Identity?.Name??"?";
+static string Cut(string? s,int n)=>(s??"").Length>n?(s??"")[..n]:(s??"");
 object Me(UserInfo u)=>new{u.Username,u.Name,u.Role,roleLabel=Roles.Label(u.Role),admin=Roles.IsAdmin(u.Role),accounting=Roles.SeesAccounting(u.Role),owner=u.Role==Roles.Owner};
 // an owner carries the admin role too, so every administrator permission applies to them
 ClaimsIdentity Identity(UserInfo u,string stamp)
@@ -362,6 +363,15 @@ app.MapPost("/api/clients/reset",(HttpContext ctx,ClientDeleteRequest r)=>
 }).RequireAuthorization("admin");
 app.MapPost("/api/assets/save",(HttpContext ctx,Asset a)=>{try{var r=store.SaveAsset(a,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("read");
 app.MapPost("/api/assets/delete",(HttpContext ctx,IdRequest r)=>{store.DeleteAsset(r.Id,Who(ctx));hub.Changed();return Results.Ok();}).RequireAuthorization("export");
+// an app that closed unexpectedly sends the error at its next start: kept in the security log for the administrators
+app.MapPost("/api/crash",(HttpContext ctx,CrashReport r)=>
+{
+ var text=(r.Text??"").Replace("\r","");if(text.Length==0)return Results.Ok();
+ var lines=text.Split('\n').Select(l=>l.Trim()).Where(l=>l.Length>0).ToList();
+ var head=string.Join(" | ",lines.Take(1).Concat(lines.Skip(1).Where(l=>l.StartsWith("at it.topcash")||l.StartsWith("Caused by")||!l.StartsWith("at ")).Take(6)));
+ store.Log("users",$"Chiusura imprevista app {Cut(r.Platform,20)} {Cut(r.Version,20)} di {Who(ctx)}: {Cut(head,1500)}");
+ return Results.Ok();
+}).RequireAuthorization("read");
 app.MapPost("/api/renewals/save",(HttpContext ctx,RenewalRequest r)=>{try{var m=store.SaveRenewal(r.Key,r.Status??"",r.Note??"",r.NextContact??"",Who(ctx));hub.Changed();return Results.Ok(m);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("read");
 app.MapPost("/api/links/save",(HttpContext ctx,LinkRequest r)=>{try{store.SaveDeviceLink(r.Serial,r.ClientCode??"",Who(ctx));hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin");
 app.MapPost("/api/clients/merge",(HttpContext ctx,MergeRequest r)=>{try{store.MergeClient(r.Code,r.Into??"",Who(ctx));hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin");
@@ -566,6 +576,7 @@ record ClientDeleteRequest(string? Code,bool Deleted);
 record LicenseSaveRequest(string? Id,LicenseEdit? Edit);
 record UserUpdate(string? Role,bool? Disabled,string? Name,string? Password);
 record UserRename(string? Username);
+record CrashReport(string? Platform,string? Version,string? Text);
 record NoteRequest(string Code,string? Note);
 record MetaRequest(string Code,ClientMeta Meta);
 record BatchRequest(string Kind,string Product,string Scope,List<string> Headers,List<List<string>> Rows,string CapturedAt);

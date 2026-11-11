@@ -203,7 +203,7 @@ private val accRoutes = setOf("acc", "accRec", "accInv", "accPay")
                     screen("users") { if (admin) UsersScreen(vm, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("deleted") { if (admin) DeletedClientsScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("warehouse") { if (admin) WarehouseScreen(vm, it, nav) { t, art -> movement = t to art } else LaunchedEffect(Unit) { nav.switchTab("home") } }
-                    screen("more") { MoreScreen(vm, it, nav) }
+                    screen("more") { MoreScreen(vm, it, nav, area) }
                     screen("deadlines") { DeadlinesScreen(it, nav) }
                     screen("accounting") { if (seesAcc) AccountingScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     AccView.entries.forEach { v -> screen(v.route) { if (seesAcc) AccountingScreen(vm, it, nav, v, topLevel = true) else LaunchedEffect(Unit) { nav.switchTab("home") } } }

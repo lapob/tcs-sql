@@ -24,6 +24,7 @@ class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        CrashLog.install(applicationContext)
         val splash = installSplashScreen()
         // keep the splash until we know where to go (cached archive / session check), then zoom it away
         splash.setKeepOnScreenCondition { vm.screen.value == Screen.Loading }
@@ -59,3 +60,21 @@ class MainActivity : ComponentActivity() {
 private fun AnimatorSet.doOnEndCompat(block: () -> Unit) = addListener(object : android.animation.AnimatorListenerAdapter() {
     override fun onAnimationEnd(animation: android.animation.Animator) = block()
 })
+
+/** Records an unexpected closing of the app (the error, never personal data) so it can be sent to the office server
+ *  at the next start and fixed without needing the phone on a cable. */
+object CrashLog {
+    @Volatile private var installed = false
+    fun file(ctx: android.content.Context) = java.io.File(ctx.filesDir, "crash.txt")
+    fun install(ctx: android.content.Context) {
+        if (installed) return; installed = true
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            runCatching {
+                val sw = java.io.StringWriter(); e.printStackTrace(java.io.PrintWriter(sw))
+                file(ctx).writeText("${java.time.OffsetDateTime.now()} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · Android ${android.os.Build.VERSION.RELEASE} · thread ${t.name}\n" + sw.toString().take(12_000))
+            }
+            previous?.uncaughtException(t, e)
+        }
+    }
+}

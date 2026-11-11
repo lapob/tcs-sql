@@ -48,9 +48,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -243,7 +240,7 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
             Text("Movimento di magazzino", style = MaterialTheme.typography.headlineSmall)
             Gap(14.dp)
             val types = listOf("carico" to "Carico", "scarico" to "Scarico", "trasferimento" to "Trasferisci")
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) { types.forEachIndexed { i, (k, l) -> SegmentedButton(type == k, { type = k }, SegmentedButtonDefaults.itemShape(i, types.size), label = { Text(l, maxLines = 1) }) } }
+            SegmentedPicker(types.map { it.second }, types.indexOfFirst { it.first == type }, { type = types[it].first })
             Gap(14.dp)
             // article: type to search, or scan
             var menu by remember { mutableStateOf(false) }

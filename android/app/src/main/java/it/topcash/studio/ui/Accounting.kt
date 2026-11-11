@@ -72,6 +72,8 @@ private fun statusTone(s: String) = when (s) { "Sollecitato" -> Tone.Info; "Prom
 
 /** The accounting area has four pages, like the four registers of Mastro's accounting: summary, receivables, invoices, payables. */
 private var accFilterHint: String? = null
+/** Opens an accounting page already filtered (from "Altro" in the Contabilità area). */
+fun NavHostController.openAccounting(view: AccView, filter: String) { accFilterHint = filter; switchTab(view.route) }
 enum class AccView(val route: String, val title: String) { Home("acc", "Contabilità"), Receivables("accRec", "Da incassare"), Invoices("accInv", "Fatture"), Payables("accPay", "Da pagare") }
 
 @Composable fun AccountingScreen(vm: AppViewModel, a: Archive, nav: NavHostController, view: AccView = AccView.Home, topLevel: Boolean = false) {

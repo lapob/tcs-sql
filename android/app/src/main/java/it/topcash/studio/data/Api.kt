@@ -130,6 +130,7 @@ class Api(context: Context) {
     suspend fun saveAsset(a: Asset) { post("/api/assets/save", json.encodeToString(a)) }
     suspend fun deleteAsset(id: String) { post("/api/assets/delete", json.encodeToString(IdOnly(id))) }
     suspend fun saveRenewal(r: RenewalRequest) { post("/api/renewals/save", json.encodeToString(r)) }
+    suspend fun sendCrash(version: String, text: String) { post("/api/crash", json.encodeToString(CrashReport("Android", version, text))) }
     // network updates: the APK published on the server by the administrator
     suspend fun updateInfo(): UpdateInfo = json.decodeFromString(get("/api/update/info"))
     suspend fun downloadApk(dir: java.io.File, b: AppBuild, onProgress: (Float) -> Unit): java.io.File = withContext(Dispatchers.IO) {

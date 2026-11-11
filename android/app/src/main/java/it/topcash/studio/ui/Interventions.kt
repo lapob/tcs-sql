@@ -47,9 +47,6 @@ import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
@@ -67,6 +64,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import it.topcash.studio.data.AppViewModel
@@ -224,18 +222,28 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Catalog.interventionStates.forEach { s -> FilterChip(status == s, { if (!ro) status = s }, label = { Text(s) }, enabled = !ro) } }
             Gap(8.dp)
             Text("Priorità", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                Catalog.priorities.forEachIndexed { i, p -> SegmentedButton(priority == p, { if (!ro) priority = p }, SegmentedButtonDefaults.itemShape(i, Catalog.priorities.size), enabled = !ro, label = { Text(p, maxLines = 1) }) }
-            }
+            val st = LocalStatus.current
+            SegmentedPicker(Catalog.priorities, Catalog.priorities.indexOf(priority), { priority = Catalog.priorities[it] }, Modifier.padding(top = 6.dp), enabled = !ro,
+                accent = { when (Catalog.priorities[it]) { "Urgente" -> st.bad; "Alta" -> st.due; else -> null } })
             Gap(14.dp)
             // date and assignee: two fields of the same shape, label on the border, aligned on one line
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
-                Box(Modifier.weight(1f)) {
+            // on phones the two fields stack at full width: the date and the name are never cut
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val narrow = maxWidth < 400.dp
+                val dateField: @Composable (Modifier) -> Unit = { m -> Box(m) {
                     OutlinedTextField(Dates.short(Dates.parse(date)), {}, Modifier.fillMaxWidth(), readOnly = true, enabled = !ro, singleLine = true,
-                        label = { Text("Data") }, leadingIcon = { Icon(Icons.Rounded.CalendarMonth, null) }, shape = MaterialTheme.shapes.medium)
+                        label = { Text("Data") }, leadingIcon = { Icon(Icons.Rounded.CalendarMonth, null, Modifier.size(20.dp)) }, shape = MaterialTheme.shapes.medium,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(letterSpacing = 0.sp))
                     Box(Modifier.matchParentSize().padding(top = 8.dp).clip(MaterialTheme.shapes.medium).clickable(enabled = !ro) { pickDate = true })
                 }
-                SelectField("Assegna a", tech, teamOptions(a.state.team, tech), { tech = it }, Modifier.weight(1f), enabled = !ro)
+                }
+                if (narrow) Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    dateField(Modifier.fillMaxWidth())
+                    SelectField("Assegna a", tech, teamOptions(a.state.team, tech), { tech = it }, Modifier.fillMaxWidth(), enabled = !ro)
+                } else Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
+                    dateField(Modifier.weight(1f))
+                    SelectField("Assegna a", tech, teamOptions(a.state.team, tech), { tech = it }, Modifier.weight(1f), enabled = !ro)
+                }
             }
             val machines = a.byCode[clientCode]?.machines.orEmpty()
             if (machines.isNotEmpty()) {
@@ -243,7 +251,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
                 Text("Macchina", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(machine.isEmpty(), { if (!ro) machine = "" }, label = { Text("Nessuna") }, enabled = !ro)
-                    machines.forEach { m -> FilterChip(machine == m.m.id, { if (!ro) machine = m.m.id }, label = { Text("${m.m.model} · ${m.m.serial}", maxLines = 1) }, enabled = !ro) }
+                    machines.forEach { m -> FilterChip(machine == m.m.id, { if (!ro) machine = m.m.id }, label = { Text("${m.m.model} · ${m.m.serial}", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, enabled = !ro) }
                 }
             }
             Gap(10.dp)

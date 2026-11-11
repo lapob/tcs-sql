@@ -144,6 +144,7 @@ object Catalog {
 /** Follow-up of a deadline: outcome, note, when to call again, with its history. */
 @Serializable data class RenewalStep(val at: String = "", val by: String = "", val status: String = "", val note: String = "")
 @Serializable data class RenewalMark(val status: String = "", val note: String = "", val nextContact: String = "", val at: String = "", val by: String = "", val steps: List<RenewalStep>? = null)
+@Serializable data class CrashReport(val platform: String, val version: String, val text: String)
 @Serializable data class RenewalRequest(val key: String, val status: String, val note: String, val nextContact: String)
 @Serializable data class IdOnly(val id: String)
 /** A build published on the office server by the administrator (network updates). */

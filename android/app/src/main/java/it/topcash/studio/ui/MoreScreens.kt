@@ -31,9 +31,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -101,31 +98,68 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
     }
 }
 
-@Composable fun MoreScreen(vm: AppViewModel, a: Archive, nav: NavHostController) {
+/**
+ * "Altro" shows only what belongs to the area in use, like the website: Interventi → registers, portals, work, licences
+ * and customers; Contabilità → the accounting shortcuts. Account, users and version are in both. Sections with a title,
+ * each row enters once with the page (no cascade on every refresh).
+ */
+@Composable fun MoreScreen(vm: AppViewModel, a: Archive, nav: NavHostController, area: String = "ops") {
     val me by vm.me.collectAsStateWithLifecycle()
-    Page(vm, "Altro", me?.let { "${it.name} · ${it.roleLabel}" }) {
+    val acc = area == "acc" && me?.seesAccounting != false
+    Page(vm, if (acc) "Altro · Contabilità" else "Altro · Interventi", me?.let { "${it.name} · ${it.roleLabel}" }) {
         item(key = "update") { UpdateCard(vm) }
-        item(key = "items") {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                MoreRow(Icons.Rounded.PointOfSale, "Registratori di cassa", "Tutti · ${a.machines.count { it.m.active }} attivi · ${a.verificationsDue.size} verificazioni entro 60 gg", Modifier.appear(0)) { nav.navigate("machines") }
-                MoreRow(Icons.Rounded.Router, "Portale DTR", if (a.registers.isEmpty()) "Si collegano dall'app Windows dell'ufficio" else "${a.registers.size} casse · ${a.dtrErrors.size} con errori · ${a.dtrSilent.size} silenziose", Modifier.appear(0)) { nav.navigate("dtr") }
-                MoreRow(Icons.Rounded.PointOfSale, "Portale Ital Retail", if (a.ital.isEmpty()) "Si collega dall'app Windows dell'ufficio" else "${a.ital.size} casse · ${a.italUpdate.size} da aggiornare · ${a.italNoSub.size} senza abbonamento", Modifier.appear(0)) { nav.navigate("ital") }
-                MoreRow(Icons.Rounded.Print, "Portale RCH", if (a.rch.isEmpty()) "Si collega dall'app Windows dell'ufficio" else "${a.rchLive.size} registratori · ${a.rchVer.size} verificazioni · ${a.rchLow.size} DGFE quasi pieni", Modifier.appear(0)) { nav.navigate("rch") }
-                MoreRow(Icons.Rounded.Route, "Giro di oggi", "Interventi e verificazioni per località, con il percorso", Modifier.appear(1)) { nav.navigate("route") }
-                MoreRow(Icons.Rounded.Call, "Rinnovi", "Chi chiamare, chi ha rinnovato, chi sollecitare", Modifier.appear(1)) { nav.navigate("renewals") }
-                if (me?.seesAccounting != false) MoreRow(Icons.Rounded.Euro, "Contabilità", if (a.acc.hasData) "${AccountingView.money0(a.acc.toCollect)} da incassare · ${a.acc.overdue.size} rate scadute" else "Fatture, incassi e pagamenti da MastroSQL", Modifier.appear(0)) { nav.switchTab("acc") }
-                MoreRow(Icons.Rounded.CalendarMonth, "Scadenziario", "${a.deadlines(0, 120).size} scadenze nei prossimi 120 giorni", Modifier.appear(0)) { nav.navigate("deadlines") }
-                MoreRow(Icons.Rounded.Key, "Licenze Zucchetti", "${a.currentLicenses.size} correnti · ${a.licenses.size - a.currentLicenses.size} storiche", Modifier.appear(1)) { nav.navigate("licenses") }
-                MoreRow(Icons.Rounded.ShoppingBag, "Ordini web", "${a.orders.size} ordini in archivio", Modifier.appear(2)) { nav.navigate("orders") }
-                MoreRow(Icons.Rounded.Computer, "PC e sistemi", if (a.assets.isEmpty()) "Inventario dei PC, stampanti e rete dei clienti" else "${a.assets.count { it.a.active }} in uso · ${a.assetsDue.size} garanzie o scadenze vicine", Modifier.appear(2)) { nav.navigate("inventory") }
-                if (me?.isAdmin == true) {
-                    MoreRow(Icons.Rounded.AccountCircle, "Utenti", "Crea, modifica ed elimina gli accessi, compreso il tuo", Modifier.appear(3)) { nav.navigate("users") }
-                    if (a.deleted.isNotEmpty()) MoreRow(Icons.Rounded.AccountCircle, "Clienti eliminati", "${a.deleted.size} da ripristinare", Modifier.appear(3)) { nav.navigate("deleted") }
+        if (acc) {
+            val ac = a.acc
+            item(key = "acc") {
+                MoreGroup("Contabilità") {
+                    if (!ac.hasData) MoreRow(Icons.Rounded.Euro, "Nessun dato contabile", "Fatture, incassi e pagamenti arrivano da MastroSQL con l'importazione dall'app Windows", Modifier.appear(0)) { nav.switchTab("acc") }
+                    else {
+                        MoreRow(Icons.Rounded.Euro, "Rate scadute da incassare", "${ac.overdue.size} rate · ${AccountingView.money0(ac.overdueSum)}", Modifier.appear(0)) { nav.openAccounting(AccView.Receivables, "Scadute") }
+                        MoreRow(Icons.Rounded.CalendarMonth, "In scadenza nei prossimi 7 giorni", "Incassi da seguire questa settimana", Modifier.appear(0)) { nav.openAccounting(AccView.Receivables, "7 giorni") }
+                        MoreRow(Icons.Rounded.Euro, "Da pagare", "${AccountingView.money0(ac.toPay30)} entro 30 giorni · ${AccountingView.money0(ac.toPay)} in tutto", Modifier.appear(1)) { nav.openAccounting(AccView.Payables, "Aperte") }
+                        MoreRow(Icons.Rounded.Euro, "Tutte le fatture", "${ac.invoices.size} fatture in archivio", Modifier.appear(1)) { nav.openAccounting(AccView.Invoices, "Tutte") }
+                    }
                 }
+            }
+        } else {
+            item(key = "reg") {
+                MoreGroup("Registratori di cassa") {
+                    MoreRow(Icons.Rounded.PointOfSale, "Registratori di cassa", "Tutti · ${a.machines.count { it.m.active }} attivi · ${a.verificationsDue.size} verificazioni entro 60 gg", Modifier.appear(0)) { nav.navigate("machines") }
+                    MoreRow(Icons.Rounded.Router, "Portale DTR", if (a.registers.isEmpty()) "Si collegano dall'app Windows dell'ufficio" else "${a.registers.size} casse · ${a.dtrErrors.size} con errori · ${a.dtrSilent.size} silenziose", Modifier.appear(0)) { nav.navigate("dtr") }
+                    MoreRow(Icons.Rounded.PointOfSale, "Portale Ital Retail", if (a.ital.isEmpty()) "Si collega dall'app Windows dell'ufficio" else "${a.ital.size} casse · ${a.italUpdate.size} da aggiornare · ${a.italNoSub.size} senza abbonamento", Modifier.appear(0)) { nav.navigate("ital") }
+                    MoreRow(Icons.Rounded.Print, "Portale RCH", if (a.rch.isEmpty()) "Si collega dall'app Windows dell'ufficio" else "${a.rchLive.size} registratori · ${a.rchVer.size} verificazioni · ${a.rchLow.size} DGFE quasi pieni", Modifier.appear(0)) { nav.navigate("rch") }
+                }
+            }
+            item(key = "work") {
+                MoreGroup("Lavoro") {
+                    MoreRow(Icons.Rounded.Route, "Giro di oggi", "Interventi e verificazioni per località, con il percorso", Modifier.appear(1)) { nav.navigate("route") }
+                    MoreRow(Icons.Rounded.Call, "Rinnovi", "Chi chiamare, chi ha rinnovato, chi sollecitare", Modifier.appear(1)) { nav.navigate("renewals") }
+                    MoreRow(Icons.Rounded.CalendarMonth, "Scadenziario", "${a.deadlines(0, 120).size} scadenze nei prossimi 120 giorni", Modifier.appear(1)) { nav.navigate("deadlines") }
+                }
+            }
+            item(key = "zuc") {
+                MoreGroup("Zucchetti e clienti") {
+                    MoreRow(Icons.Rounded.Key, "Licenze Zucchetti", "${a.currentLicenses.size} correnti · ${a.licenses.size - a.currentLicenses.size} storiche", Modifier.appear(2)) { nav.navigate("licenses") }
+                    MoreRow(Icons.Rounded.ShoppingBag, "Ordini web", "${a.orders.size} ordini in archivio", Modifier.appear(2)) { nav.navigate("orders") }
+                    MoreRow(Icons.Rounded.Computer, "PC e sistemi", if (a.assets.isEmpty()) "Inventario dei PC, stampanti e rete dei clienti" else "${a.assets.count { it.a.active }} in uso · ${a.assetsDue.size} garanzie o scadenze vicine", Modifier.appear(2)) { nav.navigate("inventory") }
+                    if (me?.isAdmin == true && a.deleted.isNotEmpty()) MoreRow(Icons.Rounded.AccountCircle, "Clienti eliminati", "${a.deleted.size} da ripristinare", Modifier.appear(2)) { nav.navigate("deleted") }
+                }
+            }
+        }
+        item(key = "account") {
+            MoreGroup("Account") {
+                if (me?.isAdmin == true) MoreRow(Icons.Rounded.AccountCircle, "Utenti", "Crea, modifica ed elimina gli accessi, compreso il tuo", Modifier.appear(3)) { nav.navigate("users") }
                 MoreRow(Icons.Rounded.AccountCircle, "Account e impostazioni", "Tema, server, uscita", Modifier.appear(3)) { nav.navigate("account") }
                 MoreRow(Icons.Rounded.SystemUpdate, "Versione ${vm.appVersion}", "Tocca per controllare gli aggiornamenti", Modifier.appear(3)) { vm.checkUpdate(true) }
             }
         }
+    }
+}
+
+@Composable private fun MoreGroup(title: String, content: @Composable () -> Unit) {
+    Column(Modifier.padding(bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SectionTitle(title)
+        content()
     }
 }
 
@@ -187,7 +221,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
             .sortedBy { it.expiry ?: java.time.LocalDate.MAX }
     }
     Page(null, "Licenze", "${list.size} licenze", onBack = { nav.popBackStack() }) {
-        item(key = "tabs") { SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) { listOf("Correnti", "Storico", "Tutte").forEachIndexed { i, t -> SegmentedButton(tab == t, { tab = t }, SegmentedButtonDefaults.itemShape(i, 3), label = { Text(t) }) } } }
+        item(key = "tabs") { val tabs = listOf("Correnti", "Storico", "Tutte"); SegmentedPicker(tabs, tabs.indexOf(tab), { tab = tabs[it] }) }
         item(key = "search") { SearchField(q, { q = it }, "Cerca cliente, matricola, P.IVA", Modifier.padding(vertical = 10.dp)) }
         a.state.licenseCleanup.let { k -> if (k.red + k.old + k.hidden > 0) item(key = "clean") { Text("Non compaiono ${listOfNotNull(k.red.takeIf { it > 0 }?.let { "$it licenze non valide sul portale" }, k.old.takeIf { it > 0 }?.let { "$it scadute da oltre 6 mesi" }, k.hidden.takeIf { it > 0 }?.let { "$it tolte a mano" }).joinToString(", ")}.${if (admin) " Tocca una licenza per correggerla." else ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 10.dp)) } }
         items(list.size.coerceAtMost(1500), key = { list[it].r.id }) { i ->
@@ -242,9 +276,8 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
         }
         item(key = "theme") {
             SectionTitle("Aspetto")
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().appear(1)) {
-                listOf("system" to "Automatico", "light" to "Chiaro", "dark" to "Scuro").forEachIndexed { i, (k, l) -> SegmentedButton(theme == k, { vm.setTheme(k) }, SegmentedButtonDefaults.itemShape(i, 3), label = { Text(l) }) }
-            }
+            val themes = listOf("system" to "Automatico", "light" to "Chiaro", "dark" to "Scuro")
+            SegmentedPicker(themes.map { it.second }, themes.indexOfFirst { it.first == theme }, { vm.setTheme(themes[it].first) }, Modifier.appear(1))
         }
         item(key = "server") {
             SectionTitle("Server")

@@ -44,6 +44,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.composed
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -308,4 +310,38 @@ fun Modifier.bleed(h: Dp): Modifier = this.layout { m, c ->
     val extra = h.roundToPx() * 2
     val p = m.measure(c.copy(minWidth = (c.minWidth + extra).coerceAtLeast(0), maxWidth = if (c.hasBoundedWidth) c.maxWidth + extra else c.maxWidth))
     layout((p.width - extra).coerceIn(c.minWidth, c.maxWidth), p.height) { p.place(-h.roundToPx(), 0) }
+}
+
+/**
+ * Segmented choice with a sliding thumb: the chosen option sits on a raised pill that glides (spring) under the
+ * labels, no tick taking room from the text. Labels shrink a step when the screen is narrow, never touch the edges
+ * and never wrap. One haptic tick per change. [accent] colours the label of the chosen option (e.g. priority).
+ */
+@Composable fun SegmentedPicker(options: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier,
+                                enabled: Boolean = true, accent: (Int) -> Color? = { null }) {
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val cs = MaterialTheme.colorScheme
+    val pill = RoundedCornerShape(50)
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth().height(48.dp).clip(pill).background(cs.surfaceContainerHigh).padding(4.dp)) {
+        val n = options.size.coerceAtLeast(1); val w = maxWidth / n
+        val x by androidx.compose.animation.core.animateDpAsState(w * selected.coerceIn(0, n - 1),
+            androidx.compose.animation.core.spring(dampingRatio = 0.82f, stiffness = 520f), label = "thumb")
+        if (selected in options.indices) Box(Modifier.offset { androidx.compose.ui.unit.IntOffset(x.roundToPx(), 0) }.width(w).fillMaxHeight()
+            .shadow(2.dp, pill, clip = false).clip(pill).background(cs.surface))
+        Row(Modifier.fillMaxSize()) {
+            options.forEachIndexed { i, label ->
+                val on = i == selected
+                val tint by androidx.compose.animation.animateColorAsState(
+                    if (on) accent(i) ?: cs.onSurface else cs.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.5f), label = "label")
+                Box(Modifier.weight(1f).fillMaxHeight().clip(pill)
+                    .selectable(on, enabled = enabled, role = androidx.compose.ui.semantics.Role.Tab) {
+                        if (!on) { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick); onSelect(i) } }
+                    .padding(horizontal = 6.dp), contentAlignment = Alignment.Center) {
+                    androidx.compose.foundation.text.BasicText(label, maxLines = 1, softWrap = false, color = { tint },
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium, textAlign = androidx.compose.ui.text.style.TextAlign.Center),
+                        autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = MaterialTheme.typography.labelLarge.fontSize, stepSize = 0.5.sp))
+                }
+            }
+        }
+    }
 }

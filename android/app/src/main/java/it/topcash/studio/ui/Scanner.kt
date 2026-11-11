@@ -83,7 +83,7 @@ import java.util.concurrent.atomic.AtomicBoolean
     LaunchedEffect(Unit) { if (!granted) ask.launch(Manifest.permission.CAMERA) }
     Dialog(onDismiss, DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            if (granted) CameraScanner(onResult)
+            if (granted) CameraScanner(onResult, onDismiss)
             else Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 Text(if (denied) "Serve il permesso della fotocamera per leggere i codici a barre." else "Richiesta del permesso fotocamera…", color = Color.White, textAlign = TextAlign.Center)
                 if (denied) Button({ ask.launch(Manifest.permission.CAMERA) }, Modifier.padding(top = 16.dp)) { Text("Consenti") }
@@ -95,36 +95,57 @@ import java.util.concurrent.atomic.AtomicBoolean
 }
 
 @androidx.annotation.OptIn(ExperimentalGetImage::class)
-@Composable private fun CameraScanner(onResult: (String) -> Unit) {
+@Composable private fun CameraScanner(onResult: (String) -> Unit, onDismiss: () -> Unit) {
     val ctx = LocalContext.current; val owner = LocalLifecycleOwner.current; val haptic = LocalHapticFeedback.current
     var camera by remember { mutableStateOf<Camera?>(null) }
     var torch by remember { mutableStateOf(false) }
     val done = remember { AtomicBoolean(false) }
+    val closed = remember { AtomicBoolean(false) }
     val executor = remember { Executors.newSingleThreadExecutor() }
+    // every step can fail on some phones (no reader module, camera busy): the scanner then says so, it never closes the app
     val scanner = remember {
-        BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8, Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E,
-            Barcode.FORMAT_CODE_128, Barcode.FORMAT_CODE_39, Barcode.FORMAT_QR_CODE, Barcode.FORMAT_DATA_MATRIX).build())
+        runCatching { BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8, Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E,
+            Barcode.FORMAT_CODE_128, Barcode.FORMAT_CODE_39, Barcode.FORMAT_QR_CODE, Barcode.FORMAT_DATA_MATRIX).build()) }.getOrNull()
     }
+    var problem by remember { mutableStateOf(if (scanner == null) "Il lettore di codici non è disponibile su questo telefono. Aggiorna Google Play Services e riprova." else null) }
     val providerFuture = remember { ProcessCameraProvider.getInstance(ctx) }
-    DisposableEffect(Unit) { onDispose { runCatching { providerFuture.get().unbindAll() }; scanner.close(); executor.shutdown() } }
-    AndroidView(factory = { c ->
+    var analysisRef by remember { mutableStateOf<ImageAnalysis?>(null) }
+    DisposableEffect(Unit) { onDispose {
+        closed.set(true)
+        runCatching { analysisRef?.clearAnalyzer() }; runCatching { providerFuture.get().unbindAll() }
+        runCatching { scanner?.close() }; executor.shutdown()
+    } }
+    if (scanner != null) AndroidView(factory = { c ->
         val view = PreviewView(c).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }
         providerFuture.addListener({
-            val provider = providerFuture.get()
-            val preview = Preview.Builder().build().also { it.surfaceProvider = view.surfaceProvider }
-            val analysis = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
-            analysis.setAnalyzer(executor) { proxy ->
-                val media = proxy.image
-                if (media == null || done.get()) { proxy.close(); return@setAnalyzer }
-                scanner.process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
-                    .addOnSuccessListener { codes -> codes.firstNotNullOfOrNull { it.rawValue?.takeIf(String::isNotBlank) }?.let { v ->
-                        if (done.compareAndSet(false, true)) view.post { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onResult(v.trim()) } } }
-                    .addOnCompleteListener { proxy.close() }
-            }
-            runCatching { provider.unbindAll(); camera = provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis) }
+            if (closed.get()) return@addListener
+            runCatching {
+                val provider = providerFuture.get()
+                val preview = Preview.Builder().build().also { it.surfaceProvider = view.surfaceProvider }
+                val analysis = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
+                analysis.setAnalyzer(executor) { proxy ->
+                    val media = proxy.image
+                    if (media == null || done.get() || closed.get()) { proxy.close(); return@setAnalyzer }
+                    try {
+                        scanner.process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
+                            .addOnSuccessListener { codes -> codes.firstNotNullOfOrNull { it.rawValue?.takeIf(String::isNotBlank) }?.let { v ->
+                                if (!closed.get() && done.compareAndSet(false, true)) view.post { if (!closed.get()) { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onResult(v.trim()) } } } }
+                            .addOnCompleteListener { proxy.close() }
+                    } catch (t: Throwable) { proxy.close() }
+                }
+                analysisRef = analysis
+                provider.unbindAll(); camera = provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+            }.onFailure { problem = "Fotocamera non disponibile: chiudi le altre app che la usano e riprova." }
         }, ContextCompat.getMainExecutor(c))
         view
     }, modifier = Modifier.fillMaxSize())
+    problem?.let { msg ->
+        Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Text(msg, color = Color.White, textAlign = TextAlign.Center)
+            Button(onDismiss, Modifier.padding(top = 16.dp)) { Text("Chiudi") }
+        }
+        return
+    }
     // viewfinder with an animated scan line
     val t = rememberInfiniteTransition(label = "scan")
     val y by t.animateFloat(0.1f, 0.9f, infiniteRepeatable(tween(1400), RepeatMode.Reverse), label = "line")

@@ -78,6 +78,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val s = api.session()
             if (s.user == null) { _screen.value = Screen.Login; return@launch }
             _me.value = s.user; prefs.edit().putString("me", json.encodeToString(Me.serializer(), s.user)).apply()
+            sendCrashLog()
             learnPublic(s.publicUrl)
             _screen.value = Screen.Main; refresh(); connect()
         } catch (e: ApiException) {
@@ -252,6 +253,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun saveAsset(a: Asset) = act(if (a.id.isBlank()) "Aggiunto all'inventario" else "Inventario aggiornato") { api.saveAsset(a) }
     fun deleteAsset(id: String) = act("Tolto dall'inventario") { api.deleteAsset(id) }
     fun saveRenewal(key: String, status: String, note: String, next: String) = act("Esito salvato") { api.saveRenewal(RenewalRequest(key, status, note, next)) }
+    /** A crash recorded on the previous run goes to the office server once (then the file is removed). */
+    private fun sendCrashLog() = viewModelScope.launch(Dispatchers.IO) {
+        val f = it.topcash.studio.CrashLog.file(getApplication()); if (!f.exists()) return@launch
+        runCatching { api.sendCrash(appVersion, f.readText()); f.delete() }
+    }
     /** "Già rinnovata" on a licence (or back to the outcome it had before, when undone). */
     fun markRenewed(key: String, on: Boolean, client: String) {
         val m = _archive.value?.state?.renewals?.get(key)
