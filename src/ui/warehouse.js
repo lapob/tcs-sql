@@ -243,7 +243,7 @@ function partsSection(parts,ro,technician){
   <input class="input mono" data-p="qty" inputmode="decimal" value="${p.qty??1}" style="width:72px" ${ro?'disabled':''}>
   <select class="select" data-p="warehouse" ${ro?'disabled':''}>${W.whs.filter(w=>w.active||w.id===p.warehouse).map(w=>`<option value="${esc(w.id)}"${w.id===(p.warehouse||van)?' selected':''}>${esc(w.name)}</option>`).join('')}</select>
   <input class="input mono" data-p="serial" value="${esc(p.serial||'')}" placeholder="matricola" style="width:120px" ${ro?'disabled':''}>${ro?'':'<button type="button" class="icon-btn" data-prm aria-label="Togli">'+icon('close')+'</button>'}</div>`;
- return`<div class="field">Ricambi usati <span class="muted" style="font-size:11.5px">— scaricati in automatico dal magazzino indicato</span>
+ return`<div class="field"><span class="field-head">Ricambi usati<small class="muted">Scaricati in automatico dal magazzino indicato</small></span>
   <div id="parts">${(parts||[]).map(row).join('')}</div>${ro?'':`<button type="button" class="btn sm ghost" data-padd style="justify-self:start">${icon('plus')}Aggiungi ricambio</button>`}
   <datalist id="mv-arts-p">${W.items.filter(i=>i.active!==false).slice(0,4000).map(i=>`<option value="${esc(i.name)}">${esc(i.code)}</option>`).join('')}</datalist><template id="part-tpl">${row({qty:1,warehouse:van})}</template></div>`;
 }

@@ -450,7 +450,8 @@ function settingsPage(){const t=store.get('theme','auto');
 // ───────────────────────── gestionale: interventions, machines, Mastro import
 const ISTATES=['Aperto','Pianificato','In corso','In attesa','Chiuso'],PRIOS=['Bassa','Normale','Alta','Urgente'];
 const istCls=s=>({'Aperto':'info','Pianificato':'acc','In corso':'due','In attesa':'','Chiuso':'ok'}[s]??'');
-const prioCls=p=>({'Urgente':'bad','Alta':'due','Bassa':''}[p]??'');
+// priority colours, the same as the Android app: Urgente red, Alta yellow, Bassa green, Normale neutral
+const prioCls=p=>({'Urgente':'bad','Alta':'due','Bassa':'ok'}[p]??'');
 function interventionsPage(){
  let list=D.interventions;const q=norm(ui.q);
  if(ui.itab==='open')list=list.filter(i=>i.status!=='Chiuso');else if(ui.itab==='mine')list=list.filter(i=>i.status!=='Chiuso'&&mineInt(i));else if(ui.itab==='today')list=list.filter(i=>i.status!=='Chiuso'&&i.d&&dayDiff(i.d)<=0);else if(ui.itab==='closed')list=list.filter(i=>i.status==='Chiuso'&&i.source==='app');else if(ui.itab==='mastro')list=list.filter(i=>i.source==='mastro');
@@ -487,7 +488,7 @@ function openIntervention(id,clientCode){remember('i',id);
   <datalist id="int-clients">${D.clients.slice(0,3000).map(x=>`<option value="${esc(x.name)}">${esc([x.city,x.code.replace(/^0+/,'')].filter(Boolean).join(' · '))}</option>`).join('')}</datalist>
   <div class="form-row"><label class="field">Data<input class="input" type="date" name="date" value="${esc(v.date||'')}" ${ro?'disabled':''}></label><label class="field">Assegna a<select class="select" name="technician" ${ro?'disabled':''}>${techOptions(v.technician||'')}</select></label></div>
   <label class="field">Titolo<input class="input" name="title" value="${esc(v.title)}" maxlength="200" required placeholder="es. Sostituzione stampante, verificazione periodica…" ${ro?'disabled':''}></label>
-  <div class="form-row"><label class="field">Stato<select class="select" name="status" ${ro?'disabled':''}>${opts(ISTATES,v.status)}</select></label><label class="field">Priorità<select class="select" name="priority" ${ro?'disabled':''}>${opts(PRIOS,v.priority)}</select></label></div>
+  <div class="form-row"><label class="field">Stato<select class="select" name="status" ${ro?'disabled':''}>${opts(ISTATES,v.status)}</select></label><div class="field">Priorità<div class="prio-seg" role="radiogroup" aria-label="Priorità">${PRIOS.map(p=>`<label class="p-${prioCls(p)||'n'}"><input type="radio" name="priority" value="${p}" ${(PRIOS.includes(v.priority)?v.priority:'Normale')===p?'checked':''} ${ro?'disabled':''}><span>${p}</span></label>`).join('')}</div></div></div>
   <label class="field">Macchina<select class="select" name="machine" id="int-machine" ${ro?'disabled':''}>${machOpts(v.clientCode)}</select></label>
   ${typeof partsSection==='function'?partsSection(it?.parts||[],ro,v.technician):''}
   <label class="field">Lavoro svolto / note<textarea class="textarea" name="work" maxlength="20000" ${ro?'disabled':''} placeholder="Descrizione del problema e del lavoro eseguito…">${esc(v.work||'')}</textarea></label>

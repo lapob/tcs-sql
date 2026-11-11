@@ -62,6 +62,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -116,7 +118,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
 }
 
 @Composable fun InterventionRow(x: UIntervention, a: Archive, modifier: Modifier = Modifier, showClient: Boolean = true, vm: AppViewModel? = null, onClick: () -> Unit) {
-    val tone = when (x.i.priority) { "Urgente" -> Tone.Bad; "Alta" -> Tone.Due; else -> Archive.toneOf(x.i.status) }
+    val tone = prioTone(x.i.priority) ?: Archive.toneOf(x.i.status)
     val stripe = LocalStatus.current.of(tone)
     CardBox(modifier, onClick = onClick, padding = PaddingValues(0.dp)) {
         Row(Modifier.heightIn(min = 72.dp).height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
@@ -124,10 +126,11 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
             Column(Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(x.i.title.ifBlank { "Intervento" }, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Pill(x.i.status, Archive.toneOf(x.i.status))
+                    prioTone(x.i.priority)?.let { Pill(x.i.priority, it, Modifier.padding(start = 8.dp, end = 6.dp)) }
+                    Pill(x.i.status, Archive.toneOf(x.i.status), if (prioTone(x.i.priority) == null) Modifier.padding(start = 8.dp) else Modifier)
                 }
                 if (showClient) Text(x.clientName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
-                Text(listOf(x.date?.let { Dates.short(it) + " · " + Dates.relative(Dates.daysFromToday(it)) }, x.i.technician.takeIf { it.isNotBlank() }, if (x.i.priority != "Normale") x.i.priority else null,
+                Text(listOf(x.date?.let { Dates.short(it) + " · " + Dates.relative(Dates.daysFromToday(it)) }, x.i.technician.takeIf { it.isNotBlank() },
                     if (x.i.source == "mastro") "storico Mastro" else null, x.i.reportNo.takeIf { x.i.signedAt.isNotBlank() }?.let { "firmato n. $it" }).filterNotNull().joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
                 if (vm != null && x.i.source == "app" && x.i.signedAt.isBlank() && x.i.status != "Chiuso") QuickActions(vm, x.i, onSign = onClick)
@@ -219,12 +222,20 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
             OutlinedTextField(title, { title = it.take(200) }, Modifier.fillMaxWidth(), enabled = !ro, label = { Text("Titolo") }, placeholder = { Text("es. Sostituzione stampante, verificazione…") }, singleLine = true, shape = MaterialTheme.shapes.medium)
             Gap(14.dp)
             Text("Stato", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Catalog.interventionStates.forEach { s -> FilterChip(status == s, { if (!ro) status = s }, label = { Text(s) }, enabled = !ro) } }
-            Gap(8.dp)
+            Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Catalog.interventionStates.chunked(3).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { s -> FilterChip(status == s, { if (!ro) status = s }, modifier = Modifier.weight(1f).height(40.dp), enabled = !ro, shape = MaterialTheme.shapes.small,
+                            label = { Text(s, Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis) }) }
+                        repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+            Gap(14.dp)
             Text("Priorità", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             val st = LocalStatus.current
-            SegmentedPicker(Catalog.priorities, Catalog.priorities.indexOf(priority), { priority = Catalog.priorities[it] }, Modifier.padding(top = 6.dp), enabled = !ro,
-                accent = { when (Catalog.priorities[it]) { "Urgente" -> st.bad; "Alta" -> st.due; else -> null } })
+            SegmentedPicker(Catalog.priorities, Catalog.priorities.indexOf(priority).let { if (it < 0) 1 else it }, { priority = Catalog.priorities[it] }, Modifier.padding(top = 8.dp), enabled = !ro,
+                accent = { prioTone(Catalog.priorities[it])?.let(st::of) })
             Gap(14.dp)
             // date and assignee: two fields of the same shape, label on the border, aligned on one line
             // on phones the two fields stack at full width: the date and the name are never cut

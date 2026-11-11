@@ -49,6 +49,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -328,9 +329,12 @@ fun Modifier.bleed(h: Dp): Modifier = this.layout { m, c ->
         val x by androidx.compose.animation.core.animateDpAsState(w * selected.coerceIn(0, n - 1),
             androidx.compose.animation.core.spring(dampingRatio = 0.82f, stiffness = 520f), label = "thumb")
         // the raised pill is lighter than the track in both themes (in dark mode "surface" is darker than the track and looked black)
-        val thumb = if (cs.surface.luminance() < 0.5f) cs.surfaceBright else cs.surface
+        val base = if (cs.surface.luminance() < 0.5f) cs.surfaceBright else cs.surface
+        // the chosen option tints the pill softly with its own colour (priority: red, yellow, green; Normale stays neutral)
+        val tinted = accent(selected.coerceIn(0, n - 1))?.copy(alpha = 0.2f)?.compositeOver(base) ?: base
+        val thumb by androidx.compose.animation.animateColorAsState(if (enabled) tinted else tinted.copy(alpha = 0.75f), label = "thumb")
         if (selected in options.indices) Box(Modifier.offset { androidx.compose.ui.unit.IntOffset(x.roundToPx(), 0) }.width(w).fillMaxHeight()
-            .shadow(if (enabled) 2.dp else 0.dp, pill, clip = false).clip(pill).background(if (enabled) thumb else thumb.copy(alpha = 0.7f)))
+            .shadow(if (enabled) 2.dp else 0.dp, pill, clip = false).clip(pill).background(thumb))
         Row(Modifier.fillMaxSize()) {
             options.forEachIndexed { i, label ->
                 val on = i == selected
@@ -369,3 +373,7 @@ fun Modifier.bleed(h: Dp): Modifier = this.layout { m, c ->
             autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MaterialTheme.typography.labelLarge.fontSize, stepSize = 0.5.sp))
     }
 }
+
+/** Priority colours, the same on the website: Urgente red, Alta yellow, Bassa green, Normale none. */
+fun prioTone(p: String): Tone? = when (p) { "Urgente" -> Tone.Bad; "Alta" -> Tone.Due; "Bassa" -> Tone.Ok; else -> null }
+@Composable fun prioColor(p: String): Color? = prioTone(p)?.let { LocalStatus.current.of(it) }
