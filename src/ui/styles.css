@@ -1055,3 +1055,28 @@ td .svc{padding:3px 8px;font-size:11px;margin:0 4px 4px 0}td small svg{width:12p
 }
 @media (max-width:380px){.area-switch.top button{padding:0 8px;gap:5px}.area-switch.top button svg{display:none}}
 @media (prefers-reduced-motion:reduce){.area-ind{transition:none}}
+
+/* ── accounting: cash flow + aging of the overdue ── */
+.legend{display:flex;gap:12px;font-size:12px;color:var(--text-3);white-space:nowrap}.legend i{display:inline-block;width:8px;height:8px;border-radius:3px;margin-right:6px;vertical-align:1px}
+.flow{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px;align-items:end;padding-top:6px}
+.flow-w{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0}
+.flow-bars{display:flex;gap:3px;align-items:flex-end;height:120px;width:100%;justify-content:center}
+.flow-bars i{display:block;flex:1;max-width:14px;min-height:2px;border-radius:5px 5px 2px 2px;transform-origin:bottom;animation:grow .9s var(--spring) both;animation-delay:calc(var(--i)*45ms)}
+.flow-bars .in{background:linear-gradient(180deg,var(--ok),color-mix(in srgb,var(--ok) 45%,transparent))}
+.flow-bars .out{background:linear-gradient(180deg,var(--bad),color-mix(in srgb,var(--bad) 45%,transparent))}
+.flow-w b{font-size:11px;font-weight:650;color:var(--ok);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}.flow-w b.neg{color:var(--bad)}
+.flow-w span{font-size:11px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.flow-note{margin:14px 0 0;font-size:13px;color:var(--text-2)}
+.aging-bar{display:flex;gap:3px;height:14px;border-radius:8px;overflow:hidden;margin:6px 0 16px}
+.aging-bar i{display:block;min-width:4px;border-radius:4px;transform-origin:left;animation:grow-x .8s var(--spring) both;animation-delay:calc(var(--i)*60ms)}
+@keyframes grow-x{from{transform:scaleX(0)}}
+.aging{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.aging > div{display:flex;flex-direction:column;gap:2px;padding:12px 14px;border-radius:14px;background:color-mix(in srgb,var(--text) 4%,transparent);min-width:0}
+.aging span{font-size:12px;color:var(--text-3)}.aging span i{display:inline-block;width:8px;height:8px;border-radius:3px;margin-right:6px}
+.aging strong{font-size:17px}.aging small{font-size:12px;color:var(--text-3)}
+@media (max-width:760px){.flow{gap:3px}.flow-w b{font-size:10px}.flow-bars{height:96px}}
+@media (prefers-reduced-motion:reduce){.flow-bars i,.aging-bar i{animation:none}}
+/* giro di oggi: filters on one row (wrap on phones), "show more" centred under the list */
+.route-tools{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}.route-tools .seg .count{margin-left:6px;font-size:11px;font-weight:600;opacity:.7;font-variant-numeric:tabular-nums}
+.route-more{display:flex;margin:10px auto 0}
+.route-more-cities{display:flex;margin:16px auto 0}.route-more-cities svg{transform:rotate(90deg)}

@@ -713,6 +713,8 @@ function saveMeta(code,patch){const old=state.metadata[code]||{favorite:false,ne
 // Each area has its own navigation and remembers its last page; technicians only have Interventi.
 const ACC_PAGES=['accounting','accRec','accInv','accPay','accCli'];
 const areaOf=p=>ACC_PAGES.includes(p)?'acc':'ops';
+// system pages (Utenti, Sync, Impostazioni, App) belong to both areas: opening them keeps the area you are in
+const SYS_PAGES=['team','sync','settings','apps'];const curArea=()=>document.documentElement.dataset.area||areaOf(page);
 const AREA_TABS={ops:['overview','clients','interventions','warehouse'],acc:['accounting','accRec','accInv','accPay']};
 let MAIN_TABS=AREA_TABS.ops;
 function setArea(a){const root=document.documentElement;if(root.dataset.area===a)return;const was=root.dataset.area;root.dataset.area=a;MAIN_TABS=AREA_TABS[a];
@@ -720,7 +722,9 @@ function setArea(a){const root=document.documentElement;if(root.dataset.area===a
  $$('[data-area-go]').forEach(b=>{b.setAttribute('aria-selected',String(b.dataset.areaGo===a));});
  // the area's navigation slides in from the side of the chosen tab (one movement, no flash)
  const nav=$('#nav');if(was&&nav?.animate&&!reduced)nav.animate([{opacity:0,transform:`translateX(${a==='acc'?12:-12}px)`},{opacity:1,transform:'none'}],{duration:260,easing:'cubic-bezier(.2,.8,.2,1)'});}
-function goArea(a){if(a==='acc'&&!canAccounting())return;if(areaOf(page)===a)return;let p=store.get('page.'+a);if(!PAGES[p]||areaOf(p)!==a)p=a==='acc'?'accounting':'overview';go(p);}
+/** the sections of the current area in menu order (what Alt+1…9 opens) */
+function areaPages(){const a=curArea();return[...new Set($$('#nav .nav-item[data-page]').filter(b=>[a,'both'].includes(b.dataset.area||'ops')&&!(b.classList.contains('need-admin')&&!isAdmin())&&!(b.classList.contains('need-acc')&&!canAccounting())&&!(b.dataset.page==='team'&&!(WEB&&(me?.role==='admin'||me?.role==='owner')))&&PAGES[b.dataset.page]).map(b=>b.dataset.page))];}
+function goArea(a){if(a==='acc'&&!canAccounting())return;if(curArea()===a&&!SYS_PAGES.includes(page))return;let p=store.get('page.'+a);if(!PAGES[p]||areaOf(p)!==a||SYS_PAGES.includes(p))p=a==='acc'?'accounting':'overview';go(p);}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-area-go]');if(b)goArea(b.dataset.areaGo);});
 let cmdSel=0,cmdItems=[];
 // recently opened clients / interventions (per device) → first thing in the quick search
@@ -740,7 +744,7 @@ function quickActions(){const a=[{t:'Nuovo intervento',s:'N',ic:'tool',run:()=>o
 function openCmd(){$('#cmd').hidden=false;const i=$('#cmd-q');i.value=ui.q||'';cmdRender();setTimeout(()=>{i.focus();i.select();},10);}
 function closeCmd(){$('#cmd').hidden=true;}
 function cmdRender(){const q=norm($('#cmd-q').value.trim());const out=[];
- Object.entries(PAGES).forEach(([k,l],i)=>{if(k==='team'&&!(WEB&&(me?.role==='admin'||me?.role==='owner')))return;if((k==='warehouse'||k==='check')&&!isAdmin())return;if(ACC_PAGES.includes(k)&&!canAccounting())return;if(!q||norm(l).includes(q))out.push({g:'Sezioni',t:l,s:'Alt + '+(i+1),ic:{overview:'home',clients:'users',licenses:'key',expiry:'calendar',orders:'bag',tasks:'task',sync:'sync',settings:'settings',team:'shield',interventions:'tool',machines:'register',warehouse:'box',accounting:'euro',route:'pin',renewals:'phone',inventory:'grid',check:'check',dtr:'shield',ital:'register'}[k],run:()=>go(k)});});
+ const AP=areaPages();Object.entries(PAGES).forEach(([k,l])=>{const i=AP.indexOf(k);if(k==='team'&&!(WEB&&(me?.role==='admin'||me?.role==='owner')))return;if((k==='warehouse'||k==='check')&&!isAdmin())return;if(ACC_PAGES.includes(k)&&!canAccounting())return;if(!q||norm(l).includes(q))out.push({g:'Sezioni',t:l,s:i>=0&&i<9?'Alt + '+(i+1):(areaOf(k)==='acc'?'Contabilità':'Interventi'),ic:{overview:'home',clients:'users',licenses:'key',expiry:'calendar',orders:'bag',tasks:'task',sync:'sync',settings:'settings',team:'shield',interventions:'tool',machines:'register',warehouse:'box',accounting:'euro',route:'pin',renewals:'phone',inventory:'grid',check:'check',dtr:'shield',ital:'register'}[k],run:()=>go(k)});});
  if(q){D.clients.filter(c=>c.search.includes(q)).slice(0,8).forEach(c=>out.push({g:'Clienti',t:c.name,s:[c.city,c.phone,c.email].filter(Boolean).join(' · ')||'Cod. '+c.code,mark:c,run:()=>openClient(c.code)}));
   state.records.filter(r=>norm(r.serial).includes(q)).slice(0,5).forEach(r=>out.push({g:'Matricole',t:r.serial,s:r.client+' · scade '+(r.expiry||'—'),ic:'key',run:()=>openClient(r.clientCode)}));
   if(HAS_W())W.items.filter(i=>i.search.includes(q)).slice(0,5).forEach(i=>out.push({g:'Magazzino',t:i.name,s:i.code+(i.barcode?' · '+i.barcode:'')+' · giacenza '+qf(i.total)+' '+i.unit,ic:'box',run:()=>openArticle(i.code)}));
@@ -763,7 +767,7 @@ function render(animate){
  // live update on the same page: remember the numbers shown, to roll only the ones that change
  const before=!animate&&lastRendered===page?$$('#main [data-count]').map(el=>+el.dataset.count):null;
  const badges=$$('.nav-item .badge, .nav-item [id^="nav-"]').map(b=>[b,b.textContent]);
- setArea(areaOf(page));store.set('page.'+areaOf(page),page);
+ {const ar=SYS_PAGES.includes(page)?curArea():areaOf(page);setArea(ar);if(!SYS_PAGES.includes(page))store.set('page.'+ar,page);}
  main.innerHTML=`<div class="page">${html()}</div>`;lastRendered=page;
  $('#crumb').textContent=PAGES[page];
  $$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.page===page));$('#nav-more')?.classList.toggle('active',!MAIN_TABS.includes(page));moveIndicator();
@@ -900,13 +904,14 @@ document.addEventListener('keydown',e=>{
   if(k==='m'&&HAS_W()){e.preventDefault();return openMovement('carico');}
   if(e.key==='/'){e.preventDefault();const q=$('#q');return q?(q.focus(),q.select()):openCmd();}
   if(e.key==='?'){e.preventDefault();return showKeys();}
+  if(k==='a'&&canAccounting()){e.preventDefault();return goArea(curArea()==='acc'?'ops':'acc');}
  }
  if(e.key==='Escape')return closeDrawer();
- if(e.altKey&&/^[1-9]$/.test(e.key)){e.preventDefault();return go(Object.keys(PAGES)[+e.key-1]);}
+ if(e.altKey&&/^[1-9]$/.test(e.key)){e.preventDefault();const p=areaPages()[+e.key-1];return p&&go(p);}
  if(e.key==='Enter'&&e.target.matches('[data-client],[data-go],[data-int]'))e.target.click();
 });
 function showKeys(){const K=(k,t)=>`<div class="key-row"><span>${t}</span><span>${k.split('+').map(x=>`<kbd>${x}</kbd>`).join('')}</span></div>`;
- ask({title:'Scorciatoie da tastiera',html:`<div class="keys">${K('Ctrl+K','Ricerca rapida ovunque')}${K('/','Cerca nella pagina')}${K('N','Nuovo intervento')}${HAS_W()?K('M','Carico merce'):''}${K('Alt+1…9','Vai a una sezione')}${K('Ctrl+Invio','Salva il modulo aperto')}${K('Esc','Chiudi')}${K('?','Questo elenco')}</div>`,ok:'Ho capito',cancel:false});}
+ ask({title:'Scorciatoie da tastiera',html:`<div class="keys">${K('Ctrl+K','Ricerca rapida ovunque')}${K('/','Cerca nella pagina')}${K('N','Nuovo intervento')}${HAS_W()?K('M','Carico merce'):''}${K('Alt+1…9','Vai a una sezione dell’area')}${canAccounting()?K('A','Passa da Interventi a Contabilità'):''}${K('Ctrl+Invio','Salva il modulo aperto')}${K('Esc','Chiudi')}${K('?','Questo elenco')}</div>`,ok:'Ho capito',cancel:false});}
 // "Nuovo" in the top bar: the most frequent actions one click away
 {const b=$('#quick-new'),menu=$('#quick-menu');
  b.addEventListener('click',()=>{menu.innerHTML=quickActions().map((a,i)=>`<button class="qm-item" data-qm="${i}" role="menuitem"><span class="ico">${icon(a.ic)}</span><span class="grow">${a.t}</span>${a.s?`<kbd>${a.s}</kbd>`:''}</button>`).join('');
@@ -919,7 +924,7 @@ $('#drawer-backdrop').addEventListener('click',closeDrawer);
 // phone: 4 main sections in the bottom bar, the rest in the "Altro" sheet
 $('#nav-more').addEventListener('click',openMoreSheet);
 function openMoreSheet(){if(document.querySelector('.more-sheet'))return;
- const items=$$('.nav-item[data-page]').filter(b=>!MAIN_TABS.includes(b.dataset.page)&&!(b.dataset.page==='team'&&!(WEB&&(me?.role==='admin'||me?.role==='owner')))&&!(b.dataset.page==='warehouse'&&!isAdmin())&&!(b.dataset.page==='check'&&!isAdmin())&&!(ACC_PAGES.includes(b.dataset.page)&&!canAccounting())&&[areaOf(page),'both'].includes(b.dataset.area||'ops')&&b.dataset.page!==undefined);
+ const items=$$('.nav-item[data-page]').filter(b=>!MAIN_TABS.includes(b.dataset.page)&&!(b.dataset.page==='team'&&!(WEB&&(me?.role==='admin'||me?.role==='owner')))&&!(b.dataset.page==='warehouse'&&!isAdmin())&&!(b.dataset.page==='check'&&!isAdmin())&&!(ACC_PAGES.includes(b.dataset.page)&&!canAccounting())&&[curArea(),'both'].includes(b.dataset.area||'ops')&&b.dataset.page!==undefined);
  const m=document.createElement('div');m.className='modal more-sheet';
  m.innerHTML=`<div class="sheet-box" role="dialog" aria-label="Altre sezioni"><i class="grip"></i><div class="more-grid">${items.map((b,i)=>{const em=b.querySelector('em.hot')?.textContent||'';return`<button class="more-item${b.dataset.page===page?' on':''}" data-more="${b.dataset.page}" style="--i:${i}">${b.querySelector('svg').outerHTML}<span>${b.querySelector('span').textContent}</span>${em?`<em>${esc(em)}</em>`:''}</button>`;}).join('')}</div></div>`;
  document.body.append(m);

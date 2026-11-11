@@ -275,6 +275,25 @@ Come MastroSQL è diviso in Mastro e Contabilità, Top Cash Studio ha due aree. 
 - Ogni area ricorda l'ultima pagina aperta. Passando da un'area all'altra cambiano il menu e la barra in basso, con un solo movimento morbido.
 - I tecnici vedono solo Interventi: per loro il selettore non compare.
 
+## Cosa arriva da MastroSQL (sola lettura)
+
+"Importa da MastroSQL" (app Windows, Impostazioni) legge Mastro senza mai modificarlo e porta in Studio:
+- **Clienti**: telefoni e email presi dalla rubrica di Mastro (`tele_nume`) e dall'anagrafica.
+- **Registratori e verifiche periodiche** (le ultime 4 per registratore).
+- **Interventi degli ultimi 12 mesi** (`lis_int`): tecnico, difetto, lavoro svolto e materiale usato (`rig_int`). Quelli ancora aperti in Mastro negli ultimi 60 giorni compaiono come "Aperto"; lo storico più vecchio resta in Mastro.
+- **Articoli e giacenze per magazzino**: per le giacenze vale l'ultimo anno di `art_giace`. Spunta "Allinea giacenze" per portarle in Studio.
+- **Fatture.**
+- **Scadenze**: riconciliate con i saldi dei conti. Arrivano tutte le rate ancora aperte più quelle degli ultimi 12 mesi.
+- **Saldi, RiBa, sedi.**
+
+Contabilità nuova nel Riepilogo:
+- **Flusso di cassa**: le prossime 8 settimane.
+- **Anzianità dello scaduto**: 1–30, 31–60, 61–90 e oltre 90 giorni.
+
+Scorciatoie:
+- Alt+1…9 aprono le voci del menu dell'area in cui sei.
+- Il tasto A passa da Interventi a Contabilità e viceversa.
+
 ## Animazioni e scorrimento
 
 - **Android**: un solo movimento per azione. Aprendo una sezione la pagina entra da destra sopra quella precedente, che si scurisce e scorre un po' a sinistra; tornando indietro avviene l'esatto contrario, uguale con il gesto (la pagina segue il dito) e con il tasto. Le schede in basso cambiano con una dissolvenza.

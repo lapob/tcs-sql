@@ -202,7 +202,7 @@ public static class MastroReader
      if(!hist.TryGetValue(id,out var l))hist[id]=l=[];
      l.Add(new(F(d,"DATA_IN","DATA_FI"),outcome,kind,F(d,"OPERAIO"),F(d,"SIGILLO"),F(d,"IMPORTO") is var a&&a!="0"&&a!="0.00"?a:"",F(d,"NUME_RAPP","NUME"),F(d,"DOVE_ESEGUITO") is var w&&w!="0"?w:"",F(d,"NOTE")));
     }
-    foreach(var(id,l) in hist){var sorted=l.OrderByDescending(v=>v.Date,StringComparer.Ordinal).ToList();byId[id]=byId[id] with{Verifications=sorted.Take(12).ToList(),VerificationCount=sorted.Count};}
+    foreach(var(id,l) in hist){var sorted=l.OrderByDescending(v=>v.Date,StringComparer.Ordinal).ToList();byId[id]=byId[id] with{Verifications=sorted.Take(4).ToList(),VerificationCount=sorted.Count};}
    }
    rtList=byId.Values.Where(r=>r.Fields.Count>0||r.VerificationCount>0).ToList();
   }
@@ -230,7 +230,7 @@ public static class MastroReader
    var tc=new List<string>();await using(var r=await q.ExecuteReaderAsync(ct))while(await r.ReadAsync(ct))tc.Add(r.GetString(0).ToUpperInvariant());return tc;
   }
   string[] interWords=["interv","inte","assist","rapport","chiamat","ticket","lavor"];
-  var candidates=tables.Where(x=>!x.StartsWith("y_",StringComparison.OrdinalIgnoreCase)&&interWords.Any(w=>x.Contains(w,StringComparison.OrdinalIgnoreCase)))
+  var candidates=tables.Where(x=>!x.StartsWith("y_",StringComparison.OrdinalIgnoreCase)&&!x.StartsWith("tmp_",StringComparison.OrdinalIgnoreCase)&&interWords.Any(w=>x.Contains(w,StringComparison.OrdinalIgnoreCase)))
    .OrderBy(x=>Array.FindIndex(interWords,w=>x.Contains(w,StringComparison.OrdinalIgnoreCase))).ToList();
   var schema=new Dictionary<string,List<string>>();
   string interNum="NUME_INTE",interDate="DATA_INTE",interClient="CODICE";
@@ -247,7 +247,49 @@ public static class MastroReader
   if(tMacc!=null)schema[tMacc]=machineCols.Select(x=>x.ToUpperInvariant()).ToList();
   if(tTipi!=null)schema[tTipi]=await Cols(tTipi);
   try{File.WriteAllText(Path.Combine(Paths.Runtime("mastro"),"schema.json"),System.Text.Json.JsonSerializer.Serialize(new{read=DateTimeOffset.Now,tables,columns=schema,interTable,interNum,interDate,interClient},new System.Text.Json.JsonSerializerOptions{WriteIndented=true}));}catch{}
-  if(interTable.Length>0)
+  if(Tab("lis_int") is string tli)
+  {
+   // closed ones of the last 12 months + the open ones (older history stays in Mastro: it would only slow down the phones); Mastro is read, never written
+   interTable=tli;var since=DateTime.Today.AddMonths(-12);var recent=DateTime.Today.AddDays(-60).ToString("yyyy-MM-dd");
+   var want=new[]{"NUME","CODI","NOME_CLI","DATA","ORA","NUME_MACC","MACCHINA","MATRICOLA","DIFETTO","LAVORO","NOTE","TECNICO","URGENTE","ESEGUITO","CHIUSO","TOT_DOC"};
+   var have=await Cols(tli);var sel=want.Where(have.Contains).ToList();
+   var mats=new Dictionary<string,List<string>>();
+   if(Tab("rig_int") is string tri&&have.Contains("DATA"))try
+   {
+    await using var q=new MySqlCommand($"SELECT r.NUME,r.DESCRI,r.QUAN FROM `{tri.Replace("`","")}` r JOIN `{tli.Replace("`","")}` l ON l.NUME=r.NUME WHERE l.DATA>=@s",c);q.Parameters.AddWithValue("@s",since);
+    await using var r=await q.ExecuteReaderAsync(ct);
+    while(await r.ReadAsync(ct))
+    {
+     var k=S(r.GetValue(0));var what=S(r.GetValue(1)).Trim();if(k.Length==0||what.Length==0)continue;var qn=D(S(r.GetValue(2)));
+     if(!mats.TryGetValue(k,out var l))mats[k]=l=[];if(l.Count<12)l.Add(qn>0&&qn!=1?$"{what} ×{qn.ToString("0.##",CultureInfo.InvariantCulture)}":what);
+    }
+   }
+   catch(MySqlException ex){warnings.Add("Materiali degli interventi non leggibili: "+ex.Message);}
+   static string Cap(string x){x=x.Trim();return x.Length==0?x:char.ToUpper(x[0],CultureInfo.GetCultureInfo("it-IT"))+x[1..].ToLower(CultureInfo.GetCultureInfo("it-IT"));}
+   if(sel.Contains("NUME")&&sel.Contains("CODI")&&sel.Contains("DATA"))
+   {
+    await using var q=new MySqlCommand($"SELECT {string.Join(',',sel.Select(x=>$"`{x}`"))} FROM `{tli.Replace("`","")}` WHERE DATA>=@s ORDER BY NUME",c);q.Parameters.AddWithValue("@s",since);
+    await using var r=await q.ExecuteReaderAsync(ct);
+    while(await r.ReadAsync(ct))
+    {
+     var d=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);for(int i=0;i<r.FieldCount;i++){object? v;try{v=r.GetValue(i);}catch{v=null;}d[r.GetName(i)]=S(v);}
+     var n=F(d,"NUME");var client=Num(F(d,"CODI"));if(n.Length==0||n=="0"||client.Length==0||client=="0")continue;
+     var date=F(d,"DATA");var done=True(F(d,"CHIUSO"))||True(F(d,"ESEGUITO"));
+     // still open in Mastro and recent = to do; very old unclosed ones are considered done
+     var open=!done&&string.CompareOrdinal(date,recent)>=0;
+     var difetto=F(d,"DIFETTO");var lavoro=F(d,"LAVORO").Trim();var first=lavoro.Split('\n')[0].Trim();
+     var title=difetto.Length>0?Cap(difetto):first.Length>0?(first.Length>90?first[..90]+"…":first):"Intervento n. "+n;
+     var lines=new List<string>();var mac=string.Join(" · ",new[]{F(d,"MACCHINA"),F(d,"MATRICOLA").Trim() is var m&&m.Length>0?"matr. "+m:""}.Where(x=>x.Length>0));
+     if(mac.Length>0)lines.Add(mac);if(lavoro.Length>0)lines.Add(lavoro);if(F(d,"NOTE").Trim() is var nt&&nt.Length>0)lines.Add(nt);
+     if(mats.TryGetValue(n,out var ml))lines.Add("Materiale: "+string.Join(", ",ml));
+     var work=string.Join("\n",lines);if(work.Length>700)work=work[..700]+"…";
+     var created=F(d,"ORA") is var ora&&ora.Length>0?$"{date}T{ora}":date;
+     interventions.Add(new("mi"+n,client,F(d,"NOME_CLI"),date,F(d,"NUME_MACC"),title,work,open?"Aperto":"Chiuso",Tech(F(d,"TECNICO")),True(F(d,"URGENTE"))?"Urgente":"Normale",
+      F(d,"TOT_DOC") is var tot&&tot!="0"?tot:"","mastro",created,"Mastro","",""));
+    }
+   }
+  }
+  else if(interTable.Length>0)
   {
    foreach(var d in await All(interTable,300_000))
    {
@@ -280,8 +322,20 @@ public static class MastroReader
    }
    articles=articles.DistinctBy(a=>a.Code.ToUpperInvariant()).ToList();
    if(Tab("art_giace") is string tg)
+   {
+    // Mastro 20: one row per article (CORTO = internal number of arti) × warehouse × year; the stock is ESIS of the latest real year
+    var byCorto=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+    foreach(var d in await All(tArti,300_000)){var k=F(d,"CORTO");var code=F(d,"CODI","CODICE");if(k.Length>0&&code.Length>0)byCorto.TryAdd(k,code);}
+    var latest=new Dictionary<(string,string),(int Year,decimal Qty)>();
     foreach(var d in await All(tg,500_000))
-    {var q=D(F(d,"ESIS"));var code=F(d,"CODI","ARTI","ART_CODI","CODICE");if(q!=0&&code.Length>0)stock.Add(new(code,F(d,"MAGA").Length>0?F(d,"MAGA"):"1",q));}
+    {
+     var code=F(d,"CODI","ARTI","ART_CODI","CODICE");if(code.Length==0&&byCorto.TryGetValue(F(d,"CORTO"),out var bc))code=bc;if(code.Length==0)continue;
+     var year=int.TryParse(F(d,"ANNO"),out var y)?y:0;if(year>DateTime.Today.Year)continue; // typos like 4202 in Mastro
+     var maga=F(d,"MAGA").Length>0?F(d,"MAGA"):"1";var key=(code,maga);
+     if(!latest.TryGetValue(key,out var cur)||year>=cur.Year)latest[key]=(year,D(F(d,"ESIS")));
+    }
+    foreach(var ((code,maga),v) in latest)if(v.Qty!=0)stock.Add(new(code,maga,v.Qty));
+   }
    else warnings.Add("Tabella delle giacenze (art_giace) non trovata: verrà importato solo il catalogo articoli.");
   }
   else warnings.Add("Tabella articoli (arti) non trovata: magazzino non importato.");
@@ -354,6 +408,12 @@ public static class MastroReader
     {var o=Math.Min(x.Amount,left);left-=o;fixedDues.Add(x with{Paid=x.Amount-o});}
    }
    dues=fixedDues;
+  }
+  if(dues!=null)
+  {
+   // settled instalments older than 12 months are only history in Mastro: not sent to the phones
+   var keepSince=DateTime.Today.AddMonths(-12).ToString("yyyy-MM-dd");
+   dues=dues.Where(x=>x.Paid<x.Amount-0.005m||string.CompareOrdinal(x.DueDate,keepSince)>=0).ToList();
   }
 
   // ── bank receipts (RiBa / effetti) of the customers: open and unpaid ones of the last 3 years

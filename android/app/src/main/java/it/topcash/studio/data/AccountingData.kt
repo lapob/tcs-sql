@@ -73,6 +73,28 @@ class AccountingView(state: ArchiveState, clients: List<UClient>) {
     }
 
     private val clientList = clients
+
+    /** One bucket of the overdue by age (days late). */
+    class AgeBucket(val label: String, val sum: Double, val count: Int)
+    /** One week of the cash flow: what comes in and goes out (already-late instalments count in the first week). */
+    class FlowWeek(val start: LocalDate, val inc: Double, val out: Double, val balance: Double)
+
+    val aging: List<AgeBucket> by lazy {
+        listOf(Triple(1, 30, "1–30 gg"), Triple(31, 60, "31–60 gg"), Triple(61, 90, "61–90 gg"), Triple(91, Int.MAX_VALUE, "oltre 90 gg")).map { (a, b, l) ->
+            val xs = overdue.filter { val late = -(it.days ?: 0); late in a..b }
+            AgeBucket(l, xs.sumOf { it.left }, xs.size)
+        }
+    }
+    val flow: List<FlowWeek> by lazy {
+        val today = LocalDate.now(); var run = 0.0
+        val rec = receivables.filter { it.open }; val pay = payables.filter { it.open }
+        (0 until 8).map { w ->
+            fun inW(d: UDue): Boolean { val x = d.days ?: return false; return if (w == 0) x < 7 else x >= w * 7 && x < w * 7 + 7 }
+            val i = rec.filter(::inW).sumOf { it.left }; val o = pay.filter(::inW).sumOf { it.left }
+            run += i - o
+            FlowWeek(today.plusDays(w * 7L), i, o, run)
+        }
+    }
     /** customers with accounting movements: first who is late, then who still has to pay, then by revenue of the year */
     val ranking: List<Pair<UClient, ClientAccounting>> by lazy {
         clientList.mapNotNull { c -> perClient[c.code]?.let { c to it } }

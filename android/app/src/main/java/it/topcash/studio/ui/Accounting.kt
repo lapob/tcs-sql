@@ -117,6 +117,8 @@ private fun LazyListScope.accSummary(acc: AccountingView, nav: NavHostController
             }
         }
         if (acc.invoices.isNotEmpty()) item(key = "chart") { MonthBars(acc, Modifier.padding(top = 10.dp).appear(4)) }
+        item(key = "flow") { CashFlow(acc, Modifier.padding(top = 10.dp).appear(5)) }
+        item(key = "aging") { Aging(acc, Modifier.padding(top = 10.dp).appear(6)) { go(AccView.Receivables, "Scadute") } }
         val chase = acc.overdue.filter { it.note?.status.isNullOrBlank() || it.note.status == "Sollecitato" }.sortedByDescending { it.left }.take(6)
         item(key = "t-chase") { SectionTitle("Da sollecitare · ${acc.overdue.size}", Modifier.padding(top = 20.dp, bottom = 8.dp)) { androidx.compose.material3.TextButton({ go(AccView.Receivables, "Scadute") }) { Text("Tutte") } } }
         if (chase.isEmpty()) item(key = "e-chase") { Empty(Icons.Rounded.TaskAlt, "Nessun ritardo", "Tutti i clienti sono in regola con i pagamenti.") }
@@ -205,6 +207,74 @@ private fun deltaText(now: Double, prev: Double): String =
                             .background(if (v < 0) LocalStatus.current.bad.copy(alpha = .5f) else MaterialTheme.colorScheme.primary.copy(alpha = if (i == acc.months.lastIndex) 1f else .55f)))
                     }
                     Text(Dates.month(m).take(3), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp), maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+/** Next 8 weeks: green = expected receipts, red = payments to suppliers, with the running balance under each week. */
+@Composable private fun CashFlow(acc: AccountingView, modifier: Modifier) {
+    val st = LocalStatus.current
+    val max = (acc.flow.maxOfOrNull { maxOf(it.inc, it.out) } ?: 0.0).coerceAtLeast(1.0)
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    fun k(v: Double): String { val a = kotlin.math.abs(v); return (if (v < 0) "−" else "+") + when { a >= 1e6 -> "%.1f M".format(a / 1e6); a >= 1e3 -> "${(a / 1e3).let { kotlin.math.round(it).toLong() }} k"; else -> "${a.let { kotlin.math.round(it).toLong() }}" } }
+    CardBox(modifier, padding = PaddingValues(16.dp)) {
+        Text("Flusso di cassa", style = MaterialTheme.typography.titleSmall)
+        Text("Prossime 8 settimane: entrate e uscite previste", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.fillMaxWidth().height(110.dp).padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.Bottom) {
+            acc.flow.forEachIndexed { i, w ->
+                Row(Modifier.weight(1f).fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.Bottom) {
+                    listOf(w.inc to st.ok, w.out to st.bad).forEachIndexed { j, (v, c) ->
+                        val f by animateFloatAsState(if (shown) (v / max).toFloat().coerceIn(0.02f, 1f) else 0f, spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessLow - i * 8f), label = "flow$i$j")
+                        Box(Modifier.weight(1f).fillMaxHeight().graphicsLayer { scaleY = f; transformOrigin = TransformOrigin(0.5f, 1f) }
+                            .clip(RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp)).background(c.copy(alpha = .8f)))
+                    }
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            acc.flow.forEachIndexed { i, w ->
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(k(w.balance), style = MaterialTheme.typography.labelSmall.tabular, color = if (w.balance < 0) st.bad else st.ok, maxLines = 1, softWrap = false)
+                    Text(if (i == 0) "Ora" else "${w.start.dayOfMonth} ${Dates.month(w.start).take(3)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, softWrap = false)
+                }
+            }
+        }
+        val end = acc.flow.lastOrNull()?.balance ?: 0.0
+        Text("Saldo previsto a 8 settimane: ${money0(end)}", style = MaterialTheme.typography.bodySmall, color = if (end < 0) st.bad else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
+    }
+}
+
+/** How old the overdue is: one bar split by age + the four buckets. */
+@Composable private fun Aging(acc: AccountingView, modifier: Modifier, onClick: () -> Unit) {
+    val st = LocalStatus.current
+    val tones = listOf(st.due, androidx.compose.ui.graphics.lerp(st.due, st.bad, .55f), st.bad, androidx.compose.ui.graphics.lerp(st.bad, androidx.compose.ui.graphics.Color.Black, .35f))
+    val total = acc.overdueSum.coerceAtLeast(1.0)
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    val grow by animateFloatAsState(if (shown) 1f else 0f, spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessLow), label = "aging")
+    CardBox(modifier, onClick = onClick, padding = PaddingValues(16.dp)) {
+        Text("Anzianità dello scaduto", style = MaterialTheme.typography.titleSmall)
+        Text(if (acc.overdue.isEmpty()) "Nessuna rata scaduta" else "${money0(acc.overdueSum)} in ${acc.overdue.size} rate: più è vecchio, più è urgente",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 12.dp).height(12.dp).graphicsLayer { scaleX = grow; transformOrigin = TransformOrigin(0f, .5f) }.clip(RoundedCornerShape(6.dp)),
+            horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            if (acc.overdue.isEmpty()) Box(Modifier.weight(1f).fillMaxHeight().background(st.ok.copy(alpha = .6f)))
+            acc.aging.forEachIndexed { i, b -> if (b.sum > 0) Box(Modifier.weight((b.sum / total).toFloat().coerceAtLeast(.02f)).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(tones[i])) }
+        }
+        acc.aging.chunked(2).forEachIndexed { r, pair ->
+            Row(Modifier.fillMaxWidth().padding(top = if (r == 0) 0.dp else 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                pair.forEachIndexed { j, b ->
+                    Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.onSurface.copy(alpha = .05f)).padding(horizontal = 12.dp, vertical = 10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(8.dp).clip(RoundedCornerShape(3.dp)).background(tones[r * 2 + j]))
+                            Text("  " + b.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text(money0(b.sum), style = MaterialTheme.typography.titleSmall.tabular, maxLines = 1)
+                        Text(if (b.count == 1) "1 rata" else "${b.count} rate", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }

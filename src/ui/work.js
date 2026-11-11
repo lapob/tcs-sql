@@ -1,7 +1,7 @@
 'use strict';
 // ───────────────────────── organised work: inventory of PCs and systems, guided renewals, the day's route,
 // data check (duplicates, VAT, unlinked devices, missing contacts) and the single sheet of every register / serial.
-let WK={inv:'all',invQ:'',ren:'open',renQ:'',route:'',check:'dup',more:{}};
+let WK={inv:'all',invQ:'',ren:'open',renQ:'',route:'',kind:'',open:new Set(),check:'dup',more:{}};
 const AS_KINDS=['PC','Server','Stampante','Router / firewall','NAS','Tablet','Licenza software','Altro'];
 const AS_ICON={PC:'grid',Server:'box',Stampante:'print','Router / firewall':'sync',NAS:'folder',Tablet:'phone','Licenza software':'key',Altro:'tool'};
 const REN_STATES=[['Da contattare','info'],['Contattato','acc'],['Da sollecitare','due'],['Rinnovato','ok'],['Perso','bad']];
@@ -138,16 +138,21 @@ function routeStops(){
 }
 function routePage(){
  const all=routeStops();const techs=[...new Set(all.map(s=>s.tech).filter(Boolean))].sort();
- const list=all.filter(s=>!WK.route||s.tech===WK.route);
+ const byTech=all.filter(s=>!WK.route||s.tech===WK.route);
+ // what kind of stop: the counts help decide where to go first
+ const KINDS=[['Intervento','Interventi'],['Verificazione','Verificazioni'],['Errore DTR','Errori cassa'],['DGFE quasi pieno','DGFE pieni']].map(([k,l])=>[k,l,byTech.filter(s=>s.kind===k).length]).filter(x=>x[2]);
+ if(WK.kind&&!KINDS.some(x=>x[0]===WK.kind))WK.kind='';
+ const list=byTech.filter(s=>!WK.kind||s.kind===WK.kind);const SHOW=6;
  const groups=new Map();for(const s of list){const k=s.city;if(!groups.has(k))groups.set(k,[]);groups.get(k).push(s);}
  const ordered=[...groups.entries()].sort((a,b)=>b[1].length-a[1].length||a[0].localeCompare(b[0],'it'));
  const addr=c=>[c?.address||c?.mastro?.address,c?.mastro?.cap,c?.city||c?.mastro?.city,c?.mastro?.prov].filter(Boolean).join(', ');
  const maps=ss=>{const places=[...new Set(ss.map(s=>addr(s.c)).filter(Boolean))].slice(0,10);if(!places.length)return'';const dest=places.pop();
   return`https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${encodeURIComponent(dest)}${places.length?'&waypoints='+encodeURIComponent(places.join('|')):''}`;};
  return`${hero('<span class="grad">Giro di oggi</span>.','Interventi aperti, verificazioni entro 30 giorni, casse in errore e giornali quasi pieni, raggruppati per località: un tocco apre il percorso sul telefono.','')}
- ${techs.length?`<div class="seg reveal" style="--i:1;margin-bottom:14px"><button class="${!WK.route?'active':''}" data-w-route="">Tutti</button>${techs.map(t=>`<button class="${WK.route===t?'active':''}" data-w-route="${esc(t)}">${esc(t)}</button>`).join('')}</div>`:''}
- ${ordered.length?`<div class="route-grid">${ordered.map(([city,ss],gi)=>{const url=maps(ss);return`<div class="card reveal route-card" style="--i:${Math.min(gi+2,9)}"><div class="card-head"><div><h2>${esc(city)}<span class="count">${ss.length}</span></h2><p>${esc([...new Set(ss.map(s=>s.zone).filter(z=>z&&!/^\d+$/.test(z)))].join(', ')||(ss.length===1?'1 tappa':ss.length+' tappe'))}</p></div>${url?`<a class="btn sm accent" href="${esc(url)}" target="_blank" rel="noopener">${icon('pin')}Percorso</a>`:''}</div>
-  ${ss.map(s=>`<div class="list-row" ${s.attr} tabindex="0"><span class="badge ${s.cls}">${esc(s.kind)}</span><div class="grow"><strong>${esc(s.c?.name||'Cliente da abbinare')}</strong><small>${esc(s.text)}${addr(s.c)?' · '+esc(addr(s.c)):''}${s.tech?' · '+esc(s.tech):''}</small></div>${s.c?.phone?`<a class="icon-btn sm" href="tel:${esc(s.c.phone.replace(/\s/g,''))}" aria-label="Chiama ${esc(s.c.name)}" data-stop>${icon('phone')}</a>`:''}</div>`).join('')}</div>`;}).join('')}</div>`
+ <div class="toolbar route-tools reveal" style="--i:1">${KINDS.length>1?`<div class="seg"><button class="${!WK.kind?'active':''}" data-w-kind="">Tutto<span class="count">${byTech.length}</span></button>${KINDS.map(([k,l,n])=>`<button class="${WK.kind===k?'active':''}" data-w-kind="${esc(k)}">${l}<span class="count">${n}</span></button>`).join('')}</div>`:''}
+  ${techs.length?`<div class="seg"><button class="${!WK.route?'active':''}" data-w-route="">Tutti i tecnici</button>${techs.map(t=>`<button class="${WK.route===t?'active':''}" data-w-route="${esc(t)}">${esc(t)}</button>`).join('')}</div>`:''}</div>
+ ${ordered.length?`<div class="route-grid">${ordered.slice(0,12+(WK.more.route||0)).map(([city,ss],gi)=>{const url=maps(ss);return`<div class="card reveal route-card" style="--i:${Math.min(gi+2,9)}"><div class="card-head"><div><h2>${esc(city)}<span class="count">${ss.length}</span></h2><p>${esc([...new Set(ss.map(s=>s.zone).filter(z=>z&&!/^\d+$/.test(z)))].join(', ')||(ss.length===1?'1 tappa':ss.length+' tappe'))}</p></div>${url?`<a class="btn sm accent" href="${esc(url)}" target="_blank" rel="noopener">${icon('pin')}Percorso</a>`:''}</div>
+  ${(WK.open.has(city)?ss:ss.slice(0,SHOW)).map(s=>`<div class="list-row" ${s.attr} tabindex="0"><span class="badge ${s.cls}">${esc(s.kind)}</span><div class="grow"><strong>${esc(s.c?.name||'Cliente da abbinare')}</strong><small>${esc(s.text)}${addr(s.c)?' · '+esc(addr(s.c)):''}${s.tech?' · '+esc(s.tech):''}</small></div>${s.c?.phone?`<a class="icon-btn sm" href="tel:${esc(s.c.phone.replace(/\s/g,''))}" aria-label="Chiama ${esc(s.c.name)}" data-stop>${icon('phone')}</a>`:''}</div>`).join('')}${ss.length>SHOW?`<button class="btn sm ghost route-more" data-w-city="${esc(city)}">${WK.open.has(city)?'Mostra meno':`Mostra altre ${ss.length-SHOW}`}</button>`:''}</div>`;}).join('')}</div>${ordered.length>12+(WK.more.route||0)?`<button class="btn route-more-cities" data-w-more="route">${icon('chevron')}Mostra altre ${ordered.length-12-(WK.more.route||0)} località</button>`:''}`
  :`<div class="card reveal empty"><span class="orb">${icon('check')}</span><h3>Giornata libera</h3><p>Nessun intervento aperto né verificazione imminente.</p></div>`}`;
 }
 
@@ -228,14 +233,18 @@ function openDevice(serial){
 
 // ── events (capture: run before the generic handlers)
 document.addEventListener('click',e=>{
- const t=e.target.closest?.('[data-w-inv],[data-w-ren],[data-w-route],[data-w-check],[data-w-more],[data-asset],[data-asset-new],[data-ren],[data-merge],[data-link-dev],[data-device]');if(!t)return;
+ const t=e.target.closest?.('[data-w-inv],[data-w-ren],[data-w-route],[data-w-kind],[data-w-city],[data-w-check],[data-w-more],[data-asset],[data-asset-new],[data-ren],[data-merge],[data-link-dev],[data-device]');if(!t)return;
  if(e.target.closest('a[href],[data-stop]')&&!t.matches('a'))return;
  const ds=t.dataset;e.preventDefault();e.stopPropagation();
  if('wInv' in ds){WK.inv=ds.wInv;WK.more.inv=0;return render(false);}
  if('wRen' in ds){WK.ren=ds.wRen;WK.more.ren=0;return render(false);}
- if('wRoute' in ds){WK.route=ds.wRoute;return render(false);}
+ if('wRoute' in ds){WK.route=ds.wRoute;WK.more.route=0;return render(false);}
+ if('wKind' in ds){WK.kind=ds.wKind;WK.more.route=0;return render(false);}
+ if('wCity' in ds){const c=ds.wCity,was=WK.open.has(c);was?WK.open.delete(c):WK.open.add(c);const y=t.closest('.route-card')?.getBoundingClientRect().top;render(false);
+  // keep the card where it was (closing a long list must not throw you elsewhere)
+  const card=[...document.querySelectorAll('[data-w-city]')].find(b=>b.dataset.wCity===c)?.closest('.route-card');if(card&&y!==undefined)$('#main').scrollBy({top:card.getBoundingClientRect().top-y,behavior:'instant'});return;}
  if('wCheck' in ds){WK.check=ds.wCheck;WK.more.chk=0;return render(false);}
- if('wMore' in ds){WK.more[ds.wMore]=(WK.more[ds.wMore]||0)+60;return render(false);}
+ if('wMore' in ds){WK.more[ds.wMore]=(WK.more[ds.wMore]||0)+(ds.wMore==='route'?12:60);return render(false);}
  if('assetNew' in ds)return openAssetEditor(null,ds.assetNew||'');
  if('asset' in ds)return openAssetEditor(ds.asset);
  if('ren' in ds)return openRenewal(ds.ren);

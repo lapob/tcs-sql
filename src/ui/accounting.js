@@ -44,7 +44,13 @@ function deriveAccounting(){
  const years=[...new Set(inv.filter(i=>i.d).map(i=>i.d.getFullYear()))].sort((a,b)=>b-a);
  A={inv,dues,rec,pay,recOpen,payOpen,overdue,months,perClient,bal,top,years,cl,
   revY:sum(invY,i=>i.net),revPY:sum(invPY,i=>i.net),toCollect:sum(recOpen,x=>x.left),overdueSum:sum(overdue,x=>x.left),
-  toPay30:sum(payOpen.filter(x=>x.days!==null&&x.days<=30),x=>x.left),toPay:sum(payOpen,x=>x.left),has:(state.invoices||[]).length+(state.dues||[]).length>0};
+  toPay30:sum(payOpen.filter(x=>x.days!==null&&x.days<=30),x=>x.left),toPay:sum(payOpen,x=>x.left),
+  // how old the overdue is (1-30, 31-60, 61-90, over 90 days late)
+  aging:[[1,30,'1–30 gg'],[31,60,'31–60 gg'],[61,90,'61–90 gg'],[91,1e9,'oltre 90 gg']].map(([a,b,l])=>{const xs=overdue.filter(x=>-x.days>=a&&-x.days<=b);return{l,v:sum(xs,x=>x.left),n:xs.length};}),
+  // next 8 weeks: what comes in (open receivables) and goes out (open payables); already-late ones count in the first week
+  flow:Array.from({length:8},(_,w)=>{const inW=x=>x.days!==null&&(w===0?x.days<7:x.days>=w*7&&x.days<w*7+7);const d=new Date(today);d.setDate(d.getDate()+w*7);
+   return{d,inc:sum(recOpen.filter(inW),x=>x.left),out:sum(payOpen.filter(inW),x=>x.left)};}),
+  has:(state.invoices||[]).length+(state.dues||[]).length>0};
 }
 
 function dueCls(x){if(!x.open)return'ok';if(x.days===null)return'';return x.days<0?'bad':x.days<=7?'due':'';}
@@ -65,7 +71,25 @@ function accountingPage(){
   <div class="card kpi reveal" style="--i:5" data-acc-tab="payables" tabindex="0"><div class="kpi-top"><span>Da pagare · 30 gg</span><span class="kpi-icon">${icon('upload')}</span></div><div class="kpi-value acc-v">${DFE0.format(A.toPay30)}</div><div class="kpi-note">${DFE0.format(A.toPay)} in totale ai fornitori</div></div></div>
  ${A.inv.length?`<div class="card reveal" style="--i:6"><div class="card-head"><div><h2>Fatturato mensile</h2><p>Ultimi 12 mesi, imponibile al netto delle note di credito.</p></div></div>
   <div class="bars acc-bars">${A.months.map((m,i)=>`<div class="bar"><i class="${m.v<0?'neg':''}" style="height:${Math.max(3,Math.abs(m.v)/maxM*100)}%;--i:${i}" data-v="${esc(DFE0.format(m.v))} · ${m.n} doc."></i><span>${DF3.format(m.d)}</span></div>`).join('')}</div></div>`:''}
+ ${A.has?accCash():''}
  ${A.has?accFocus():''}`;
+}
+/** cash flow of the next 8 weeks + how old the overdue is */
+function accCash(){
+ let run=0;const fl=A.flow.map(f=>({...f,bal:run+=f.inc-f.out}));const max=Math.max(1,...fl.map(f=>Math.max(f.inc,f.out)));
+ const ag=A.aging,agT=Math.max(1,A.overdueSum),tones=['var(--due)','color-mix(in srgb,var(--due) 45%,var(--bad))','var(--bad)','color-mix(in srgb,var(--bad) 65%,#000)'];
+ const k=v=>{const a=Math.abs(v);return a>=1e6?(a/1e6).toFixed(1).replace('.',',')+' M':a>=1e3?Math.round(a/1e3)+' k':String(Math.round(a));};
+ return`<div class="layout-half acc-cash">
+  <div class="card reveal" style="--i:7"><div class="card-head"><div><h2>Flusso di cassa</h2><p>Prossime 8 settimane: incassi attesi e pagamenti ai fornitori. Le rate già scadute contano nella prima.</p></div>
+   <div class="legend"><span><i style="background:var(--ok)"></i>Entrate</span><span><i style="background:var(--bad)"></i>Uscite</span></div></div>
+   <div class="flow">${fl.map((f,i)=>`<div class="flow-w" title="${esc(`Settimana dal ${dShort(f.d)}: entrate ${DFE0.format(f.inc)}, uscite ${DFE0.format(f.out)}, saldo ${DFE0.format(f.bal)}`)}">
+    <div class="flow-bars"><i class="in" style="height:${f.inc/max*100}%;--i:${i}"></i><i class="out" style="height:${f.out/max*100}%;--i:${i}"></i></div>
+    <b class="mono ${f.bal<0?'neg':''}">${f.bal<0?'−':'+'}${k(f.bal)}</b><span>${i?dShort(f.d).replace(/\s?\d{4}$/,''):'Ora'}</span></div>`).join('')}</div>
+   <p class="flow-note">Saldo previsto a 8 settimane: <strong class="mono" style="color:var(--${run<0?'bad':'ok'})">${DFE0.format(run)}</strong></p></div>
+  <div class="card reveal" style="--i:8"><div class="card-head"><div><h2>Anzianità dello scaduto</h2><p>${A.overdue.length?`${DFE0.format(A.overdueSum)} in ${plur(A.overdue.length,'rata','rate')}: più è vecchio, più è urgente.`:'Nessuna rata scaduta.'}</p></div><button class="btn sm ghost" data-acc-tab="receivables">Sollecita${icon('chevron')}</button></div>
+   <div class="aging-bar" role="img" aria-label="Scaduto per anzianità">${ag.map((g,i)=>g.v>0?`<i style="flex:${g.v/agT};background:${tones[i]};--i:${i}"></i>`:'').join('')||'<i style="flex:1;background:var(--ok)"></i>'}</div>
+   <div class="aging">${ag.map((g,i)=>`<div><span><i style="background:${tones[i]}"></i>${g.l}</span><strong class="mono">${DFE0.format(g.v)}</strong><small>${plur(g.n,'rata','rate')}</small></div>`).join('')}</div></div>
+ </div>`;
 }
 /** what the office should look at today: overdue receivables to chase, payments due soon, best customers of the year */
 function accFocus(){
