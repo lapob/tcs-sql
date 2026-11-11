@@ -266,6 +266,15 @@ Nell'intervento il campo **Assegna a** è un menu con le persone del team, divis
 
 La scheda **Portali e accessi** (in Panoramica quando manca un accesso, sempre in *Sincronizzazione*) mostra lo stato di MY Zucchetti, DTR-Service, Ital Retail e RCH XDealer: verde collegato, giallo mai collegato, rosso accesso da rifare. Sulla postazione di sincronizzazione **Accedi di nuovo** apre la finestra del portale: accedi tu, Studio non salva le password e legge i dati in sola lettura. Per RCH XDealer la sessione si considera scaduta solo se il portale lo conferma due volte a 20 secondi di distanza (il passaggio automatico dal sito di accesso RCH non chiede più di rientrare), e i dispositivi senza matricola non bloccano più l'aggiornamento: vengono contati e saltati.
 
+## Due aree: Interventi e Contabilità
+
+Come MastroSQL è diviso in Mastro e Contabilità, Top Cash Studio ha due aree. Il selettore "Interventi | Contabilità" sta in cima al menu sul computer e nella barra in alto su telefono e app Android.
+- **Interventi**: il lavoro di tutti i giorni. Ci sono clienti, interventi, giro, registratori, Zucchetti, magazzino e ufficio.
+- **Contabilità**: è divisa in quattro pagine, cioè Riepilogo, Da incassare, Fatture e Da pagare. Sul sito c'è anche Situazione clienti.
+  - Il Riepilogo mostra le cifre, il grafico mensile e le cose da guardare oggi: rate da sollecitare, pagamenti entro 30 giorni e migliori clienti.
+- Ogni area ricorda l'ultima pagina aperta. Passando da un'area all'altra cambiano il menu e la barra in basso, con un solo movimento morbido.
+- I tecnici vedono solo Interventi: per loro il selettore non compare.
+
 ## Animazioni e scorrimento
 
 - **Android**: un solo movimento per azione. Aprendo una sezione la pagina entra da destra sopra quella precedente, che si scurisce e scorre un po' a sinistra; tornando indietro avviene l'esatto contrario, uguale con il gesto (la pagina segue il dito) e con il tasto. Le schede in basso cambiano con una dissolvenza.

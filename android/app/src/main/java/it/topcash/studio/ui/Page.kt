@@ -72,7 +72,7 @@ import it.topcash.studio.data.AppViewModel
                 GlassBar(state, pageHaze) { androidx.compose.material3.TopAppBar(
                     title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.graphicsLayer { this.alpha = alpha }) },
                     navigationIcon = { if (onBack != null) IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Indietro") } },
-                    actions = actions, scrollBehavior = scroll,
+                    actions = { if (onBack == null) LocalAreaSwitch.current?.invoke(); actions() }, scrollBehavior = scroll,
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = clear, scrolledContainerColor = clear),
                 ) }
             },
@@ -88,7 +88,7 @@ import it.topcash.studio.data.AppViewModel
             GlassBar(state, pageHaze) { LargeTopAppBar(
                 title = { Column { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis); if (subtitle != null && scroll.state.collapsedFraction < 0.5f) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
                 navigationIcon = { if (onBack != null) IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Indietro") } },
-                actions = actions, scrollBehavior = scroll,
+                actions = { if (onBack == null) LocalAreaSwitch.current?.invoke(); actions() }, scrollBehavior = scroll,
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = clear, scrolledContainerColor = clear),
             ) }
         },

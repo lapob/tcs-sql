@@ -52,6 +52,12 @@ import androidx.navigation.compose.rememberNavController
 import it.topcash.studio.data.AppViewModel
 import it.topcash.studio.data.Archive
 import it.topcash.studio.data.Screen
+import androidx.compose.material.icons.rounded.Insights
+import androidx.compose.material.icons.rounded.Payments
+import androidx.compose.material.icons.rounded.AccountBalanceWallet
+import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.layout.Row
 
 /** Scopes for shared-element transitions (list avatar → detail header). */
 val LocalShared = compositionLocalOf<SharedTransitionScope?> { null }
@@ -101,6 +107,10 @@ data class EditorRequest(val interventionId: String? = null, val clientCode: Str
 private data class Tab(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
 private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("clients", "Clienti", Icons.Rounded.Groups),
     Tab("interventions", "Interventi", Icons.Rounded.Build), Tab("warehouse", "Magazzino", Icons.Rounded.Inventory2), Tab("more", "Altro", Icons.Rounded.MoreHoriz))
+// the accounting area (like Mastro's Contabilità): its own four pages in the bottom bar
+private val accTabs = listOf(Tab("acc", "Riepilogo", Icons.Rounded.Insights), Tab("accRec", "Incassi", Icons.Rounded.Payments),
+    Tab("accInv", "Fatture", Icons.AutoMirrored.Rounded.ReceiptLong), Tab("accPay", "Pagamenti", Icons.Rounded.AccountBalanceWallet), Tab("more", "Altro", Icons.Rounded.MoreHoriz))
+private val accRoutes = setOf("acc", "accRec", "accInv", "accPay")
 
 @Composable fun MainScreen(vm: AppViewModel) {
     val nav = rememberNavController()
@@ -119,10 +129,19 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
         when (sc) { "new" -> editor = EditorRequest(); "load" -> if (admin) movement = "carico" to null else vm.notify("Il magazzino è riservato all'amministratore"); "search" -> { nav.switchTab("clients"); vm.focusSearch.value = true }; else -> return@LaunchedEffect }
         vm.shortcut.value = null
     }
-    val tabs = remember(admin) { if (admin) allTabs else allTabs.filter { it.route != "warehouse" } }
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route ?: "home"
+    // two areas, Interventi and Contabilità (technicians only have Interventi); each remembers its last page
+    val seesAcc = me?.seesAccounting != false
+    var area by rememberSaveable { mutableStateOf("ops") }
+    val lastOf = remember { mutableMapOf("ops" to "home", "acc" to "acc") }
+    LaunchedEffect(route) {
+        if (route in accRoutes) area = "acc" else if (route in tabRoutes && route != "more") area = "ops"
+        if (route in tabRoutes && route != "more") lastOf[area] = route
+    }
+    val tabs = remember(admin, area) { if (area == "acc") accTabs else if (admin) allTabs else allTabs.filter { it.route != "warehouse" } }
     val topLevel = tabs.any { it.route == route }
+    val areaSwitch: (@Composable () -> Unit)? = if (!seesAcc) null else ({ AreaSwitch(area) { a -> if (a != area) { area = a; nav.switchTab(lastOf[a] ?: if (a == "acc") "acc" else "home") } } })
 
     val haze = dev.chrisbanes.haze.rememberHazeState()
     Scaffold(
@@ -133,11 +152,17 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
             AnimatedVisibility(topLevel, enter = fadeIn(tween(220, 230)) + slideInVertically(tween(320, 230, EmphasizedDecelerate)) { it / 3 }, exit = fadeOut(tween(90))) {
                 // frosted glass: the pages scroll underneath and show through blurred
                 NavigationBar(Modifier.glass(haze, strong = true), containerColor = androidx.compose.ui.graphics.Color.Transparent, tonalElevation = androidx.compose.ui.unit.Dp(0f)) {
-                    tabs.forEach { t ->
-                        NavigationBarItem(selected = route == t.route, onClick = { nav.switchTab(t.route) }, label = { Text(t.label) }, icon = {
-                            val n = when (t.route) { "interventions" -> archive?.openInterventions?.size ?: 0; "warehouse" -> archive?.wh?.belowMin?.size ?: 0; else -> 0 }
-                            if (n > 0) BadgedBox(badge = { Badge { Text("$n") } }) { Icon(t.icon, t.label) } else Icon(t.icon, t.label)
-                        })
+                    // changing area the items cross-fade in place (one movement), the bar itself stays still
+                    androidx.compose.animation.AnimatedContent(tabs, Modifier.weight(1f), transitionSpec = { fadeIn(tween(220, 70, EmphasizedDecelerate)) togetherWith fadeOut(tween(90)) }, label = "area-tabs") { list ->
+                        Row {
+                            list.forEach { t ->
+                                NavigationBarItem(selected = route == t.route, onClick = { nav.switchTab(t.route) }, label = { Text(t.label, maxLines = 1) }, icon = {
+                                    val n = when (t.route) { "interventions" -> archive?.openInterventions?.size ?: 0; "warehouse" -> archive?.wh?.belowMin?.size ?: 0
+                                        "accRec" -> archive?.acc?.overdue?.size ?: 0; "accPay" -> archive?.acc?.payables?.count { it.open && (it.days ?: 99) <= 7 } ?: 0; else -> 0 }
+                                    if (n > 0) BadgedBox(badge = { Badge { Text("$n") } }) { Icon(t.icon, t.label) } else Icon(t.icon, t.label)
+                                })
+                            }
+                        }
                     }
                 }
             }
@@ -150,7 +175,7 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
             // the room left for the bar changes in one step: animating it re-measured every list under the page on each
             // frame of the back animation (that was the stutter); the bar itself still fades and slides in
             val barSpace = if (topLevel) androidx.compose.ui.unit.Dp(80f) else androidx.compose.ui.unit.Dp(0f)
-            CompositionLocalProvider(LocalShared provides this, LocalAppHaze provides haze, LocalBottomBar provides barSpace) {
+            CompositionLocalProvider(LocalShared provides this, LocalAppHaze provides haze, LocalBottomBar provides barSpace, LocalAreaSwitch provides areaSwitch) {
                 BackMotion.Attach()
                 NavHost(nav, startDestination = "home",
                     // Tabs: "fade through". Pages: one motion per action, the same for swipe and key (BackMotion.kt):
@@ -180,7 +205,8 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
                     screen("warehouse") { if (admin) WarehouseScreen(vm, it, nav) { t, art -> movement = t to art } else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("more") { MoreScreen(vm, it, nav) }
                     screen("deadlines") { DeadlinesScreen(it, nav) }
-                    screen("accounting") { if (me?.seesAccounting != false) AccountingScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
+                    screen("accounting") { if (seesAcc) AccountingScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
+                    AccView.entries.forEach { v -> screen(v.route) { if (seesAcc) AccountingScreen(vm, it, nav, v, topLevel = true) else LaunchedEffect(Unit) { nav.switchTab("home") } } }
                     screen("licenses") { LicensesScreen(vm, it, nav) }
                     screen("orders") { OrdersScreen(it, nav) }
                     screen("account") { AccountScreen(vm, nav) }
@@ -207,7 +233,7 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
     }
 }
 
-private val tabRoutes = setOf("home", "clients", "interventions", "warehouse", "more")
+private val tabRoutes = setOf("home", "clients", "interventions", "warehouse", "more", "acc", "accRec", "accInv", "accPay")
 private fun androidx.compose.animation.AnimatedContentTransitionScope<androidx.navigation.NavBackStackEntry>.isTabSwitch() =
     initialState.destination.route in tabRoutes && targetState.destination.route in tabRoutes
 

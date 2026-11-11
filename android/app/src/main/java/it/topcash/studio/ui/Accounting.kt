@@ -70,10 +70,15 @@ private val dueFilters = listOf("Aperte", "Scadute", "7 giorni", "Tutte")
 private fun dueTone(d: UDue) = when { !d.open -> Tone.Ok; d.late -> Tone.Bad; (d.days ?: 99) <= 7 -> Tone.Due; else -> Tone.Neutral }
 private fun statusTone(s: String) = when (s) { "Sollecitato" -> Tone.Info; "Promesso" -> Tone.Accent; "Incassato" -> Tone.Ok; "Contestato" -> Tone.Bad; else -> Tone.Neutral }
 
-@Composable fun AccountingScreen(vm: AppViewModel, a: Archive, nav: NavHostController) {
+/** The accounting area has four pages, like the four registers of Mastro's accounting: summary, receivables, invoices, payables. */
+private var accFilterHint: String? = null
+enum class AccView(val route: String, val title: String) { Home("acc", "Contabilità"), Receivables("accRec", "Da incassare"), Invoices("accInv", "Fatture"), Payables("accPay", "Da pagare") }
+
+@Composable fun AccountingScreen(vm: AppViewModel, a: Archive, nav: NavHostController, view: AccView = AccView.Home, topLevel: Boolean = false) {
     val acc = a.acc
-    var tab by rememberSaveable { mutableStateOf(accTabs[0]) }
+    val tab = when (view) { AccView.Invoices -> accTabs[1]; AccView.Payables -> accTabs[2]; else -> accTabs[0] }
     var filter by rememberSaveable { mutableStateOf(dueFilters[0]) }
+    LaunchedEffect(Unit) { accFilterHint?.let { filter = it; accFilterHint = null } } // filter chosen from the summary tiles
     var q by rememberSaveable { mutableStateOf("") }
     var open by remember { mutableStateOf<String?>(null) }
     val dues = remember(acc, tab, filter, q) {
@@ -83,27 +88,70 @@ private fun statusTone(s: String) = when (s) { "Sollecitato" -> Tone.Info; "Prom
         }
     }
     val invoices = remember(acc, q) { val n = norm(q.trim()); acc.invoices.filter { n.isEmpty() || it.search.contains(n) }.take(300) }
-    Page(vm, "Contabilità", "${money0(acc.toCollect)} da incassare · ${acc.overdue.size} scadute", onBack = { nav.popBackStack() }) {
+    val subtitle = when (view) {
+        AccView.Home -> "${money0(acc.toCollect)} da incassare · ${acc.overdue.size} scadute"
+        AccView.Receivables -> "${money0(acc.toCollect)} · ${acc.receivables.count { it.open }} rate aperte"
+        AccView.Payables -> "${money0(acc.toPay)} · ${money0(acc.toPay30)} entro 30 giorni"
+        AccView.Invoices -> "${acc.invoices.size} documenti · ${money0(acc.revenueYear)} nel ${java.time.LocalDate.now().year}"
+    }
+    val go: (AccView, String) -> Unit = { v, f -> accFilterHint = f; if (topLevel) nav.switchTab(v.route) else nav.navigate(v.route) }
+    Page(vm, view.title, subtitle, onBack = if (topLevel) null else ({ nav.popBackStack() })) {
         if (!acc.hasData) { item(key = "none") { Empty(Icons.Rounded.Euro, "Nessun dato contabile", "Importa fatture e scadenze da MastroSQL dall'app Windows (Impostazioni).") }; return@Page }
+        if (view == AccView.Home) accSummary(acc, nav, go) { open = it } else accRegister(view, tab, filter, { filter = it }, q, { q = it }, dues, invoices, nav) { open = it }
+    }
+    open?.let { id -> acc.due(id)?.let { d -> DueSheet(vm, d, nav, onDismiss = { open = null }) } ?: LaunchedEffect(id) { open = null } }
+}
+
+/** Summary: figures, the monthly chart and what the office should look at today. */
+private fun LazyListScope.accSummary(acc: AccountingView, nav: NavHostController, go: (AccView, String) -> Unit, onDue: (String) -> Unit) {
         item(key = "kpi") {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     MoneyTile("Fatturato ${java.time.LocalDate.now().year}", acc.revenueYear, deltaText(acc.revenueYear, acc.revenuePrevYear), Tone.Info, Modifier.weight(1f).appear(0))
-                    MoneyTile("Da incassare", acc.toCollect, "${acc.receivables.count { it.open }} rate aperte", Tone.Accent, Modifier.weight(1f).appear(1)) { tab = accTabs[0]; filter = "Aperte" }
+                    MoneyTile("Da incassare", acc.toCollect, "${acc.receivables.count { it.open }} rate aperte", Tone.Accent, Modifier.weight(1f).appear(1)) { go(AccView.Receivables, "Aperte") }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    MoneyTile("Scaduto", acc.overdueSum, if (acc.overdue.isEmpty()) "nessun ritardo" else "${acc.overdue.map { it.d.partyCode }.toSet().size} clienti da sollecitare", if (acc.overdue.isEmpty()) Tone.Ok else Tone.Bad, Modifier.weight(1f).appear(2)) { tab = accTabs[0]; filter = "Scadute" }
-                    MoneyTile("Da pagare · 30 gg", acc.toPay30, "${money0(acc.toPay)} in totale", Tone.Due, Modifier.weight(1f).appear(3)) { tab = accTabs[2]; filter = "Aperte" }
+                    MoneyTile("Scaduto", acc.overdueSum, if (acc.overdue.isEmpty()) "nessun ritardo" else "${acc.overdue.map { it.d.partyCode }.toSet().size} clienti da sollecitare", if (acc.overdue.isEmpty()) Tone.Ok else Tone.Bad, Modifier.weight(1f).appear(2)) { go(AccView.Receivables, "Scadute") }
+                    MoneyTile("Da pagare · 30 gg", acc.toPay30, "${money0(acc.toPay)} in totale", Tone.Due, Modifier.weight(1f).appear(3)) { go(AccView.Payables, "Aperte") }
                 }
             }
         }
         if (acc.invoices.isNotEmpty()) item(key = "chart") { MonthBars(acc, Modifier.padding(top = 10.dp).appear(4)) }
-        item(key = "tabs") { ChoiceChips(accTabs, tab, { tab = it }, Modifier.padding(top = 16.dp)) }
-        item(key = "search") { SearchField(q, { q = it }, if (tab == "Fatture") "Cerca numero o cliente" else "Cerca nominativo, documento, nota", Modifier.padding(top = 8.dp)) }
+        val chase = acc.overdue.filter { it.note?.status.isNullOrBlank() || it.note.status == "Sollecitato" }.sortedByDescending { it.left }.take(6)
+        item(key = "t-chase") { SectionTitle("Da sollecitare · ${acc.overdue.size}", Modifier.padding(top = 20.dp, bottom = 8.dp)) { androidx.compose.material3.TextButton({ go(AccView.Receivables, "Scadute") }) { Text("Tutte") } } }
+        if (chase.isEmpty()) item(key = "e-chase") { Empty(Icons.Rounded.TaskAlt, "Nessun ritardo", "Tutti i clienti sono in regola con i pagamenti.") }
+        items(chase.size, key = { "c" + chase[it].d.id }) { i -> DueRow(chase[i], Modifier.padding(bottom = 8.dp)) { onDue(chase[i].d.id) } }
+        val soon = acc.payables.filter { it.open && (it.days ?: 999) <= 30 }.take(6)
+        item(key = "t-soon") { SectionTitle("Da pagare entro 30 giorni", Modifier.padding(top = 16.dp, bottom = 8.dp)) { androidx.compose.material3.TextButton({ go(AccView.Payables, "Aperte") }) { Text("Tutti") } } }
+        if (soon.isEmpty()) item(key = "e-soon") { Empty(Icons.Rounded.TaskAlt, "Niente in scadenza", "Nessun pagamento ai fornitori nei prossimi 30 giorni.") }
+        items(soon.size, key = { "p" + soon[it].d.id }) { i -> DueRow(soon[i], Modifier.padding(bottom = 8.dp)) { onDue(soon[i].d.id) } }
+        val rank = acc.ranking.take(8)
+        if (rank.isNotEmpty()) item(key = "t-cli") { SectionTitle("Situazione clienti", Modifier.padding(top = 16.dp, bottom = 8.dp)) }
+        items(rank.size, key = { "r" + rank[it].first.code }) { i -> val (c, p) = rank[i]
+            CardBox(Modifier.padding(bottom = 8.dp), onClick = { nav.openClient(c.code) }, padding = PaddingValues(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(c.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(if (p.overdue > 0.005) "${money(p.overdue)} scaduti · ${money(p.open)} da incassare" else if (p.open > 0.005) "${money(p.open)} da incassare" else "in regola",
+                            style = MaterialTheme.typography.bodySmall, color = if (p.overdue > 0.005) LocalStatus.current.bad else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(money0(p.revenueYear), style = MaterialTheme.typography.titleSmall.tabular)
+                        Text("fatturato ${java.time.LocalDate.now().year}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+}
+
+/** One register per page: receivables / payables with filters, or invoices. */
+private fun LazyListScope.accRegister(view: AccView, tab: String, filter: String, setFilter: (String) -> Unit, q: String, setQ: (String) -> Unit,
+    dues: List<UDue>, invoices: List<it.topcash.studio.data.UInvoice>, nav: NavHostController, onDue: (String) -> Unit) {
+        item(key = "search") { SearchField(q, setQ, if (tab == "Fatture") "Cerca numero o cliente" else "Cerca nominativo, documento, nota", Modifier.padding(top = 8.dp)) }
         if (tab != "Fatture") {
-            item(key = "filters") { ChoiceChips(dueFilters, filter, { filter = it }, Modifier.padding(vertical = 8.dp)) }
+            item(key = "filters") { ChoiceChips(dueFilters, filter, setFilter, Modifier.padding(vertical = 8.dp)) }
             if (dues.isEmpty()) item(key = "e") { Empty(Icons.Rounded.TaskAlt, "Nessuna rata", "Nessuna scadenza corrisponde ai filtri.") }
-            items(dues.size.coerceAtMost(400), key = { "d" + dues[it].d.id }) { i -> DueRow(dues[i], Modifier.padding(bottom = 8.dp).animateItem()) { open = dues[i].d.id } }
+            items(dues.size.coerceAtMost(400), key = { "d" + dues[it].d.id }) { i -> DueRow(dues[i], Modifier.padding(bottom = 8.dp).animateItem()) { onDue(dues[i].d.id) } }
         } else {
             if (invoices.isEmpty()) item(key = "e") { Empty(Icons.Rounded.Euro, "Nessuna fattura", "Modifica la ricerca.") }
             items(invoices.size, key = { "i" + invoices[it].i.id }) { k -> val v = invoices[k]
@@ -121,8 +169,6 @@ private fun statusTone(s: String) = when (s) { "Sollecitato" -> Tone.Info; "Prom
                 }
             }
         }
-    }
-    open?.let { id -> acc.due(id)?.let { d -> DueSheet(vm, d, nav, onDismiss = { open = null }) } ?: LaunchedEffect(id) { open = null } }
 }
 
 private fun deltaText(now: Double, prev: Double): String =

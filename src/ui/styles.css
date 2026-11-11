@@ -620,7 +620,7 @@ tbody tr[data-client]:active,tbody tr[data-int]:active,.card[data-go]:active{tra
  nav{overflow:visible}
  .nav-item{flex:1 1 0;min-width:0}
  .nav-item span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
- .nav-item[data-page]:not([data-page="overview"]):not([data-page="clients"]):not([data-page="interventions"]):not([data-page="warehouse"]){display:none}
+ .nav-item[data-page]:not(.tab-main){display:none}
  .nav-more{display:flex}
  .nav-more em:empty{display:none}
 }
@@ -1026,3 +1026,32 @@ td .svc{padding:3px 8px;font-size:11px;margin:0 4px 4px 0}td small svg{width:12p
 .card-head > div:first-child{min-width:min(220px,100%)}
 .seg{max-width:100%;overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain}
 .seg::-webkit-scrollbar{display:none}
+
+/* ───────── two areas (Interventi / Contabilità), like MastroSQL's Mastro and Contabilità */
+:root[data-area="ops"] [data-area="acc"],:root[data-area="acc"] [data-area="ops"]{display:none!important}
+:root:not([data-area]) [data-area="acc"]{display:none!important}
+.area-switch{position:relative;display:grid;grid-template-columns:1fr 1fr;padding:4px;margin:0 2px;border-radius:14px;background:var(--bg-2);border:1px solid var(--line);isolation:isolate}
+.area-switch button{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:7px;height:34px;padding:0 10px;border-radius:10px;font-size:13px;font-weight:600;color:var(--text-2);white-space:nowrap;transition:color .25s var(--ease)}
+.area-switch button svg{width:16px;height:16px;flex:none}
+.area-switch button:hover{color:var(--text)}
+.area-switch button[aria-selected="true"]{color:var(--text)}
+.area-switch button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.area-ind{position:absolute;z-index:0;top:4px;bottom:4px;left:4px;width:calc(50% - 4px);border-radius:10px;background:var(--surface);box-shadow:0 1px 2px rgba(8,12,30,.1),0 4px 14px -6px rgba(8,12,30,.25);border:1px solid var(--line);transition:transform .38s cubic-bezier(.2,.9,.25,1.05),background-color .3s}
+:root[data-area="acc"] .area-ind{transform:translateX(100%)}
+:root[data-area="acc"] .area-switch button[data-area-go="acc"] svg{color:var(--ok)}
+:root[data-area="ops"] .area-switch button[data-area-go="ops"] svg{color:var(--accent)}
+.area-switch.top{display:none}
+/* summary page of the accounting area */
+.acc-focus{align-items:start}
+.acc-focus .list-row .mark{width:34px;height:34px;flex:none}
+.acc-amt{font-weight:600;white-space:nowrap}
+@media (max-width:900px) and (min-width:761px){.sidebar .area-switch:not(.top){grid-template-columns:1fr;gap:4px}.sidebar .area-switch span{display:none}.sidebar .area-ind{display:none}.sidebar .area-switch button[aria-selected="true"]{background:var(--surface)}}
+@media (max-width:760px){
+ .sidebar .area-switch{display:none}
+ :root:not([data-role="tecnico"]) .area-switch.top{display:grid;margin:0;flex:none}
+ :root:not([data-role="tecnico"]) .topbar .crumbs{display:none}
+ .area-switch.top{width:min(220px,calc(100vw - 150px))}
+ .area-switch.top button{height:32px;padding:0 10px;font-size:12.5px}
+}
+@media (max-width:380px){.area-switch.top button{padding:0 8px;gap:5px}.area-switch.top button svg{display:none}}
+@media (prefers-reduced-motion:reduce){.area-ind{transition:none}}

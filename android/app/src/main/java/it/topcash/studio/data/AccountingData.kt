@@ -72,6 +72,12 @@ class AccountingView(state: ArchiveState, clients: List<UClient>) {
         }
     }
 
+    private val clientList = clients
+    /** customers with accounting movements: first who is late, then who still has to pay, then by revenue of the year */
+    val ranking: List<Pair<UClient, ClientAccounting>> by lazy {
+        clientList.mapNotNull { c -> perClient[c.code]?.let { c to it } }
+            .sortedWith(compareByDescending<Pair<UClient, ClientAccounting>> { it.second.overdue }.thenByDescending { it.second.open }.thenByDescending { it.second.revenueYear })
+    }
     fun of(c: UClient): ClientAccounting? = perClient[c.code]
     fun due(id: String): UDue? = receivables.firstOrNull { it.d.id == id } ?: payables.firstOrNull { it.d.id == id }
 

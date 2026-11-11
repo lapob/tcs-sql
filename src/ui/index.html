@@ -71,7 +71,7 @@
 <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></symbol>
 <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
 <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="2"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="2"/></symbol>
-<symbol id="i-euro" viewBox="0 0 24 24"><path d="M17.5 6.2A7 7 0 1 0 17.5 17.8"/><path d="M4 10h9M4 14h9"/></symbol>
+<symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M7 16v-5M12 16V6M17 16v-8"/></symbol><symbol id="i-euro" viewBox="0 0 24 24"><path d="M17.5 6.2A7 7 0 1 0 17.5 17.8"/><path d="M4 10h9M4 14h9"/></symbol>
 <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></symbol>
 <symbol id="i-print" viewBox="0 0 24 24"><path d="M7 8V3.5h10V8M7 17H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M7 14h10v6.5H7z"/><path d="M17 11h.01"/></symbol>
 </defs></svg>
@@ -85,35 +85,41 @@
   <span class="brand-text"><span class="brand-tc">Top Cash</span><small>Service · Studio</small></span>
  </div>
  <button class="cmd-trigger" id="cmd-open"><svg><use href="#i-search"/></svg><span>Cerca ovunque…</span><kbd>Ctrl K</kbd></button>
+ <div class="area-switch need-acc" role="tablist" aria-label="Area di lavoro"><i class="area-ind" aria-hidden="true"></i><button role="tab" data-area-go="ops"><svg><use href="#i-tool"/></svg><span>Interventi</span></button><button role="tab" data-area-go="acc"><svg><use href="#i-euro"/></svg><span>Contabilità</span></button></div>
  <nav id="nav">
   <span class="nav-indicator" aria-hidden="true"></span>
-  <button class="nav-item" data-page="overview"><svg><use href="#i-home"/></svg><span>Panoramica</span></button>
-  <div class="nav-caption">Lavoro</div>
-  <button class="nav-item" data-page="clients"><svg><use href="#i-users"/></svg><span>Clienti</span><em id="nav-clients"></em></button>
-  <button class="nav-item" data-page="interventions"><svg><use href="#i-tool"/></svg><span>Interventi</span><em id="nav-interventions" class="hot"></em></button>
-  <button class="nav-item" data-page="route"><svg><use href="#i-pin"/></svg><span>Giro di oggi</span><em id="nav-route"></em></button>
-  <button class="nav-item" data-page="tasks"><svg><use href="#i-task"/></svg><span>Attività</span><em id="nav-tasks" class="hot"></em></button>
-  <button class="nav-item" data-page="expiry"><svg><use href="#i-calendar"/></svg><span>Scadenze</span><em id="nav-due" class="hot"></em></button>
-  <button class="nav-item" data-page="renewals"><svg><use href="#i-repeat"/></svg><span>Rinnovi</span><em id="nav-renewals" class="hot"></em></button>
-  <div class="nav-caption">Registratori di cassa</div>
-  <button class="nav-item" data-page="machines"><svg><use href="#i-register"/></svg><span>Tutti</span><em id="nav-machines"></em></button>
-  <button class="nav-item" data-page="dtr"><svg><use href="#i-cloud"/></svg><span>Portale DTR</span><em id="nav-dtr"></em></button>
-  <button class="nav-item" data-page="ital"><svg><use href="#i-store"/></svg><span>Portale Ital Retail</span><em id="nav-ital"></em></button>
-  <button class="nav-item" data-page="rch"><svg><use href="#i-print"/></svg><span>Portale RCH</span><em id="nav-rch"></em></button>
-  <div class="nav-caption">Zucchetti</div>
-  <button class="nav-item" data-page="licenses"><svg><use href="#i-key"/></svg><span>Licenze</span><em id="nav-licenses"></em></button>
-  <button class="nav-item" data-page="orders"><svg><use href="#i-bag"/></svg><span>Ordini</span><em id="nav-orders"></em></button>
-  <button class="nav-item" data-page="inventory"><svg><use href="#i-monitor"/></svg><span>PC e sistemi</span><em id="nav-inventory" class="hot"></em></button>
-  <div class="nav-caption need-acc">Ufficio</div>
-  <button class="nav-item need-acc" data-page="accounting"><svg><use href="#i-euro"/></svg><span>Contabilità</span><em id="nav-accounting" class="hot"></em></button>
-  <button class="nav-item need-admin" data-page="warehouse"><svg><use href="#i-box"/></svg><span>Magazzino</span><em id="nav-warehouse" class="hot"></em></button>
-  <button class="nav-item need-admin" data-page="check"><svg><use href="#i-check"/></svg><span>Controllo dati</span><em id="nav-check"></em></button>
-  <button class="nav-item need-admin web-only" data-page="team"><svg><use href="#i-shield"/></svg><span>Utenti</span></button>
-  <div class="nav-caption">Sistema</div>
-  <button class="nav-item" data-page="sync"><svg><use href="#i-sync"/></svg><span>Sincronizzazione</span><i id="nav-sync-dot" class="sync-dot"></i></button>
-  <button class="nav-item" data-page="settings"><svg><use href="#i-settings"/></svg><span>Impostazioni</span></button>
-  <button class="nav-item" data-page="apps"><svg><use href="#i-download"/></svg><span>Scarica le app</span></button>
-  <button class="nav-item nav-more" id="nav-more" aria-haspopup="dialog"><svg><use href="#i-grid"/></svg><span>Altro</span><em id="nav-more-dot" class="hot"></em></button>
+  <button data-area="ops" class="nav-item" data-page="overview"><svg><use href="#i-home"/></svg><span>Panoramica</span></button>
+  <div data-area="ops" class="nav-caption">Lavoro</div>
+  <button data-area="ops" class="nav-item" data-page="clients"><svg><use href="#i-users"/></svg><span>Clienti</span><em id="nav-clients"></em></button>
+  <button data-area="ops" class="nav-item" data-page="interventions"><svg><use href="#i-tool"/></svg><span>Interventi</span><em id="nav-interventions" class="hot"></em></button>
+  <button data-area="ops" class="nav-item" data-page="route"><svg><use href="#i-pin"/></svg><span>Giro di oggi</span><em id="nav-route"></em></button>
+  <button data-area="ops" class="nav-item" data-page="tasks"><svg><use href="#i-task"/></svg><span>Attività</span><em id="nav-tasks" class="hot"></em></button>
+  <button data-area="ops" class="nav-item" data-page="expiry"><svg><use href="#i-calendar"/></svg><span>Scadenze</span><em id="nav-due" class="hot"></em></button>
+  <button data-area="ops" class="nav-item" data-page="renewals"><svg><use href="#i-repeat"/></svg><span>Rinnovi</span><em id="nav-renewals" class="hot"></em></button>
+  <div data-area="ops" class="nav-caption">Registratori di cassa</div>
+  <button data-area="ops" class="nav-item" data-page="machines"><svg><use href="#i-register"/></svg><span>Tutti</span><em id="nav-machines"></em></button>
+  <button data-area="ops" class="nav-item" data-page="dtr"><svg><use href="#i-cloud"/></svg><span>Portale DTR</span><em id="nav-dtr"></em></button>
+  <button data-area="ops" class="nav-item" data-page="ital"><svg><use href="#i-store"/></svg><span>Portale Ital Retail</span><em id="nav-ital"></em></button>
+  <button data-area="ops" class="nav-item" data-page="rch"><svg><use href="#i-print"/></svg><span>Portale RCH</span><em id="nav-rch"></em></button>
+  <div data-area="ops" class="nav-caption">Zucchetti</div>
+  <button data-area="ops" class="nav-item" data-page="licenses"><svg><use href="#i-key"/></svg><span>Licenze</span><em id="nav-licenses"></em></button>
+  <button data-area="ops" class="nav-item" data-page="orders"><svg><use href="#i-bag"/></svg><span>Ordini</span><em id="nav-orders"></em></button>
+  <button data-area="ops" class="nav-item" data-page="inventory"><svg><use href="#i-monitor"/></svg><span>PC e sistemi</span><em id="nav-inventory" class="hot"></em></button>
+  <div data-area="ops" class="nav-caption need-admin">Ufficio</div>
+  <button data-area="ops" class="nav-item need-admin" data-page="warehouse"><svg><use href="#i-box"/></svg><span>Magazzino</span><em id="nav-warehouse" class="hot"></em></button>
+  <button data-area="ops" class="nav-item need-admin" data-page="check"><svg><use href="#i-check"/></svg><span>Controllo dati</span><em id="nav-check"></em></button>
+  <div data-area="acc" class="nav-caption">Contabilità</div>
+  <button data-area="acc" class="nav-item need-acc" data-page="accounting"><svg><use href="#i-chart"/></svg><span>Riepilogo</span></button>
+  <button data-area="acc" class="nav-item need-acc" data-page="accRec"><svg><use href="#i-download"/></svg><span>Da incassare</span><em id="nav-accounting" class="hot"></em></button>
+  <button data-area="acc" class="nav-item need-acc" data-page="accInv"><svg><use href="#i-file"/></svg><span>Fatture</span></button>
+  <button data-area="acc" class="nav-item need-acc" data-page="accPay"><svg><use href="#i-upload"/></svg><span>Da pagare</span><em id="nav-accpay" class="hot"></em></button>
+  <button data-area="acc" class="nav-item need-acc" data-page="accCli"><svg><use href="#i-users"/></svg><span>Situazione clienti</span></button>
+  <div data-area="both" class="nav-caption">Sistema</div>
+  <button data-area="both" class="nav-item need-admin web-only" data-page="team"><svg><use href="#i-shield"/></svg><span>Utenti</span></button>
+  <button data-area="both" class="nav-item" data-page="sync"><svg><use href="#i-sync"/></svg><span>Sincronizzazione</span><i id="nav-sync-dot" class="sync-dot"></i></button>
+  <button data-area="both" class="nav-item" data-page="settings"><svg><use href="#i-settings"/></svg><span>Impostazioni</span></button>
+  <button data-area="both" class="nav-item" data-page="apps"><svg><use href="#i-download"/></svg><span>Scarica le app</span></button>
+  <button data-area="both" class="nav-item nav-more" id="nav-more" aria-haspopup="dialog"><svg><use href="#i-grid"/></svg><span>Altro</span><em id="nav-more-dot" class="hot"></em></button>
  </nav>
  <div class="sidebar-foot">
   <div class="company"><span class="avatar">TC</span><div><strong>Top Cash Service S.r.l.</strong><small id="side-status">Archivio locale</small></div></div>
@@ -123,6 +129,7 @@
 
 <div class="shell">
  <header class="topbar">
+  <div class="area-switch need-acc top" role="tablist" aria-label="Area di lavoro"><i class="area-ind" aria-hidden="true"></i><button role="tab" data-area-go="ops"><svg><use href="#i-tool"/></svg><span>Interventi</span></button><button role="tab" data-area-go="acc"><svg><use href="#i-euro"/></svg><span>Contabilità</span></button></div>
   <div class="crumbs"><span>Top Cash</span><svg><use href="#i-chevron"/></svg><strong id="crumb">Panoramica</strong></div>
   <div class="top-actions">
    <div id="sync-pill" class="sync-pill" hidden><span class="spinner"></span><span id="sync-pill-text">Sincronizzazione…</span></div>

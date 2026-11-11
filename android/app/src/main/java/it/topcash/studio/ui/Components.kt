@@ -58,6 +58,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import it.topcash.studio.data.Tone
+import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material.icons.rounded.Euro
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 
 /** Springy press feedback: the element sinks slightly and bounces back. */
 fun Modifier.pressScale(source: MutableInteractionSource): Modifier = composed {
@@ -175,6 +183,34 @@ fun hueColor(key: String, dark: Boolean = false): Color { var h = 0; key.forEach
         }
         Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
         Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+    }
+}
+
+/** The area switch shown in the top bar of the main pages (null = the user has only one area). */
+val LocalAreaSwitch = androidx.compose.runtime.staticCompositionLocalOf<(@Composable () -> Unit)?> { null }
+
+/** "Interventi | Contabilità": a pill with a sliding thumb, like the site and the Windows app. */
+@Composable fun AreaSwitch(area: String, onSelect: (String) -> Unit) {
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val items = listOf("ops" to ("Interventi" to androidx.compose.material.icons.Icons.Rounded.Build), "acc" to ("Contabilità" to androidx.compose.material.icons.Icons.Rounded.Euro))
+    val idx = if (area == "acc") 1 else 0
+    val thumb by androidx.compose.animation.core.animateFloatAsState(idx.toFloat(), androidx.compose.animation.core.spring(dampingRatio = 0.78f, stiffness = 520f), label = "area")
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.padding(end = 8.dp).width(220.dp).height(38.dp).clip(RoundedCornerShape(13.dp))
+        .background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(3.dp)) {
+        val w = maxWidth / 2
+        Box(Modifier.offset(x = w * thumb).width(w).fillMaxHeight().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surface))
+        Row(Modifier.fillMaxSize()) {
+            items.forEachIndexed { i, (key, v) ->
+                val on = i == idx
+                val tint by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant, label = "t")
+                Row(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(10.dp)).clickable { if (!on) haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick); onSelect(key) }
+                    .semantics { role = androidx.compose.ui.semantics.Role.Tab; selected = on },
+                    horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.Icon(v.second, null, Modifier.size(16.dp), tint = if (on) (if (key == "acc") LocalStatus.current.ok else MaterialTheme.colorScheme.primary) else tint)
+                    Text("  " + v.first, style = MaterialTheme.typography.labelLarge, color = tint, maxLines = 1)
+                }
+            }
+        }
     }
 }
 

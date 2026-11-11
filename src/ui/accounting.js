@@ -9,7 +9,8 @@ const DFE0=new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR',maximu
 const DUE_ST=['','Sollecitato','Promesso','Incassato','Contestato'];
 const DUE_CLS={Sollecitato:'info',Promesso:'acc',Incassato:'ok',Contestato:'bad'};
 let A=null;
-let aui={tab:'receivables',only:'open',year:''};
+let aui={only:'open',year:''};
+const ACC_PAGE={receivables:'accRec',invoices:'accInv',payables:'accPay',clients:'accCli'};
 
 function deriveAccounting(){
  const today=new Date();today.setHours(0,0,0,0);
@@ -51,8 +52,6 @@ function dueWhen(x){if(!x.open)return x.note?.status==='Incassato'?'incassata':'
 
 function accountingPage(){
  if(!A)deriveAccounting();
- const tabs=[['receivables',`Da incassare${A.overdue.length?' · '+A.overdue.length:''}`],['invoices','Fatture'],['payables','Da pagare'],['clients','Clienti']];
- const body={receivables:receivablesTab,invoices:invoicesTab,payables:payablesTab,clients:clientsAccTab}[aui.tab]||receivablesTab;
  const delta=A.revPY>0?(A.revY-A.revPY)/A.revPY*100:null;
  const maxM=Math.max(1,...A.months.map(m=>Math.abs(m.v)));
  return`${hero('La <span class="grad">contabilità</span>.','Fatture, incassi e pagamenti letti da MastroSQL. Segna solleciti e promesse di pagamento: le note restano anche dopo ogni importazione.',
@@ -66,7 +65,32 @@ function accountingPage(){
   <div class="card kpi reveal" style="--i:5" data-acc-tab="payables" tabindex="0"><div class="kpi-top"><span>Da pagare · 30 gg</span><span class="kpi-icon">${icon('upload')}</span></div><div class="kpi-value acc-v">${DFE0.format(A.toPay30)}</div><div class="kpi-note">${DFE0.format(A.toPay)} in totale ai fornitori</div></div></div>
  ${A.inv.length?`<div class="card reveal" style="--i:6"><div class="card-head"><div><h2>Fatturato mensile</h2><p>Ultimi 12 mesi, imponibile al netto delle note di credito.</p></div></div>
   <div class="bars acc-bars">${A.months.map((m,i)=>`<div class="bar"><i class="${m.v<0?'neg':''}" style="height:${Math.max(3,Math.abs(m.v)/maxM*100)}%;--i:${i}" data-v="${esc(DFE0.format(m.v))} · ${m.n} doc."></i><span>${DF3.format(m.d)}</span></div>`).join('')}</div></div>`:''}
- ${A.has?`<div class="toolbar reveal" style="--i:7"><div class="seg">${tabs.map(([k,l])=>`<button class="${aui.tab===k?'active':''}" data-acc-tab="${k}">${l}</button>`).join('')}</div></div>${body()}`:''}`;
+ ${A.has?accFocus():''}`;
+}
+/** what the office should look at today: overdue receivables to chase, payments due soon, best customers of the year */
+function accFocus(){
+ const chase=A.overdue.filter(x=>!x.note?.status||x.note.status==='Sollecitato').sort((a,b)=>b.left-a.left).slice(0,6);
+ const soon=A.payOpen.filter(x=>x.days!==null&&x.days<=30).slice(0,6);
+ const more=(t,n)=>`<button class="btn sm ghost" data-acc-tab="${t}">${n}${icon('chevron')}</button>`;
+ const row=x=>`<div class="list-row" data-due="${esc(x.id)}" tabindex="0"><span class="mark" style="--h:${hue(x.name)}">${esc(initials(x.name))}</span><div class="grow"><strong>${esc(x.name)}</strong><small>${x.d?dShort(x.d):'—'} · <span style="color:var(--${dueCls(x)==='bad'?'bad':dueCls(x)==='due'?'due':'text-3'})">${dueWhen(x)}</span>${x.note?.status?' · '+esc(x.note.status):''}</small></div><span class="mono acc-amt">${eurA(x.left)}</span></div>`;
+ return`<div class="layout-half acc-focus">
+  <div class="card reveal" style="--i:7"><div class="card-head"><div><h2>Da sollecitare<span class="count">${fmt(A.overdue.length)}</span></h2><p>Rate scadute, prima le più alte.</p></div>${more('receivables','Tutte')}</div>
+   ${chase.map(row).join('')||empty('check','Nessun ritardo','Tutti i clienti sono in regola con i pagamenti.')}</div>
+  <div class="card reveal" style="--i:8"><div class="card-head"><div><h2>Da pagare entro 30 giorni</h2><p>${eurA(A.toPay30)} ai fornitori.</p></div>${more('payables','Tutti')}</div>
+   ${soon.map(row).join('')||empty('check','Niente in scadenza','Nessun pagamento ai fornitori nei prossimi 30 giorni.')}</div>
+  ${A.top.length?`<div class="card reveal" style="--i:9"><div class="card-head"><div><h2>Migliori clienti ${new Date().getFullYear()}</h2><p>Fatturato imponibile dell'anno.</p></div>${more('clients','Situazione')}</div>
+   ${A.top.map(x=>`<div class="list-row" data-client="${esc(x.c.code)}" tabindex="0">${markEl(x.c.name,x.c.code)}<div class="grow"><strong>${esc(x.c.name)}</strong><small>${esc(x.c.city||'')}${x.overdue?` · <span style="color:var(--bad)">${eurA(x.overdue)} scaduti</span>`:''}</small></div><span class="mono acc-amt">${eurA(x.revY)}</span></div>`).join('')}</div>`:''}
+ </div>`;
+}
+/** one register per page (Da incassare, Fatture, Da pagare, Situazione clienti), same filters as before */
+function accRegister(kind){
+ if(!A)deriveAccounting();
+ const T={receivables:['Da <span class="grad">incassare</span>.','Le rate dei clienti in ordine di scadenza: apri una rata per segnare sollecito, promessa o incasso e preparare l’email.',receivablesTab,'dues'],
+  invoices:['Le <span class="grad">fatture</span>.','Fatture e note di credito emesse, lette da MastroSQL.',invoicesTab,'invoices'],
+  payables:['Da <span class="grad">pagare</span>.','Le scadenze verso i fornitori, in ordine di data.',payablesTab,'dues'],
+  clients:['Situazione <span class="grad">clienti</span>.','Fatturato, residui e scaduto di ogni cliente: prima chi è in ritardo.',clientsAccTab,'']}[kind];
+ return`${hero(T[0],T[1],T[3]?`<button class="btn need-export" data-acc-exp="${T[3]}">${icon('download')}${T[3]==='dues'?'Scadenze':'Fatture'} CSV</button>`:'')}
+ ${A.has?T[2]():`<div class="card reveal" style="--i:2">${empty('euro','Nessun dato contabile','Importa fatture e scadenze da MastroSQL in Impostazioni: basta un clic, i dati di Mastro non vengono modificati.')}</div>`}`;
 }
 
 function dueRows(list,cols){
@@ -87,7 +111,7 @@ function onlySel(withTodo){return`<select class="select" id="f-acc-only"><option
 
 function receivablesTab(){
  const list=filterDues(A.rec);const rows=pageOf(list,16);
- return`<div class="card reveal" style="--i:8"><div class="card-head"><div><h2>Scadenzario clienti<span class="count">${fmt(list.length)}</span></h2><p>Residuo ${eurA(list.reduce((s,x)=>s+x.left,0))} · apri una rata per segnare il sollecito o la promessa di pagamento.</p></div></div>
+ return`<div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Scadenzario clienti<span class="count">${fmt(list.length)}</span></h2><p>Residuo ${eurA(list.reduce((s,x)=>s+x.left,0))} · apri una rata per segnare il sollecito o la promessa di pagamento.</p></div></div>
  <div class="toolbar">${search('Cerca cliente, documento, nota…')}${onlySel(true)}</div>
  <div class="table-wrap"><table class="t-acc"><thead><tr><th>Cliente</th><th>Documento</th><th>Scadenza</th><th>Residuo</th><th>Stato</th><th></th></tr></thead><tbody>
  ${dueRows(rows,true)||`<tr><td colspan="6">${empty('check','Nessuna rata','Nessun incasso corrisponde ai filtri: ottimo segno.')}</td></tr>`}
@@ -95,7 +119,7 @@ function receivablesTab(){
 }
 function payablesTab(){
  const list=filterDues(A.pay);const rows=pageOf(list,16);
- return`<div class="card reveal" style="--i:8"><div class="card-head"><div><h2>Pagamenti ai fornitori<span class="count">${fmt(list.length)}</span></h2><p>Residuo ${eurA(list.reduce((s,x)=>s+x.left,0))} · in ordine di scadenza.</p></div></div>
+ return`<div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Pagamenti ai fornitori<span class="count">${fmt(list.length)}</span></h2><p>Residuo ${eurA(list.reduce((s,x)=>s+x.left,0))} · in ordine di scadenza.</p></div></div>
  <div class="toolbar">${search('Cerca fornitore, documento…')}${onlySel(false)}</div>
  <div class="table-wrap"><table class="t-acc"><thead><tr><th>Fornitore</th><th>Documento</th><th>Scadenza</th><th>Residuo</th><th>Stato</th><th></th></tr></thead><tbody>
  ${dueRows(rows,true)||`<tr><td colspan="6">${empty('check','Nessun pagamento','Nessuna scadenza fornitore corrisponde ai filtri.')}</td></tr>`}
@@ -105,7 +129,7 @@ function invoicesTab(){
  const q=norm(ui.q);let list=A.inv;if(q)list=list.filter(i=>i.search.includes(q));
  if(aui.year)list=list.filter(i=>i.d&&String(i.d.getFullYear())===aui.year);
  const rows=pageOf(list,18);const tot=list.reduce((s,i)=>s+i.net,0);
- return`<div class="card reveal" style="--i:8"><div class="card-head"><div><h2>Fatture e note di credito<span class="count">${fmt(list.length)}</span></h2><p>Imponibile ${eurA(tot)}${list.length?` · ${eurA(list.reduce((s,i)=>s+i.gross,0))} con IVA`:''}.</p></div></div>
+ return`<div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Fatture e note di credito<span class="count">${fmt(list.length)}</span></h2><p>Imponibile ${eurA(tot)}${list.length?` · ${eurA(list.reduce((s,i)=>s+i.gross,0))} con IVA`:''}.</p></div></div>
  <div class="toolbar">${search('Cerca numero, cliente, pagamento…')}<select class="select" id="f-acc-year"><option value="">Tutti gli anni</option>${A.years.map(y=>`<option${aui.year===String(y)?' selected':''}>${y}</option>`).join('')}</select></div>
  <div class="table-wrap"><table class="t-acc"><thead><tr><th>Documento</th><th>Cliente</th><th>Imponibile</th><th>IVA</th><th>Totale</th><th>Pagamento</th></tr></thead><tbody>
  ${rows.map((i,k)=>`<tr class="reveal" style="--i:${Math.min(k,14)}" ${i.client?`data-client="${esc(i.client.code)}" tabindex="0"`:''}><td><strong class="mono">${hl(i.number,ui.q)}</strong> ${i.sign<0?'<span class="badge acc">Nota di credito</span>':''}<br><small class="muted">${i.d?dShort(i.d):esc(i.date)}</small></td>
@@ -118,7 +142,7 @@ function clientsAccTab(){
  if(q)list=list.filter(x=>norm(x.c.name+' '+x.c.code).includes(q));
  list.sort((a,b)=>b.overdue-a.overdue||b.open-a.open||b.revY-a.revY);
  const rows=pageOf(list,16);
- return`<div class="card reveal" style="--i:8"><div class="card-head"><div><h2>Situazione per cliente<span class="count">${fmt(list.length)}</span></h2><p>Prima chi ha importi scaduti. Clicca per aprire la scheda cliente.</p></div></div>
+ return`<div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Situazione per cliente<span class="count">${fmt(list.length)}</span></h2><p>Prima chi ha importi scaduti. Clicca per aprire la scheda cliente.</p></div></div>
  <div class="toolbar">${search('Cerca cliente…')}</div>
  <div class="table-wrap"><table class="t-acc"><thead><tr><th>Cliente</th><th>Fatturato ${new Date().getFullYear()}</th><th>Da incassare</th><th>Scaduto</th><th>Ultima fattura</th><th></th></tr></thead><tbody>
  ${rows.map((x,k)=>`<tr class="reveal" style="--i:${Math.min(k,14)}" data-client="${esc(x.c.code)}" tabindex="0"><td><div class="who">${markEl(x.c.name,x.c.code)}<div><strong>${hl(x.c.name,ui.q)}</strong><small>${esc(x.c.city||'')}</small></div></div></td>
@@ -176,10 +200,10 @@ function openDue(id){
 
 document.addEventListener('click',e=>{
  const t=e.target.closest('[data-acc-tab],[data-due],[data-acc-exp],[data-acc-client]');if(!t)return;const ds=t.dataset;
- if(ds.accTab){if(page!=='accounting'){go('accounting');}aui.tab=ds.accTab;if(ds.accTab!=='invoices')aui.only=aui.only||'open';ui.p=1;ui.q='';return render(false);}
+ if(ds.accTab){if(ds.accTab!=='invoices')aui.only=aui.only||'open';return go(ACC_PAGE[ds.accTab]||'accRec');}
  if(ds.due)return openDue(ds.due);
  if(ds.accExp)return send(ds.accExp==='dues'?'exportDues':'exportInvoices');
- if(ds.accClient){const c=D.byCode.get(ds.accClient);closeDrawer();aui.tab='receivables';aui.only='all';go('accounting');ui.q=c?.name||'';render(false);}
+ if(ds.accClient){const c=D.byCode.get(ds.accClient);closeDrawer();aui.only='all';go('accRec');ui.q=c?.name||'';render(false);}
 });
 document.addEventListener('keydown',e=>{if(e.key!=='Enter')return;const r=e.target.closest?.('tr[data-due]');if(r){e.preventDefault();openDue(r.dataset.due);}});
 document.addEventListener('change',e=>{const id=e.target.id;
