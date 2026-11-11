@@ -33,6 +33,9 @@ public sealed class Hub(Store store)
  /// Sections a technician never receives (accounting stays on the server for them).
  static readonly HashSet<string> Accounting=["invoices","dues","balances","dueNotes","riba"];
  Snap? snap;
+ /// Devices get the invoices from January 1st of last year (charts, receivables and client situation never look further back);
+ /// the full history stays here, in the CSV export and in Mastro. 40k rows since 2019 were too much for a phone's memory.
+ List<Invoice> RecentInvoices(){var from=new DateTime(DateTime.Today.Year-1,1,1).ToString("yyyy-MM-dd");return store.Invoices().Where(i=>string.CompareOrdinal(i.Date,from)>=0).ToList();}
  Snap Current()
  {
   lock(gate)
@@ -42,7 +45,7 @@ public sealed class Hub(Store store)
    var mv=store.Mastro();
    var parts=new (string,object)[]{("records",store.Licenses()),("licenseEdits",store.LicenseEdits()),("licenseCleanup",store.LicenseCleanup()),("clientEdits",store.ClientEdits()),("clients",store.Clients()),("orders",store.Orders()),
     ("mastroClients",mv.Clients),("machines",mv.Machines),("interventions",mv.Interventions),("brandRule",mv.Excluded),("assets",store.Assets()),("renewals",store.Renewals()),("deviceLinks",store.DeviceLinks()),
-    ("warehouses",store.Warehouses()),("articles",store.Articles()),("stockLevels",store.StockLevels()),("stock",store.Stock()),("movements",store.Movements()),("invoices",store.Invoices()),("dues",store.Dues()),("balances",store.Balances()),("dueNotes",store.DueNotes()),
+    ("warehouses",store.Warehouses()),("articles",store.Articles()),("stockLevels",store.StockLevels()),("stock",store.Stock()),("movements",store.Movements()),("invoices",RecentInvoices()),("dues",store.Dues()),("balances",store.Balances()),("dueNotes",store.DueNotes()),
     ("sources",store.Sources()),("events",store.Events()),("notes",store.Notes()),("metadata",store.Metadata()),("dtr",store.DtrRegisters()),("dtrStatus",store.DtrState()),("ital",store.ItalDevices()),("italOrders",store.ItalOrders()),("italStatus",store.ItalState()),("rch",store.RchDevices()),("rchStatus",store.RchState()),
     ("rt",store.RtInfos()),("sites",store.Sites()),("riba",store.RibaList()),("team",Team?.Invoke()??[]),
     ("features",new{mail=store.MailReady(),backupError=Backups.Status(store).Error})};

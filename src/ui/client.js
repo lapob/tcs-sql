@@ -101,6 +101,7 @@ function devicesTab(c,off){
 function licRow(r){const d=parseDate(r.expiry),n=dayDiff(d),e=D.licEdits?.[r.id];
  return`<div class="lic"><div class="lic-top"><strong>${esc(famLabel(famOfScope(r.scope)))} <span class="mono muted">${esc(r.serial)}</span></strong><span class="row-act">${badge(licenseStatus(r))}${licEditBtn(r)}</span></div>
  <div class="lic-meta"><div>Scadenza<b>${d?dShort(d):'—'}</b>${d?`<span style="color:var(--${n<0?'bad':n<=30?'due':'text-3'})">${rel(n)}</span>`:''}</div><div>Versione<b>${esc(r.version)||'—'}</b></div><div>Rilasciata<b>${esc((r.released||'—').slice(0,10))}</b></div><div>Aggiornata<b>${esc((r.updated||'—').slice(0,10))}</b></div>${r.blocked?`<div>Blocco<b>${esc(r.blocked)}</b></div>`:''}</div>
+ ${licRenewBtn(r,true)?`<div class="lic-renew">${licRenewBtn(r,true)}${licRenewed(r)?`<small class="muted">${esc(renewBy(r))}</small>`:''}</div>`:''}
  ${e&&(e.note||e.expiry)?`<div class="comment">${icon('edit')}<div><p>${e.note?esc(e.note):'Scadenza corretta a mano'}</p><small>${e.expiry?'Scadenza corretta · ':''}${e.updatedBy?esc(e.updatedBy):''}</small></div></div>`:''}</div>`;}
 function licensesTab(c,cur){
  const old=c.records.filter(r=>!isCurrent(r));

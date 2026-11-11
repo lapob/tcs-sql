@@ -206,6 +206,18 @@ import java.time.ZoneOffset
                             MiniFact("Scadenza", Dates.short(l.expiry) + (l.days?.let { " · " + Dates.relative(it) } ?: ""))
                             MiniFact("Versione", l.r.version.ifBlank { "—" }); MiniFact("Elenco", if (l.current) "Corrente" else "Storico")
                         }
+                        // "Già rinnovata": shown from 60 days before the expiry; the tap shows at once, the save follows
+                        val key = l.expiry?.let { "lic|${l.r.id}|$it" }
+                        val renewed = l.status == "Rinnovata"
+                        if (key != null && l.current && (renewed || (l.days ?: 999) <= 60)) {
+                            var on by remember(key, renewed) { mutableStateOf(renewed) }
+                            Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                if (on) {
+                                    OutlinedButton({ on = false; vm.markRenewed(key, false, c.name) }) { Text("Annulla \u201crinnovata\u201d") }
+                                    Text(a.state.renewals[key]?.by?.takeIf { it.isNotBlank() }?.let { "  Segnata da $it" }.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                } else FilledTonalButton({ on = true; vm.markRenewed(key, true, c.name) }) { Text("Gi\u00e0 rinnovata") }
+                            }
+                        }
                     }
                 }
             }

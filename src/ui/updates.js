@@ -58,7 +58,7 @@ function updBanner(){
 // Files: the server's update copies; the Windows app without a server falls back to the official GitHub release.
 const RELEASE='https://github.com/lapob/tcs-sql/releases/latest/download/';
 let installPrompt=null;
-addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;if(page==='apps')render(false);});
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;if(page==='apps')render(false);authGetApp();});
 addEventListener('appinstalled',()=>{installPrompt=null;toast('Top Cash Studio installato','check');if(page==='apps')render(false);});
 function appsPage(){
  updLoad();const inf=UPD.info||{},ua=navigator.userAgent;
@@ -89,5 +89,38 @@ function appsPage(){
    <div class="app-cta">${c.btn}</div>${c.steps}</article>`;}).join('')}</div>
   <p class="muted apps-foot">${icon('shield')}Gli stessi file della Release ufficiale. Fuori ufficio le app usano la connessione cifrata.</p>`;
 }
+// ───────────────────────── "Scarica l'app" under the sign-in form: the right app for the device in use
+// (Android phone → the APK, Windows PC → Studio for Windows, iPhone/iPad → add to Home, other browsers → install as app).
+// The sign-in page only opens to a device the server already lets in (office network, or approved for outside the
+// office), so outside the office the button appears only after the administrator's approval.
+function authGetApp(){
+ const slot=document.getElementById('auth-get');if(!slot||host)return;
+ const ua=navigator.userAgent,ios=/iPhone|iPad|iPod/i.test(ua)||(navigator.maxTouchPoints>1&&/Macintosh/.test(ua));
+ const kind=/Android/i.test(ua)?'android':ios?'ios':/Windows NT/i.test(ua)?'windows':'web';
+ const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+ const draw=html=>{if(slot.dataset.html===html)return;slot.dataset.html=html;slot.innerHTML=html;slot.hidden=!html;};
+ const row=(ic,tone,title,sub,go,attrs)=>{const tag=attrs.startsWith('href')?'a':'button';return`<${tag}${tag==='button'?' type="button"':''} class="auth-get" ${attrs}><span class="ag-ic ${tone}">${icon(ic)}</span><span class="ag-txt"><strong>${title}</strong><small>${sub}</small></span><span class="ag-go">${icon(go)}</span></${tag}>`;};
+ if(kind==='ios'){
+  if(standalone)return draw('');
+  return draw(`<div class="ag-wrap">${row('plus','t-due','Aggiungi Top Cash alla Home','Si apre a tutto schermo, come un’app','chevron','data-get-ios aria-expanded="false"')}<div class="ag-steps"><div><ol><li>Tocca <b>Condividi</b> nella barra di Safari</li><li>Scegli <b>Aggiungi alla schermata Home</b></li><li>Apri l’icona <b>Top Cash</b> dalla Home</li></ol></div></div></div>`);
+ }
+ if(kind==='web'){
+  if(standalone||!installPrompt)return draw('');
+  return draw(row('download','t-info','Installa Top Cash come app','Finestra sua, icona nel menu, sempre aggiornata','plus','data-install-pwa'));
+ }
+ const show=()=>{const b=UPD.info?.[kind];if(!b?.version)return draw('');
+  draw(kind==='android'
+   ?row('android','t-ok','Scarica l’app per Android',`Versione ${esc(b.version)} · ${updSize(b.size)}`,'download','href="api/update/android" download data-get-app="android"')
+   :row('windows','t-info','Scarica Studio per Windows',`Versione ${esc(b.version)} · ${updSize(b.size)} · Windows 10 e 11`,'download','href="api/update/windows" download data-get-app="windows"'));};
+ if(UPD.info)return show();
+ fetch('api/update/info',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{if(j){UPD.info=j;show();}}).catch(()=>{});
+}
+document.addEventListener('click',e=>{
+ const ios=e.target.closest?.('[data-get-ios]');
+ if(ios){const w=ios.parentElement,open=!w.classList.contains('open');w.classList.toggle('open',open);ios.setAttribute('aria-expanded',open);return;}
+ const a=e.target.closest?.('[data-get-app]');if(!a)return;
+ a.classList.remove('sent');void a.offsetWidth;a.classList.add('sent');
+ toast(a.dataset.getApp==='android'?'Download avviato: aprilo dalle notifiche e consenti l’installazione':'Download avviato: estrai la cartella e avvia TopCash.Licenze.exe','download');
+});
 document.addEventListener('click',async e=>{const b=e.target.closest?.('[data-install-pwa]');if(!b||!installPrompt)return;e.preventDefault();
  installPrompt.prompt();const r=await installPrompt.userChoice.catch(()=>null);installPrompt=null;if(r?.outcome!=='accepted')render(false);});

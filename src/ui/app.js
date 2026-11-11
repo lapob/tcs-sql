@@ -35,10 +35,31 @@ let D=null; // derived data
 let page=store.get('page','overview'),ui={q:'',status:'',product:'',city:'',tab:'current',p:1,sort:{key:'name',dir:1},ostatus:'',ofam:'',taskTab:'open',clientView:'all',itab:'open',mtab:'active',tech:''};
 let drawerCode=null,firstState=true,searchTimer=0;
 
-function licenseStatus(r){if(r._st)return r._st;if((r.blocked||'').toUpperCase()==='SI')return'Bloccata';const d=days(r.expiry);return d===null?'Da verificare':d<0?'Scaduta':d<=30?'In scadenza':'Attiva';}
+function licenseStatus(r){if(r._st)return r._st;if((r.blocked||'').toUpperCase()==='SI')return'Bloccata';const d=days(r.expiry);if(d!==null&&licRenewed(r))return'Rinnovata';return d===null?'Da verificare':d<0?'Scaduta':d<=30?'In scadenza':'Attiva';}
+// "Già rinnovata": the same outcome as the Rinnovi page (key = licence + expiry day), so a new expiry read from the
+// portal starts clean by itself, and the mark is shared by the website, the Windows app and the phones.
+function licRenewKey(r){const d=parseDate(r.expiry);return d?`lic|${r.id}|${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`:'';}
+function renewBy(r){const m=state.renewals?.[licRenewKey(r)];return m?`Segnata come rinnovata${m.by?' da '+m.by:''}${m.at?' il '+dShort(new Date(m.at)):''}`:'';}
+// one tap: marked (or unmarked) at once on screen, saved in the background; if the save fails the screen goes back
+document.addEventListener('click',async e=>{const b=e.target.closest?.('[data-lic-renew]');if(!b)return;e.preventDefault();e.stopPropagation();
+ const r=state.records.find(x=>x.id===b.dataset.licRenew);const key=r&&licRenewKey(r);if(!key||b.disabled)return;
+ const was=state.renewals?.[key]||null,on=was?.status==='Rinnovato';
+ const back=on?([...(was.steps||[])].reverse().find(s=>s.status&&s.status!=='Rinnovato')?.status||''):'Rinnovato';
+ const now=new Date().toISOString(),by=me?.name||'';
+ (state.renewals||={})[key]={...(was||{}),status:back,nextContact:on?(was?.nextContact||''):'',at:now,by,steps:[...(was?.steps||[]),{at:now,by,status:back,note:''}]};
+ b.disabled=true;derive();render(false);if(drawerCode&&!$('#drawer').hidden)openClient(drawerCode,true);
+ if(!on)document.querySelectorAll(`[data-lic-renew="${CSS.escape(r.id)}"]`).forEach(x=>x.classList.add('just')); // one pop, only on what was tapped
+ const ok=await sendWork('renewalSave',{key,status:back,note:was?.note||'',nextContact:state.renewals[key].nextContact},'/api/renewals/save');
+ if(!ok){if(was)state.renewals[key]=was;else delete state.renewals[key];derive();render(false);if(drawerCode&&!$('#drawer').hidden)openClient(drawerCode,true);return;}
+ toast(on?`${r.client}: di nuovo da rinnovare`:`${r.client}: licenza segnata come rinnovata`,on?'repeat':'check');
+},true);
+function licRenewed(r){const k=licRenewKey(r);return!!k&&state.renewals?.[k]?.status==='Rinnovato';}
+const licRenewBtn=(r,big)=>{const d=days(r.expiry);if(d===null||(d>60&&!licRenewed(r)))return'';const on=licRenewed(r);
+ return big?`<button type="button" class="btn sm ${on?'ghost':'renew-go'}" data-lic-renew="${esc(r.id)}">${icon(on?'repeat':'check')}${on?'Annulla “rinnovata”':'Già rinnovata'}</button>`
+  :`<button type="button" class="icon-btn sm renew-btn${on?' on':''}" data-lic-renew="${esc(r.id)}" data-tip="${on?'Segnata come rinnovata: tocca per annullare':'Segna come già rinnovata'}" aria-label="${on?'Annulla rinnovata':'Già rinnovata'}" aria-pressed="${on}">${icon('check')}</button>`;};
 const isCurrent=r=>!r.scope.endsWith('-scadute');
-const STATUS_CLS={'Attiva':'ok','In scadenza':'due','Scaduta':'bad','Bloccata':'bad','Da verificare':'','Senza licenze':''};
-const STATUS_TIP={'Attiva':'Licenza negli elenchi correnti con scadenza oltre 30 giorni','In scadenza':'Scade entro i prossimi 30 giorni: momento giusto per contattare il cliente','Scaduta':'Data di scadenza già passata','Bloccata':'Il portale segnala la generazione bloccata','Da verificare':'Scadenza non indicata dal portale','Senza licenze':'Cliente presente in anagrafica ma senza matricole negli elenchi letti'};
+const STATUS_CLS={'Rinnovata':'ok renewed','Attiva':'ok','In scadenza':'due','Scaduta':'bad','Bloccata':'bad','Da verificare':'','Senza licenze':''};
+const STATUS_TIP={'Rinnovata':'Segnata come già rinnovata: si aggiorna da sola quando il portale riporta la nuova scadenza','Attiva':'Licenza negli elenchi correnti con scadenza oltre 30 giorni','In scadenza':'Scade entro i prossimi 30 giorni: momento giusto per contattare il cliente','Scaduta':'Data di scadenza già passata','Bloccata':'Il portale segnala la generazione bloccata','Da verificare':'Scadenza non indicata dal portale','Senza licenze':'Cliente presente in anagrafica ma senza matricole negli elenchi letti'};
 const badge=s=>`<span class="badge ${STATUS_CLS[s]??''}" data-tip="${esc(STATUS_TIP[s]||'')}">${esc(s)}</span>`;
 function orderCls(s){s=norm(s);return /annull|non approv|disdett/.test(s)?'bad':/allegati|sospes|da completare/.test(s)?'due':/^registrato$/.test(s)?'ok':/approvazione|registrazione|inviare|approvato/.test(s)?'info':'';}
 
@@ -52,7 +73,7 @@ function derive(){
   const g=reg.get(code)||{};const recs=(by.get(code)||[]).slice().sort((a,b)=>(parseDate(a.expiry)||0)-(parseDate(b.expiry)||0));
   const active=recs.filter(isCurrent);const meta=state.metadata?.[code]||{};
   const families=[...new Set([...(g.families||[]),...recs.map(r=>famOfScope(r.scope))])];
-  const pool=active.length?active:recs;const st=pool.map(licenseStatus);
+  const pool=active.length?active:recs;const st=pool.map(r=>{const s=licenseStatus(r);return s==='Rinnovata'?'Attiva':s;});
   const status=!recs.length?'Senza licenze':st.includes('Bloccata')?'Bloccata':st.includes('In scadenza')?'In scadenza':st.includes('Attiva')?'Attiva':st.every(s=>s==='Scaduta')?'Scaduta':'Da verificare';
   const next=active.map(r=>parseDate(r.expiry)).filter(d=>d&&d>=today).sort((a,b)=>a-b)[0]||null;
   const c={code,name:g.name||recs[0]?.client||code,vat:recs.find(r=>r.vat)?.vat||'',taxCode:g.taxCode||'',city:g.city||'',address:g.address||'',phone:(g.phone||'').trim(),email:g.email||'',families,records:recs,active,orders:[],status,next,meta,note:state.notes?.[code]||'',registry:!!g.code,installer:recs.find(r=>r.installer)?.installer||''};
@@ -84,8 +105,8 @@ function derive(){
  list.sort((a,b)=>a.name.localeCompare(b.name,'it'));
  const current=state.records.filter(isCurrent);
  D={clients:list,byCode,orders,current,machines,dropped:allM.length-keptM.length,interventions,history:state.records.filter(r=>!isCurrent(r)),
-  due30:current.filter(r=>{const d=days(r.expiry);return d!==null&&d>=0&&d<=30;}),
-  overdue:current.filter(r=>{const d=days(r.expiry);return d!==null&&d<0;}),
+  due30:current.filter(r=>{const d=days(r.expiry);return d!==null&&d>=0&&d<=30&&r._st!=='Rinnovata';}),
+  overdue:current.filter(r=>{const d=days(r.expiry);return d!==null&&d<0&&r._st!=='Rinnovata';}),
   tasks:list.filter(c=>c.meta.nextContact||c.meta.followupState&&c.meta.followupState!=='Completato'),
   orders30:orders.filter(o=>o.d&&dayDiff(o.d)>=-30),
   openInterventions:interventions.filter(i=>i.status!=='Chiuso'),
@@ -206,7 +227,7 @@ function agendaItems(from,to){
   if(r.certDue)add('rcert',parseDate(r.certDue),r.cert,nm,`RCH · ${r.serial}`,a);}
  return out.sort((a,b)=>a.d-b.d);
 }
-function agendaRow(x){const[label,cls]=AG_KIND[x.k];return`<div class="list-row" ${x.attr}><span class="date-chip ${x.n<0?'bad':x.n<=30?'due':''}"><b>${x.d.getDate()}</b><span>${DF3.format(x.d)}</span></span><div class="grow"><strong>${esc(x.title)}</strong><small><span class="badge ${cls}">${label}</span> ${esc(x.sub)}</small></div><span class="in-days" style="color:var(--${x.n<0?'bad':x.n<=30?'due':'text-3'})">${rel(x.n)}</span></div>`;}
+function agendaRow(x){const[label,cls]=AG_KIND[x.k];return`<div class="list-row" ${x.attr}><span class="date-chip ${x.n<0?'bad':x.n<=30?'due':''}"><b>${x.d.getDate()}</b><span>${DF3.format(x.d)}</span></span><div class="grow"><strong>${esc(x.title)}</strong><small><span class="badge ${cls}">${label}</span> ${esc(x.sub)}</small></div>${x.k==='lic'&&state.renewals?.[`lic|${x.ref}|${isoDay(x.d)}`]?.status==='Rinnovato'?'<span class="badge ok renewed">Rinnovata</span>':`<span class="in-days" style="color:var(--${x.n<0?'bad':x.n<=30?'due':'text-3'})">${rel(x.n)}</span>`}</div>`;}
 // "Da fare oggi": only the lines that need attention, each one opens the right page
 function todayCard(){
  const late=D.tasks.filter(c=>c.meta.followupState!=='Completato'&&c.meta.nextContact&&days(c.meta.nextContact)<=0).length;
@@ -326,7 +347,7 @@ function licTable(list,size=14,title='Registro licenze',sub='Dati originali dell
  return`<div class="card reveal" style="--i:3"><div class="card-head"><div><h2>${title}<span class="count">${fmt(list.length)}</span></h2><p>${sub}</p></div></div>
  <div class="toolbar">${search('Cerca cliente, matricola, P.IVA…')}${sel('f-status','Tutti gli stati',['Attiva','In scadenza','Scaduta','Bloccata','Da verificare'],ui.status)}${sel('f-product','Tutti i prodotti',Object.keys(FAMILY),ui.product)}</div>
  <div class="table-wrap"><table><thead><tr>${th('Cliente','client')}${th('Matricola','serial')}<th>Prodotto</th>${th('Versione','ver')}${th('Scadenza','exp')}<th>Stato</th><th></th></tr></thead><tbody>
- ${rows.map((r,i)=>{const d=parseDate(r.expiry),n=dayDiff(d);return`<tr class="reveal" style="--i:${i}" data-client="${esc(r.clientCode)}" tabindex="0"><td><div class="who">${markEl(r.client,r.clientCode)}<div><strong>${hl(r.client,ui.q)}</strong><small>Cod. ${esc(r.clientCode.replace(/^0+/,''))}</small></div></div></td><td class="mono">${hl(r.serial,ui.q)}</td><td><span class="chip">${esc(famLabel(famOfScope(r.scope)))}</span></td><td class="mono">${esc(r.version)||'—'}</td><td>${d?`${dShort(d)}<br><small style="color:var(--${n<0?'bad':n<=30?'due':'text-3'})">${rel(n)}</small>`:'<span class="muted">Non indicata</span>'}</td><td>${badge(licenseStatus(r))} ${licNote(r)}</td><td><div class="row-act">${licEditBtn(r)}<span class="row-go">${icon('chevron')}</span></div></td></tr>`;}).join('')||`<tr><td colspan="7">${empty('key','Nessuna licenza','Modifica la ricerca o i filtri.')}</td></tr>`}
+ ${rows.map((r,i)=>{const d=parseDate(r.expiry),n=dayDiff(d);return`<tr class="reveal" style="--i:${i}" data-client="${esc(r.clientCode)}" tabindex="0"><td><div class="who">${markEl(r.client,r.clientCode)}<div><strong>${hl(r.client,ui.q)}</strong><small>Cod. ${esc(r.clientCode.replace(/^0+/,''))}</small></div></div></td><td class="mono">${hl(r.serial,ui.q)}</td><td><span class="chip">${esc(famLabel(famOfScope(r.scope)))}</span></td><td class="mono">${esc(r.version)||'—'}</td><td>${d?`${dShort(d)}<br><small style="color:var(--${n<0?'bad':n<=30?'due':'text-3'})">${rel(n)}</small>`:'<span class="muted">Non indicata</span>'}</td><td>${badge(licenseStatus(r))} ${licNote(r)}</td><td><div class="row-act">${licRenewBtn(r)}${licEditBtn(r)}<span class="row-go">${icon('chevron')}</span></div></td></tr>`;}).join('')||`<tr><td colspan="7">${empty('key','Nessuna licenza','Modifica la ricerca o i filtri.')}</td></tr>`}
  </tbody></table></div>${pager(list.length,size)}</div>`;
 }
 function licensesPage(){
@@ -356,9 +377,9 @@ function expiryPage(){
   ${ag.length>(ui.amore||60)?`<div class="btn-row" style="justify-content:center;margin-top:12px"><button class="btn ghost" data-amore>Mostra altre ${fmt(Math.min(60,ag.length-(ui.amore||60)))}</button></div>`:''}
  </div>
  <div class="layout-2"><div class="card reveal" style="--i:5"><div class="card-head"><div><h2>Licenze Zucchetti per mese</h2><p>Prossimi 120 giorni.</p></div></div>
-  ${[...months.values()].map(m=>`<div class="month"><div class="month-head"><h3>${DF2.format(m.d)}</h3><span>${m.items.length} licenze</span></div>${m.items.map(r=>{const d=parseDate(r.expiry),n=dayDiff(d);return`<div class="list-row" data-client="${esc(r.clientCode)}"><span class="date-chip ${n<=30?'due':''}"><b>${d.getDate()}</b><span>${DF5.format(d)}</span></span><div class="grow"><strong>${esc(r.client)}</strong><small>${esc(famLabel(famOfScope(r.scope)))} · <span class="mono">${esc(r.serial)}</span></small></div><span class="in-days" style="color:var(--${n<=30?'due':'text-3'})">${rel(n)}</span>${D.byCode.get(r.clientCode)?.meta.nextContact?`<span class="badge acc" data-tip="Promemoria già fissato">${icon('check')}</span>`:''}</div>`;}).join('')}</div>`).join('')||empty('calendar','Nessuna scadenza in arrivo','Nei prossimi 120 giorni non scade nessuna licenza.')}
+  ${[...months.values()].map(m=>`<div class="month"><div class="month-head"><h3>${DF2.format(m.d)}</h3><span>${m.items.length} licenze</span></div>${m.items.map(r=>{const d=parseDate(r.expiry),n=dayDiff(d);return`<div class="list-row" data-client="${esc(r.clientCode)}"><span class="date-chip ${n<=30?'due':''}"><b>${d.getDate()}</b><span>${DF5.format(d)}</span></span><div class="grow"><strong>${esc(r.client)}</strong><small>${esc(famLabel(famOfScope(r.scope)))} · <span class="mono">${esc(r.serial)}</span></small></div>${licRenewed(r)?'<span class="badge ok renewed">Rinnovata</span>':`<span class="in-days" style="color:var(--${n<=30?'due':'text-3'})">${rel(n)}</span>`}${licRenewBtn(r)}${D.byCode.get(r.clientCode)?.meta.nextContact?`<span class="badge acc" data-tip="Promemoria già fissato">${icon('check')}</span>`:''}</div>`;}).join('')}</div>`).join('')||empty('calendar','Nessuna scadenza in arrivo','Nei prossimi 120 giorni non scade nessuna licenza.')}
  </div>
- <div class="card reveal" style="--i:6"><h2>Scadute da gestire</h2><p class="sub">Licenze con data passata ancora negli elenchi correnti.</p><div style="margin-top:10px">${D.overdue.sort((a,b)=>parseDate(b.expiry)-parseDate(a.expiry)).slice(0,30).map(r=>`<div class="list-row" data-client="${esc(r.clientCode)}"><div class="grow"><strong>${esc(r.client)}</strong><small><span class="mono">${esc(r.serial)}</span> · ${esc(r.expiry)}</small></div><span class="in-days" style="color:var(--bad)">${rel(days(r.expiry))}</span></div>`).join('')||'<p class="sub">Nessuna. Ottimo lavoro!</p>'}</div></div></div>
+ <div class="card reveal" style="--i:6"><h2>Scadute da gestire</h2><p class="sub">Licenze con data passata ancora negli elenchi correnti.</p><div style="margin-top:10px">${D.overdue.sort((a,b)=>parseDate(b.expiry)-parseDate(a.expiry)).slice(0,30).map(r=>`<div class="list-row" data-client="${esc(r.clientCode)}"><div class="grow"><strong>${esc(r.client)}</strong><small><span class="mono">${esc(r.serial)}</span> · ${esc(r.expiry)}</small></div><span class="in-days" style="color:var(--bad)">${rel(days(r.expiry))}</span>${licRenewBtn(r)}</div>`).join('')||'<p class="sub">Nessuna. Ottimo lavoro!</p>'}</div></div></div>
  ${D.machines.length?`<div class="card reveal" style="--i:7;margin-top:16px"><div class="card-head"><div><h2>Verificazioni e abbonamenti</h2><p>Registratori con verificazione periodica (stimata) o abbonamento in scadenza entro 60 giorni.</p></div><button class="btn ghost sm" data-go="machines">Parco macchine ${icon('arrow')}</button></div>
   ${[...D.verDue.map(m=>({m,kind:'Verificazione',d:m.verNext,n:m.verDays})),...D.contractDue.map(m=>({m,kind:'Fine abbonamento',d:m.end,n:m.endDays}))].sort((a,b)=>a.d-b.d).slice(0,40).map(x=>`<div class="list-row" ${x.m.code?`data-client="${esc(x.m.code)}"`:''}><span class="date-chip ${x.n<0?'bad':'due'}"><b>${x.d.getDate()}</b><span>${DF3.format(x.d)}</span></span><div class="grow"><strong>${esc(x.m.client)}</strong><small>${x.kind} · ${esc(x.m.model||'')} <span class="mono">${esc(x.m.serial)}</span></small></div><span class="in-days" style="color:var(--${x.n<0?'bad':'due'})">${rel(x.n)}</span></div>`).join('')||'<p class="sub">Nessuna scadenza nei prossimi 60 giorni.</p>'}</div>`:''}`;
 }
@@ -1048,7 +1069,7 @@ document.addEventListener('visibilitychange',()=>{if(WEB&&me&&document.visibilit
 function showAuth(kind,err=''){
  $('#splash')?.classList.add('gone');es?.close();const a=$('#auth');a.hidden=false;
  const setup=kind==='setup';
- a.innerHTML=`<form class="auth-card" id="auth-form" autocomplete="on">
+ a.innerHTML=`<div class="auth-stack"><form class="auth-card" id="auth-form" autocomplete="on">
   <img src="assets/tcs-app@2x.png" alt="Top Cash Service" class="auth-logo">
   <h1>${setup?'Configura Top Cash Studio':'Accedi a Top Cash Studio'}</h1>
   <p>${setup?'Crea l’account <strong>amministratore</strong>. Potrai poi aggiungere i colleghi da <em>Utenti</em>.':'Usa le credenziali che ti ha dato l’amministratore.'}</p>
@@ -1058,7 +1079,8 @@ function showAuth(kind,err=''){
   ${setup?`<label class="field">Ripeti la password<input class="input" name="password2" type="password" required autocomplete="new-password"></label><p class="muted" style="font-size:12px">Almeno 10 caratteri. Scegli una password che non usi altrove.</p>`:`<label class="check"><input type="checkbox" name="remember" checked> Resta connesso su questo dispositivo</label>`}
   <div class="auth-err" role="alert">${esc(err)}</div>
   <button class="btn accent" type="submit">${setup?'Crea amministratore':'Accedi'} ${icon('arrow')}</button>
- </form>`;
+ </form><div id="auth-get" hidden></div></div>`;
+ if(!setup&&typeof authGetApp==='function')authGetApp();
  setTimeout(()=>a.querySelector('input')?.focus(),50);
  $('#auth-form').addEventListener('submit',async e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));const btn=e.target.querySelector('button');
   if(setup&&f.password!==f.password2){e.target.querySelector('.auth-err').textContent='Le due password non coincidono.';return;}
@@ -1078,6 +1100,25 @@ function checkDevices(){if(!WEB||!me||!isAdmin())return;const wait=20000-(Date.n
  pendAt=Date.now();api('/api/devices/pending').then(r=>{const n=r?.count||0,el=$('#nav-team');if(el)el.textContent=n||'';
   if(pendLast>=0&&n>pendLast)toast(n===1?'Un dispositivo chiede l’accesso da fuori ufficio: autorizzalo in Utenti → Dispositivi':`${n} dispositivi chiedono l’accesso da fuori ufficio: autorizzali in Utenti → Dispositivi`,'shield');
   pendLast=n;}).catch(()=>{});}
+// ───────────────────────── on-screen keyboard (phones and tablets)
+// The field being typed in must never hide behind the keyboard: the page knows how much of the screen the keyboard
+// covers (--kb, for browsers that do not shrink the page themselves) and brings the focused field to the middle of
+// what is left, inside its sheet / dialog / page, once the keyboard has finished opening.
+(()=>{const vv=window.visualViewport;if(!vv||!matchMedia('(pointer:coarse)').matches)return;const root=document.documentElement;let raf=0,base=innerHeight;
+ const typing=()=>{const a=document.activeElement;return!!a&&(a.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))&&!/^(checkbox|radio|button|submit|range|color|file)$/.test(a.type||'');};
+ const update=()=>{raf=0;if(!typing())base=Math.max(base,innerHeight);
+  const kb=Math.max(0,Math.round(innerHeight-vv.height-vv.offsetTop));const open=typing()&&(kb>80||innerHeight<base-120);
+  root.style.setProperty('--kb',(kb>80?kb:0)+'px');root.classList.toggle('kb-open',open);};
+ const sched=()=>{if(!raf)raf=requestAnimationFrame(update);};
+ vv.addEventListener('resize',sched);vv.addEventListener('scroll',sched);addEventListener('resize',sched);
+ const reveal=el=>{if(!el?.isConnected||document.activeElement!==el)return;const r=el.getBoundingClientRect(),top=vv.offsetTop+56,bottom=vv.offsetTop+vv.height-16;
+  if(r.top<top||r.bottom>bottom)el.scrollIntoView({block:'center',inline:'nearest',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth'});};
+ document.addEventListener('focusin',e=>{const el=e.target;if(!typing())return;sched();
+  // the keyboard animates in for ~250-350 ms: check once it is up, and again if the visible area changes after that
+  setTimeout(()=>reveal(el),320);const once=()=>{vv.removeEventListener('resize',once);setTimeout(()=>reveal(el),60);};vv.addEventListener('resize',once);setTimeout(()=>vv.removeEventListener('resize',once),1200);});
+ document.addEventListener('focusout',()=>setTimeout(sched,60));
+})();
+
 function showDevice(status,code){
  $('#splash')?.classList.add('gone');es?.close();clearTimeout(devTimer);const a=$('#auth');a.hidden=false;const blocked=status==='revoked';
  a.innerHTML=`<div class="auth-card device-card">

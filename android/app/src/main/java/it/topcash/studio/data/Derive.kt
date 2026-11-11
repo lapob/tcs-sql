@@ -133,7 +133,7 @@ class UClient(
     }
     var search = ""
     val status: String get() {
-        val pool = active.ifEmpty { licenses }; val st = pool.map { it.status }
+        val pool = active.ifEmpty { licenses }; val st = pool.map { if (it.status == "Rinnovata") "Attiva" else it.status }
         return when {
             licenses.isEmpty() -> "Senza licenze"; "Bloccata" in st -> "Bloccata"; "In scadenza" in st -> "In scadenza"
             "Attiva" in st -> "Attiva"; st.all { it == "Scaduta" } -> "Scaduta"; else -> "Da verificare"
@@ -175,7 +175,9 @@ class Archive(val state: ArchiveState) {
     init {
         fun lic(r: LicenseRecord): ULicense {
             val exp = Dates.parse(r.expiry); val d = Dates.daysFromToday(exp)
-            val st = when { r.blocked.equals("SI", true) -> "Bloccata"; d == null -> "Da verificare"; d < 0 -> "Scaduta"; d <= 30 -> "In scadenza"; else -> "Attiva" }
+            // "Rinnovata": marked as already renewed for this expiry (same key as the Rinnovi page and the website)
+            val renewed = exp != null && state.renewals["lic|${r.id}|$exp"]?.status == "Rinnovato"
+            val st = when { r.blocked.equals("SI", true) -> "Bloccata"; d == null -> "Da verificare"; renewed -> "Rinnovata"; d < 0 -> "Scaduta"; d <= 30 -> "In scadenza"; else -> "Attiva" }
             return ULicense(r, exp, d, st, !r.scope.endsWith("-scadute"), r.scope.substringBefore("-"))
         }
         licenses = state.records.map(::lic)
@@ -305,8 +307,8 @@ class Archive(val state: ArchiveState) {
     /** Accounting mirror of MastroSQL (invoices, instalments, balances) linked to the app's clients. */
     val acc: AccountingView by lazy { AccountingView(state, clients) }
     val currentLicenses by lazy { licenses.filter { it.current } }
-    val due30 by lazy { currentLicenses.filter { (it.days ?: -1) in 0..30 } }
-    val overdue by lazy { currentLicenses.filter { (it.days ?: 0) < 0 } }
+    val due30 by lazy { currentLicenses.filter { (it.days ?: -1) in 0..30 && it.status != "Rinnovata" } }
+    val overdue by lazy { currentLicenses.filter { (it.days ?: 0) < 0 && it.status != "Rinnovata" } }
     val openInterventions by lazy { interventions.filter { it.i.status != "Chiuso" } }
     val verificationsDue by lazy { machines.filter { it.m.active && it.verDays != null && it.verDays <= 60 } }
     val contractsDue by lazy { machines.filter { it.m.subscribed && it.endDays != null && it.endDays <= 60 } }
@@ -366,7 +368,7 @@ class Archive(val state: ArchiveState) {
 
     companion object {
         fun toneOf(status: String) = when {
-            status in setOf("Attiva", "Chiuso", "Registrato") -> Tone.Ok
+            status in setOf("Attiva", "Rinnovata", "Chiuso", "Registrato") -> Tone.Ok
             status in setOf("In scadenza", "In corso", "Alta") || status.contains("allegati", true) || status.startsWith("Sospes") -> Tone.Due
             status in setOf("Scaduta", "Bloccata", "Urgente", "Annullato", "Non approvato") || status.startsWith("Disdett") -> Tone.Bad
             status in setOf("Aperto") || status.contains("approvazione") || status.contains("registrazione") || status.contains("inviare") -> Tone.Info

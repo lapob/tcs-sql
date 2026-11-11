@@ -18,8 +18,8 @@ android {
         applicationId = "it.topcash.studio"
         minSdk = 26
         targetSdk = 36
-        versionCode = 33
-        versionName = "2.8.11"
+        versionCode = 34
+        versionName = "2.8.12"
     }
 
     signingConfigs {
@@ -74,6 +74,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.sse)
     implementation(libs.kotlinx.serialization.json)
+    testImplementation("junit:junit:4.13.2")
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.haze)
     implementation(libs.haze.blur)

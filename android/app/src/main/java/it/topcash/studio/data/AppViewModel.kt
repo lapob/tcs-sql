@@ -23,7 +23,11 @@ data class SyncProgress(val running: Boolean = false, val text: String = "")
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("topcash", Context.MODE_PRIVATE)
     private val api = Api(app)
+    private val files: File = app.filesDir
+    /** Archive saved by versions up to 2.8.11 as one big file: moved into [sections] on the first start. */
     private val cacheFile = File(app.filesDir, "archive.json")
+    /** The saved archive, one file per section (see SectionCache: no huge strings or JSON trees in memory). */
+    private val sections = SectionCache(File(app.filesDir, "archive"))
     private val etagFile = File(app.filesDir, "archive.etag")
     /** Fingerprints of the saved sections ("name=hash,…"): sent to the server to download only what changed. */
     private val hashFile = File(app.filesDir, "archive.hashes")
@@ -42,7 +46,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _theme = MutableStateFlow(prefs.getString("theme", "system") ?: "system"); val theme = _theme.asStateFlow()
     val server: String get() = prefs.getString("server", "").orEmpty()
     val serverExternal: String get() = prefs.getString("server_ext", "").orEmpty()
-    /** Code shown on the "device blocked" screen, and its status. */
+    /** Code shown on the "authorize / blocked device" screen, and its status. */
     private val _device = MutableStateFlow(DeviceStatus()); val device = _device.asStateFlow()
     val usingExternal: Boolean get() = api.isExternal
     private val deviceKey: String by lazy {
@@ -52,10 +56,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private var etag: String? = null
-    /** The saved archive as JSON sections, read from disk when a partial update needs it. */
-    private suspend fun rawArchive(): kotlinx.serialization.json.JsonObject? = withContext(Dispatchers.Default) {
-        runCatching { json.parseToJsonElement(cacheFile.readText()) as kotlinx.serialization.json.JsonObject }.getOrNull()
-    }
     private var stream: EventSource? = null
     private var reconnect: Job? = null
     private var refreshJob: Job? = null
@@ -90,8 +90,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun loadCache() = withContext(Dispatchers.Default) {
-        if (!cacheFile.exists()) return@withContext
-        runCatching { val ar = Archive(json.decodeFromString<ArchiveState>(cacheFile.readText())); _archive.value = ar; etag = etagFile.takeIf { it.exists() }?.readText(); ar.warm() } // shown at once, the rest is prepared here in the background
+        try {
+            if (cacheFile.exists()) {
+                // first start after the update: the old single file is split into sections (streamed, little memory)
+                if (!sections.complete) runCatching { val st = File(files, "archive.new"); sections.commit(st, sections.split(cacheFile, st)); hashFile.writeText(sections.hashes()) }
+                    .onFailure { sections.clear(); etagFile.delete(); hashFile.delete() }
+                cacheFile.delete()
+            }
+            if (!sections.complete) return@withContext
+            val ar = Archive(sections.decode()); _archive.value = ar; etag = etagFile.takeIf { it.exists() }?.readText(); ar.warm() // shown at once, the rest is prepared here in the background
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e
+        } catch (e: Throwable) {
+            // unreadable copy (or not enough memory for it): start clean, the archive is downloaded again
+            sections.clear(); etagFile.delete(); hashFile.delete(); etag = null
+        }
     }
 
     fun refresh(userInitiated: Boolean = false) {
@@ -110,25 +122,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (userInitiated) _refreshing.value = true
             try {
                 val have = if (_archive.value == null) null else withContext(Dispatchers.IO) { hashFile.takeIf { it.exists() }?.readText()?.ifBlank { null } }
-                val r = try { api.state(if (_archive.value == null) null else etag, have) }
-                        catch (e: ApiException) { if (e.status == 404 && have != null) api.state(null) else throw e } // older server: full archive
-                if (r != null) {
-                    var (body, tag) = r; var hashes = ""
-                    val parsed = withContext(Dispatchers.Default) {
-                        val o = json.parseToJsonElement(body) as kotlinx.serialization.json.JsonObject
-                        // partial answer: only the sections that changed, merged into the saved copy
-                        var o2 = o
-                        if (o["partial"] != null) {
-                            val saved = rawArchive()
-                            if (saved != null) body = kotlinx.serialization.json.JsonObject(saved + o.filterKeys { it != "partial" }).toString()
-                            else { val full = api.state(null)!!; body = full.first; tag = full.second; o2 = json.parseToJsonElement(body) as kotlinx.serialization.json.JsonObject } // saved copy unreadable: whole archive
+                val download = File(files, "archive.download")
+                var tag = try { api.stateTo(download, if (_archive.value == null) null else etag, have) }
+                          catch (e: ApiException) { if (e.status == 404 && have != null) api.stateTo(download, null) else throw e } // older server: full archive
+                if (tag != null) {
+                    val parsed = try {
+                        withContext(Dispatchers.Default) {
+                            // the answer is split from the file into the section files; a partial one replaces only what changed
+                            val staging = File(files, "archive.new")
+                            var partial = sections.split(download, staging)
+                            if (partial && !sections.complete) { tag = api.stateTo(download, null).orEmpty(); partial = sections.split(download, staging) } // no complete copy here: whole archive
+                            sections.commit(staging, partial); download.delete()
+                            Archive(sections.decode()).also { it.warm() }
                         }
-                        hashes = (o2["hashes"] as? kotlinx.serialization.json.JsonObject)?.entries?.joinToString(",") { (k, v) -> k + "=" + (v as kotlinx.serialization.json.JsonPrimitive).content }.orEmpty()
-                        Archive(json.decodeFromString<ArchiveState>(body)).also { it.warm() }
+                    } catch (e: kotlinx.coroutines.CancellationException) { throw e
+                    } catch (e: ApiException) { throw e
+                    } catch (e: Throwable) {
+                        // damaged copy or answer: the next update downloads the whole archive again (never a crash)
+                        download.delete(); sections.clear(); etagFile.delete(); hashFile.delete(); etag = null
+                        throw ApiException("Archivio da riscaricare: riprova tra un attimo")
                     }
                     _archive.value?.let { noticeAssigned(it.state.interventions, parsed.state.interventions) }
-                    _archive.value = parsed; etag = tag
-                    withContext(Dispatchers.IO) { cacheFile.writeText(body); tag?.let { etagFile.writeText(it) }; hashFile.writeText(hashes) }
+                    _archive.value = parsed; etag = tag?.ifEmpty { null }
+                    withContext(Dispatchers.IO) { etag?.let { etagFile.writeText(it) } ?: etagFile.delete(); hashFile.writeText(sections.hashes()) }
                 }
                 _online.value = true
             } catch (e: ApiException) {
@@ -202,7 +218,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun logout() = viewModelScope.launch {
         stream?.cancel(); stream = null; api.logout(); signedOut()
-        withContext(Dispatchers.IO) { cacheFile.delete(); etagFile.delete(); hashFile.delete() }; _archive.value = null
+        withContext(Dispatchers.IO) { cacheFile.delete(); sections.clear(); etagFile.delete(); hashFile.delete() }; _archive.value = null
     }
     /** Interventions just assigned to me by someone else: a system notification ("Interventi assegnati" channel). */
     private fun noticeAssigned(prev: List<Intervention>, next: List<Intervention>) {
@@ -236,6 +252,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun saveAsset(a: Asset) = act(if (a.id.isBlank()) "Aggiunto all'inventario" else "Inventario aggiornato") { api.saveAsset(a) }
     fun deleteAsset(id: String) = act("Tolto dall'inventario") { api.deleteAsset(id) }
     fun saveRenewal(key: String, status: String, note: String, next: String) = act("Esito salvato") { api.saveRenewal(RenewalRequest(key, status, note, next)) }
+    /** "Già rinnovata" on a licence (or back to the outcome it had before, when undone). */
+    fun markRenewed(key: String, on: Boolean, client: String) {
+        val m = _archive.value?.state?.renewals?.get(key)
+        val status = if (on) "Rinnovato" else m?.steps.orEmpty().lastOrNull { it.status.isNotEmpty() && it.status != "Rinnovato" }?.status.orEmpty()
+        act(if (on) "$client: licenza segnata come rinnovata" else "$client: di nuovo da rinnovare") {
+            api.saveRenewal(RenewalRequest(key, status, m?.note.orEmpty(), if (on) "" else m?.nextContact.orEmpty()))
+        }
+    }
     // ── network updates: compare the APK on the server with this one, download it and hand it to the system installer
     val appVersion: String = runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull().orEmpty()
     private val _update = MutableStateFlow<AppBuild?>(null); val update = _update.asStateFlow()

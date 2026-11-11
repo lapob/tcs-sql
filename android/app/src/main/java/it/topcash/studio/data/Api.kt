@@ -177,6 +177,23 @@ class Api(context: Context) {
         } catch (e: ApiException) { throw e } catch (e: IOException) { throw ApiException("Server non raggiungibile") }
     }
 
+    /** Like [state], but the answer goes straight to [out] (never one huge string in memory). Returns the ETag
+     *  (or "" when the server sends none), null when nothing changed (HTTP 304). */
+    suspend fun stateTo(out: java.io.File, etag: String?, have: String? = null): String? = withContext(Dispatchers.IO) {
+        val b = Request.Builder().url(url(if (have.isNullOrEmpty()) "/api/state" else "/api/state/delta")).get()
+        if (!etag.isNullOrEmpty()) b.header("If-None-Match", etag)
+        if (!have.isNullOrEmpty()) b.header("X-Have", have)
+        try {
+            // the whole archive over a slow mobile line can take a while: generous limit, the read timeout still catches a dead link
+            http.newCall(b.build()).apply { timeout().timeout(120, TimeUnit.SECONDS) }.execute().use { r ->
+                if (r.code == 304) return@withContext null
+                if (!r.isSuccessful) throw r.error()
+                out.outputStream().buffered(64 * 1024).use { o -> r.body.byteStream().use { it.copyTo(o, 64 * 1024) } }
+                r.header("ETag").orEmpty()
+            }
+        } catch (e: ApiException) { throw e } catch (e: IOException) { out.delete(); throw ApiException("Server non raggiungibile") }
+    }
+
     fun stream(onMessage: (StreamMessage) -> Unit, onOpen: () -> Unit, onFailure: () -> Unit): EventSource =
         EventSources.createFactory(streamHttp).newEventSource(Request.Builder().url(url("/api/stream")).build(), object : EventSourceListener() {
             override fun onOpen(eventSource: EventSource, response: Response) = onOpen()

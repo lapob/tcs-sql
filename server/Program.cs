@@ -20,6 +20,9 @@ if(users.PromotedOwner)store.Log("users","Il primo amministratore del server è 
 var hub=new Hub(store);
 hub.Team=()=>users.List().Where(u=>!u.Disabled).Select(u=>(object)new{name=u.Name,username=u.Username,role=u.Role}).ToArray();
 var devices=new Devices(store.DatabasePath);
+// 2.8.12: sign-in names asked by the owner (password, role and history unchanged)
+foreach(var (from,to) in users.RenameOnce("rename_2_8_12",("Lapo","Bardi"),("Andrea","Chiti")))
+ store.Log("users",$"Nome utente cambiato {from} → {to}: da ora si accede con «{to}» (stessa password).");
 var updates=new Updates(dataDir);
 var guard=new LoginGuard();
 var uiDir=Path.Combine(AppContext.BaseDirectory,"ui");
@@ -288,6 +291,15 @@ app.MapPost("/api/users/{username}",(HttpContext ctx,string username,UserUpdate 
  if(r.Name!=null&&r.Name.Trim()!=before.Name)what.Add("nome");
  store.Log("users",$"{Who(ctx)} ha modificato l'utente {username}{(what.Count>0?": "+string.Join(", ",what):"")}.");hub.Changed();return Results.Ok();
 }).RequireAuthorization("admin");
+// the sign-in name: password, role and history stay; every session of that user ends (they sign in with the new name)
+app.MapPost("/api/users/{username}/rename",(HttpContext ctx,string username,UserRename r)=>
+{
+ if(OwnerOnly(ctx,username,null) is IResult deny)return deny;
+ string old;try{old=users.Rename(username,r.Username??"");}catch(InvalidDataException ex){return Bad(ex.Message);}
+ var now=(r.Username??"").Trim();
+ if(old!=now){store.Log("users",$"{Who(ctx)} ha cambiato il nome utente {old} → {now}: da ora si accede con «{now}».");hub.Changed();}
+ return Results.Ok(new{username=now,self=string.Equals(old,ctx.User.Identity!.Name,StringComparison.OrdinalIgnoreCase)});
+}).RequireAuthorization("admin");
 app.MapPost("/api/users/{username}/delete",(HttpContext ctx,string username)=>
 {
  if(username==ctx.User.Identity!.Name)return Bad("Non puoi eliminare il tuo stesso utente: chiedi a un altro amministratore.");
@@ -553,6 +565,7 @@ record ClientSaveRequest(string? Code,ClientEdit? Edit);
 record ClientDeleteRequest(string? Code,bool Deleted);
 record LicenseSaveRequest(string? Id,LicenseEdit? Edit);
 record UserUpdate(string? Role,bool? Disabled,string? Name,string? Password);
+record UserRename(string? Username);
 record NoteRequest(string Code,string? Note);
 record MetaRequest(string Code,ClientMeta Meta);
 record BatchRequest(string Kind,string Product,string Scope,List<string> Headers,List<List<string>> Rows,string CapturedAt);

@@ -332,7 +332,7 @@ tbody tr:last-child td{border-bottom:0}
 .fact:nth-child(odd){border-right:1px solid var(--line)}
 .fact:nth-last-child(-n+2){border-bottom:0}
 .fact small{display:block;font-size:11.5px;color:var(--text-3);margin-bottom:2px}
-.fact span{display:flex;align-items:center;gap:6px;font-weight:550;word-break:break-word}
+.fact>span{display:flex;align-items:center;gap:8px;font-weight:550;word-break:break-word;min-width:0}
 .fact .copy{opacity:0;color:var(--text-3);transition:.2s}
 .fact:hover .copy{opacity:1}
 .fact .copy svg{width:13px;height:13px}
@@ -469,6 +469,30 @@ main{view-transition-name:main-content}
 .auth-card>p{text-align:center;color:var(--text-2);font-size:13.5px;margin-bottom:6px}
 .auth-card .btn{justify-content:center;height:44px;margin-top:4px}
 .auth-err{color:var(--bad);font-size:13px;min-height:18px}
+/* "Scarica l'app" under the sign-in card: one soft rise after the card, a light lift on hover, a press on tap */
+.auth-stack{width:min(420px,100%);display:grid;gap:12px}
+.auth-stack .auth-card{width:100%}
+.auth-get{display:flex;align-items:center;gap:12px;width:100%;padding:11px 14px 11px 11px;border-radius:20px;border:1px solid var(--line);background:var(--glass,var(--surface));-webkit-backdrop-filter:blur(16px) saturate(1.5);backdrop-filter:blur(16px) saturate(1.5);color:var(--text);text-decoration:none;text-align:left;font:inherit;cursor:pointer;box-shadow:var(--shadow-sm);animation:getin .55s var(--soft) .22s both;transition:transform .22s var(--soft),box-shadow .22s var(--soft),border-color .22s var(--soft);-webkit-tap-highlight-color:transparent}
+.auth-get:hover{transform:translateY(-2px);border-color:var(--accent-ring,var(--line-2));box-shadow:var(--shadow)}
+.auth-get:active{transform:scale(.98);transition-duration:.08s}
+.auth-get:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ag-ic{width:40px;height:40px;flex:none;display:grid;place-items:center;border-radius:13px;background:var(--tone-soft);color:var(--tone)}
+.ag-ic svg{width:21px;height:21px}
+.ag-txt{flex:1;min-width:0;display:grid;gap:2px}
+.ag-txt strong{font-size:14px;font-weight:620;letter-spacing:-.01em}
+.ag-txt small{font-size:12px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ag-go{width:30px;height:30px;flex:none;display:grid;place-items:center;border-radius:50%;color:var(--text-3);background:var(--surface-2);transition:color .2s,background .2s,transform .3s var(--soft)}
+.ag-go svg{width:16px;height:16px}
+.auth-get:hover .ag-go{color:var(--accent);background:var(--accent-soft)}
+.auth-get.sent .ag-go{animation:agsent .6s var(--soft)}
+.ag-wrap.open .ag-go{transform:rotate(90deg)}
+.ag-steps{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows .34s var(--soft),opacity .25s}
+.ag-steps>div{overflow:hidden}
+.ag-steps ol{margin:8px 4px 0;padding:12px 14px 12px 32px;border-radius:16px;background:var(--surface);border:1px solid var(--line);font-size:13px;color:var(--text-2);display:grid;gap:6px}
+.ag-wrap.open .ag-steps{grid-template-rows:1fr;opacity:1}
+@keyframes getin{from{opacity:0;transform:translateY(12px)}}
+@keyframes agsent{40%{transform:translateY(4px)}}
+@media (prefers-reduced-motion:reduce){.auth-get,.ag-go,.ag-steps{transition:none}}
 .check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-2);cursor:pointer}
 .check input{width:16px;height:16px;accent-color:var(--accent)}
 .offline-bar{position:fixed;z-index:60;top:calc(env(safe-area-inset-top) + 64px);left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:99px;background:var(--due-soft);color:var(--due);border:1px solid color-mix(in srgb,var(--due) 30%,transparent);font-size:12.5px;font-weight:600;backdrop-filter:blur(10px);animation:barin .32s var(--soft) both;max-width:calc(100vw - 24px)}
@@ -588,7 +612,6 @@ main{view-transition-name:main-content}
 .sign-banner{display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:14px;background:var(--ok-soft);color:var(--ok)}
 .sign-banner strong{display:block;color:var(--text)}.sign-banner small{color:var(--text-2);font-size:12px}
 @media (max-width:760px){.sign-sum{grid-template-columns:1fr}.sign-pad{height:220px}}
-
 /* ── quick actions menu (popover, top layer) */
 .quick-menu{inset:auto;position:fixed;margin:0;min-width:270px;padding:6px;border-radius:16px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow-lg);color:var(--text);
  opacity:1;transform:none;transform-origin:top right;transition:opacity .18s,transform .4s var(--spring),overlay .2s allow-discrete,display .2s allow-discrete}
@@ -730,7 +753,7 @@ tbody tr[data-client]:active,tbody tr[data-int]:active,.card[data-go]:active{tra
 .drawer.keep .d-body>*{animation:none}
 @media (max-width:760px){
  .modal{place-items:end center;padding:0}
- .modal-box.wide{width:100%;max-height:92vh;border-radius:24px 24px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));animation:sheetin .46s var(--soft) both}
+ .modal-box.wide{width:100%;max-height:min(92vh,92dvh);border-radius:24px 24px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));animation:sheetin .46s var(--soft) both}
  .modal.out .modal-box.wide{animation:sheetout .2s var(--soft-in) both}
  .drawer{animation-name:sheetin}.drawer.out{animation-name:sheetout}
 }
@@ -1083,3 +1106,32 @@ td .svc{padding:3px 8px;font-size:11px;margin:0 4px 4px 0}td small svg{width:12p
 .route-tools{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}.route-tools .seg .count{margin-left:6px;font-size:11px;font-weight:600;opacity:.7;font-variant-numeric:tabular-nums}
 .route-more{display:flex;margin:10px auto 0}
 .route-more-cities{display:flex;margin:16px auto 0}.route-more-cities svg{transform:rotate(90deg)}
+
+/* ── "Già rinnovata" on licences: a quiet check that fills green with one soft pop when tapped */
+.renew-btn{color:var(--text-3);transition:color .2s var(--soft),background .2s var(--soft),box-shadow .2s var(--soft)}
+.renew-btn:hover{color:var(--ok);background:var(--ok-soft)}
+.renew-btn.on{color:#fff;background:var(--ok);box-shadow:0 2px 10px color-mix(in srgb,var(--ok) 35%,transparent)}
+.renew-btn.on.just{animation:renewpop .42s var(--spring)}
+.renew-btn.on:hover{filter:brightness(1.06)}
+.renew-btn:disabled{opacity:1;cursor:progress}
+.badge.renewed{display:inline-flex;align-items:center;gap:4px}
+.badge.renewed::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.lic-renew{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px}
+.lic-renew small{font-size:12px}
+.btn.renew-go{color:var(--ok);background:var(--ok-soft);border-color:transparent}
+.btn.renew-go:hover{background:var(--ok);color:#fff}
+.list-row .renew-btn{margin-left:4px;flex:none}
+@keyframes renewpop{0%{transform:scale(.8)}60%{transform:scale(1.12)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.renew-btn.on.just{animation:none}}
+/* ── on-screen keyboard (phones): --kb is the part of the screen it covers when the browser does not shrink the page by
+   itself (iPhone; Android Chrome resizes the page, then --kb stays 0). Sheets, dialogs and the login card sit above it,
+   the bottom bar steps aside while typing, so the field being written is always in sight. */
+@media (max-width:760px){
+ .modal{padding-bottom:var(--kb,0px);transition:padding-bottom .2s var(--soft)}
+ .modal-box{max-height:calc(min(92vh,92dvh) - var(--kb,0px));overflow:auto}
+ .modal-box.wide{max-height:calc(min(92vh,92dvh) - var(--kb,0px))}
+ .auth{padding-bottom:calc(20px + var(--kb,0px));overflow-y:auto}
+ .drawer{bottom:var(--kb,0px)}
+ :root.kb-open .sidebar{display:none}
+ :root.kb-open main{padding-bottom:16px}
+}

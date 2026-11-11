@@ -104,6 +104,28 @@ public sealed class Users
   if(current.User.Role==Roles.Owner&&!current.User.Disabled&&ActiveOwners(c,tx)<=1)throw new InvalidDataException("Deve restare almeno un proprietario attivo.");
   using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="DELETE FROM users WHERE username=$u";q.Parameters.AddWithValue("$u",username);q.ExecuteNonQuery();tx.Commit();
  }
+ /// Changes the sign-in name (password, role and history stay). The new stamp ends the sessions opened with the old
+ /// name: everyone signs in again with the new one (devices and history keep the display name, which does not change).
+ public string Rename(string username,string newName)
+ {
+  newName=newName.Trim();
+  if(ValidateUsername(newName) is string e)throw new InvalidDataException(e);
+  using var c=Open();using var tx=c.BeginTransaction();
+  string old;
+  using(var g=c.CreateCommand()){g.Transaction=tx;g.CommandText="SELECT username FROM users WHERE username=$u";g.Parameters.AddWithValue("$u",username);old=g.ExecuteScalar() as string??throw new InvalidDataException("Utente non trovato.");}
+  if(!string.Equals(old,newName,StringComparison.OrdinalIgnoreCase))
+  {
+   using var x=c.CreateCommand();x.Transaction=tx;x.CommandText="SELECT count(*) FROM users WHERE username=$n";x.Parameters.AddWithValue("$n",newName);
+   if((long)x.ExecuteScalar()!>0)throw new InvalidDataException("Esiste già un utente con questo nome.");
+  }
+  if(old==newName)return old;
+  using(var q=c.CreateCommand())
+  {
+   q.Transaction=tx;q.CommandText="UPDATE users SET username=$n,stamp=$s WHERE username=$u";
+   q.Parameters.AddWithValue("$n",newName);q.Parameters.AddWithValue("$s",Guid.NewGuid().ToString("N"));q.Parameters.AddWithValue("$u",old);q.ExecuteNonQuery();
+  }
+  tx.Commit();return old;
+ }
  public void SetPassword(string username,string password)
  {
   if(ValidatePassword(password) is string e)throw new InvalidDataException(e);
@@ -117,6 +139,18 @@ public sealed class Users
  {
   var token="tcs_"+Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+','-').Replace('/','_');
   SetSetting("sync_token_sha256",Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))));SetSetting("sync_token_created",DateTimeOffset.Now.ToString("O"));return token;
+ }
+ /// Renames requested once by the owner, applied on the first start of the version that carries them and never again
+ /// (a name that no longer exists, or a new name already taken, is left alone).
+ public List<(string From,string To)> RenameOnce(string key,params (string From,string To)[] pairs)
+ {
+  var done=new List<(string,string)>();if(GetSetting(key)!=null)return done;
+  foreach(var (from,to) in pairs)
+  {
+   var u=Get(from)?.User;if(u==null||u.Username!=from||Get(to)!=null)continue;
+   try{Rename(from,to);done.Add((from,to));}catch(InvalidDataException){}
+  }
+  SetSetting(key,DateTimeOffset.Now.ToString("O"));return done;
  }
  public void RevokeSyncToken(){SetSetting("sync_token_sha256","");}
  public bool CheckSyncToken(string? token)
