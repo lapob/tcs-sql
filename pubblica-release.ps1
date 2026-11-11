@@ -1,4 +1,4 @@
-# Pubblica il codice e una Release su GitHub (repository pubblico lapob/tcs-sql).
+﻿# Pubblica il codice e una Release su GitHub (repository pubblico lapob/tcs-sql).
 # Uso:  powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\pubblica-release.ps1 -Versione 2.3.0 [-Note "cosa cambia"]
 # Prima volta: accedi con  .tools\gh\bin\gh.exe auth login  (vedi GUIDA, sezione "Versioni e Release").
 # Nella Release vanno SOLO i programmi compilati: mai database, backup, chiavi o password (esclusi da .gitignore).
@@ -48,6 +48,7 @@ foreach ($f in $files | Where-Object { $_ -like '*.zip' }) {
 # 3. Release con note e file
 if (-not $Note) { $Note = (& $git log -1 --pretty=%B) -join "`n" }
 $tag = "v$Versione"
-& $gh release create $tag @files --repo $repo --title "Top Cash Studio $Versione" --notes $Note --target main
+$notesFile = Join-Path $out 'note.txt'; Set-Content -Path $notesFile -Value $Note -Encoding UTF8   # multi-line notes go through a file
+& $gh release create $tag @files --repo $repo --title "Top Cash Studio $Versione" --notes-file $notesFile --target main
 if ($LASTEXITCODE) { throw 'Creazione della Release non riuscita' }
 Write-Host "Release pubblicata: https://github.com/$repo/releases/tag/$tag" -ForegroundColor Green
