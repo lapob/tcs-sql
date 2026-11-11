@@ -28,7 +28,12 @@ function applyEdits(){
   t.phones=[...new Set([...(t.phones||[]),...(c.phones||[])])];t.emails=[...new Set([...(t.emails||[]),...(c.emails||[])])];
   if(!t.vat)t.vat=c.vat;if(!t.taxCode)t.taxCode=c.taxCode;if(!t.mastro&&c.mastro)t.mastro=c.mastro;(t.mastroCodes||=[]).push(...(c.mastroCodes||[]));
   t.search=norm(t.search+' '+c.search);(t.mergedFrom||=[]).push(c);D.byCode.set(code,t);D.merged.push(c);}
+ // customers without an active machine leave Studio by themselves: restorable from Eliminati, and back on their own
+ // as soon as Mastro gives them an active machine. Customers created in Studio and restored ones stay.
+ {const out=new Set([...D.deleted,...D.merged]);D.autoGone=0;
+  for(const c of D.clients){if(out.has(c)||c.edit?.created||c.edit?.keep||(c.machines||[]).some(m=>m.active))continue;c.autoGone=true;D.deleted.push(c);D.autoGone++;}}
  if(D.deleted.length||D.merged.length){const gone=new Set([...D.deleted,...D.merged]);D.clients=D.clients.filter(c=>!gone.has(c));}
+ D.deleted.sort((a,b)=>a.name.localeCompare(b.name,'it'));
  D.clients.sort((a,b)=>a.name.localeCompare(b.name,'it'));
  D.licEdits=state.licenseEdits||{};
 }
@@ -76,6 +81,7 @@ async function deleteClient(code){
  if(!await ask({title:`Eliminare ${c.name}?`,text:`Il cliente sparisce da Studio per tutto il team${links?` (con i collegamenti a ${links})`:''}. I portali e Mastro non vengono toccati e puoi <strong>ripristinarlo</strong> quando vuoi da Clienti → Eliminati.`,ok:'Elimina',danger:true}))return;
  if(await adminSend('clientDelete',{code,deleted:true})){if(typeof closeDrawer==='function')closeDrawer();if(WEB)toast('Cliente eliminato · ripristinabile da Clienti → Eliminati');}
 }
+document.addEventListener('input',e=>{if(e.target.matches?.('[data-del-q]')){ui.delQ=e.target.value;const at=e.target.selectionStart;render();const f=document.querySelector('[data-del-q]');if(f){f.focus();f.setSelectionRange(at,at);}}});
 async function restoreClient(code){if(await adminSend('clientDelete',{code,deleted:false})&&WEB)toast('Cliente ripristinato');}
 
 async function openLicenseEditor(id){

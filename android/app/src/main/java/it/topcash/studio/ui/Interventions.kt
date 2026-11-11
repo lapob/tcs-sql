@@ -53,6 +53,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,6 +66,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import it.topcash.studio.data.AppViewModel
 import it.topcash.studio.data.Archive
@@ -88,6 +90,8 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
     val state = rememberLazyListState()
     val expanded by remember { derivedStateOf { state.firstVisibleItemIndex < 2 } }
     val me by vm.me.collectAsStateWithLifecycle()
+    var roleTab by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(me) { if (!roleTab && me?.role == "tecnico") { tab = "I miei"; roleTab = true } }
     val list = remember(a, tab, q, tech, me) {
         val n = norm(q.trim())
         a.interventions.filter { x ->
@@ -145,7 +149,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
             leadingIcon = { Icon(Icons.Rounded.Verified, null, Modifier.size(16.dp)) })
         Box {
             androidx.compose.material3.AssistChip({ later = true }, { Text("Posticipa") }, leadingIcon = { Icon(Icons.Rounded.CalendarMonth, null, Modifier.size(16.dp)) })
-            androidx.compose.material3.DropdownMenu(later, { later = false }) {
+            androidx.compose.material3.DropdownMenu(later, { later = false }, shape = RoundedCornerShape(18.dp), containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
                 val today = LocalDate.now()
                 listOf("Domani" to today.plusDays(1), "Dopodomani" to today.plusDays(2), "Lunedì prossimo" to today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.MONDAY)),
                     "Tra una settimana" to today.plusWeeks(1), "Tra due settimane" to today.plusWeeks(2), "Tra un mese" to today.plusMonths(1)).forEach { (l, d) ->
@@ -208,7 +212,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
                 OutlinedTextField(clientQuery, { clientQuery = it; clientCode = ""; menu = true }, Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable), enabled = !ro && existing == null || clientCode.isEmpty(),
                     label = { Text("Cliente") }, singleLine = true, shape = MaterialTheme.shapes.medium, isError = clientQuery.isNotBlank() && clientCode.isEmpty(),
                     supportingText = { if (clientQuery.isNotBlank() && clientCode.isEmpty()) Text("Scegli il cliente dall'elenco") })
-                ExposedDropdownMenu(menu && suggestions.isNotEmpty() && !ro, { menu = false }) {
+                ExposedDropdownMenu(menu && suggestions.isNotEmpty() && !ro, { menu = false }, shape = RoundedCornerShape(18.dp), containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
                     suggestions.forEach { c -> DropdownMenuItem(text = { Column { Text(c.name, maxLines = 1); Text(listOf(c.city, c.code.trimStart('0')).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
                         onClick = { clientCode = c.code; clientQuery = c.name; menu = false; machine = "" }) }
                 }
@@ -225,7 +229,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
             Gap(14.dp)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton({ pickDate = true }, Modifier.weight(1f).height(56.dp), enabled = !ro, shape = MaterialTheme.shapes.medium) { Icon(Icons.Rounded.CalendarMonth, null); Text("  " + Dates.short(Dates.parse(date))) }
-                OutlinedTextField(tech, { tech = it.take(80) }, Modifier.weight(1f), enabled = !ro, label = { Text("Tecnico") }, singleLine = true, shape = MaterialTheme.shapes.medium)
+                SelectField("Assegna a", tech, teamOptions(a.state.team, tech), { tech = it }, Modifier.weight(1f), enabled = !ro)
             }
             val machines = a.byCode[clientCode]?.machines.orEmpty()
             if (machines.isNotEmpty()) {

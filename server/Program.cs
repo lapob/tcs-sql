@@ -18,6 +18,7 @@ var store=new Store(dataDir);
 var users=new Users(store.DatabasePath);
 if(users.PromotedOwner)store.Log("users","Il primo amministratore del server è diventato Proprietario (nuovo ruolo con poteri illimitati).");
 var hub=new Hub(store);
+hub.Team=()=>users.List().Where(u=>!u.Disabled).Select(u=>(object)new{name=u.Name,username=u.Username,role=u.Role}).ToArray();
 var devices=new Devices(store.DatabasePath);
 var updates=new Updates(dataDir);
 var guard=new LoginGuard();
@@ -44,7 +45,7 @@ builder.Services.AddSingleton(store).AddSingleton(users).AddSingleton(hub).AddSi
 // the tunnel (cloudflared on this PC) forwards the real client IP and https: trusted only from loopback
 builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(o=>{o.ForwardedHeaders=Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor|Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;o.ForwardLimit=1;});
 // Session-cookie keys: on disk next to the data, encrypted with machine DPAPI (works for the service and the console run).
-builder.Services.AddDataProtection().SetApplicationName("TopCashStudio").PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDir,"keys"))).ProtectKeysWithDpapi(protectToLocalMachine:true);
+{var dp=builder.Services.AddDataProtection().SetApplicationName("TopCashStudio").PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDir,"keys")));if(OperatingSystem.IsWindows())dp.ProtectKeysWithDpapi(protectToLocalMachine:true);}
 builder.Services.AddResponseCompression(o=>{o.EnableForHttps=true;o.Providers.Add<BrotliCompressionProvider>();o.Providers.Add<GzipCompressionProvider>();o.MimeTypes=ResponseCompressionDefaults.MimeTypes.Concat(["application/json","image/svg+xml","application/manifest+json"]);});
 builder.Services.Configure<BrotliCompressionProviderOptions>(o=>o.Level=CompressionLevel.Fastest);
 builder.Services.Configure<GzipCompressionProviderOptions>(o=>o.Level=CompressionLevel.Fastest);
@@ -114,7 +115,7 @@ app.Use(async(ctx,next)=>
 });
 app.Use(async(ctx,next)=>
 {
- var h=ctx.Response.Headers;h["X-Content-Type-Options"]="nosniff";h["Referrer-Policy"]="no-referrer";h["X-Frame-Options"]="DENY";h["Permissions-Policy"]="camera=(), microphone=(), geolocation=()";h["Content-Security-Policy"]="frame-ancestors 'none'; base-uri 'none'";h["Cross-Origin-Opener-Policy"]="same-origin";h["Cross-Origin-Resource-Policy"]="same-origin";
+ var h=ctx.Response.Headers;h["X-Content-Type-Options"]="nosniff";h["Referrer-Policy"]="no-referrer";h["X-Frame-Options"]="DENY";h["Permissions-Policy"]="camera=(), microphone=(), geolocation=()";h["Content-Security-Policy"]="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self' blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";if(ctx.Request.IsHttps)h["Strict-Transport-Security"]="max-age=31536000";h["Cross-Origin-Opener-Policy"]="same-origin";h["Cross-Origin-Resource-Policy"]="same-origin";
  // CSRF guard: every state-changing API call must carry a custom header (cannot be sent cross-site without CORS).
  if(ctx.Request.Path.StartsWithSegments("/api")&&!HttpMethods.IsGet(ctx.Request.Method)&&!HttpMethods.IsHead(ctx.Request.Method)&&ctx.Request.Headers["X-Requested-With"]!="topcash")
  {ctx.Response.StatusCode=400;await ctx.Response.WriteAsync("Richiesta non valida.");return;}

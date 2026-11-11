@@ -29,3 +29,7 @@ Write-Host ""
 Write-Host "Server Top Cash installato e avviato." -ForegroundColor Green
 Write-Host "Apri  http://localhost:$Porta  su questo PC per creare l'account amministratore."
 Write-Host "Dagli altri dispositivi in ufficio:  http://$($ip):$Porta"
+
+# automatic updates: the server takes new versions from .\server-update by itself
+$upd = Join-Path $PSScriptRoot 'aggiorna-server.ps1'
+if (Test-Path $upd) { & $upd -Installa }

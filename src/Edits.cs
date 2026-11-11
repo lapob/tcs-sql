@@ -9,7 +9,7 @@ namespace TopCash.Licenze;
 /// Created = customer added by hand (it exists only here); Deleted = hidden from Studio (it can be restored).
 public sealed record ClientEdit(string Name = "", string Vat = "", string TaxCode = "", string City = "", string Address = "",
     string Phone = "", string Email = "", string Pec = "", string Contact = "", string Category = "", bool Created = false,
-    bool Deleted = false, string UpdatedAt = "", string UpdatedBy = "", string MergedInto = "");
+    bool Deleted = false, string UpdatedAt = "", string UpdatedBy = "", string MergedInto = "", bool Keep = false);
 
 /// Changes made by an administrator to a licence: a corrected expiry, a note, or the licence hidden from Studio.
 public sealed record LicenseEdit(string Expiry = "", string Note = "", bool Hidden = false, string UpdatedAt = "", string UpdatedBy = "");
@@ -73,7 +73,7 @@ public sealed partial class Store
     public void DeleteClient(string code, bool deleted, string who)
     {
         var old = ClientEdits().GetValueOrDefault(code) ?? new ClientEdit();
-        SaveEdit("client_edits", "code", code, old with { Deleted = deleted, UpdatedAt = DateTimeOffset.Now.ToString("O"), UpdatedBy = Trim(who, 80) });
+        SaveEdit("client_edits", "code", code, old with { Deleted = deleted, Keep = !deleted, UpdatedAt = DateTimeOffset.Now.ToString("O"), UpdatedBy = Trim(who, 80) });
         Log("users", $"{who} ha {(deleted ? "eliminato" : "ripristinato")} il cliente {(old.Name.Length > 0 ? old.Name : code)}.");
     }
 

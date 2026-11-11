@@ -26,6 +26,7 @@
 *{box-sizing:border-box;margin:0}
 [hidden]{display:none!important}
 html,body{height:100%}
+@supports (height:100dvh){html,body{height:100dvh}}
 body{font:14px/1.5 var(--font);color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased;overflow:hidden;font-feature-settings:"tnum" 1,"cv11" 1}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer;border:0;background:none}
@@ -527,7 +528,7 @@ main{view-transition-name:main-content}
  .part-row [data-p=article]{grid-area:a}.part-row [data-p=qty]{grid-area:q}.part-row [data-p=warehouse]{grid-area:w}.part-row [data-p=serial]{grid-area:s;width:auto!important}.part-row .icon-btn{grid-area:x}
  .card-head .seg{width:100%}
  .card-head .seg button{flex:1}
- .toolbar .select{flex:1 1 30%;min-width:0;padding-right:26px;font-size:14px}
+ .toolbar .select{flex:1 1 calc(50% - 4px);min-width:0;padding-right:28px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
  .banner{flex-wrap:wrap;padding:18px}
  /* tables become stacked rows */
  table thead{display:none}
@@ -1013,4 +1014,5 @@ td .svc{padding:3px 8px;font-size:11px;margin:0 4px 4px 0}td small svg{width:12p
  .sidebar{transform:translateZ(0);will-change:auto;contain:layout paint}
  #main{overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
 }
+@media (max-width:760px){.anim .reveal,.anim tbody tr.reveal{animation:none!important}} /* phones: the whole page moves once (pageIn) */
 @media (max-width:760px) and (prefers-reduced-motion:reduce){.nav-item,.nav-item svg{transition:none}.nav-item.active svg{transform:none}}

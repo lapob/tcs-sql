@@ -12,6 +12,7 @@ const RC_SILENT=10;     // days without a daily closure (Z report) sent to the p
 function deriveRch(){
  const list=state.rch||[];if(!D){RC=null;return;}
  const byName=new Map(),byVat=new Map();
+ for(const c of D.deleted||[])c.rch=[]; // a register can point to a removed customer (manual link or serial)
  for(const c of D.clients){c.rch=[];const k=dtrKey(c.name);if(k&&!byName.has(k))byName.set(k,c);for(const v of [c.vat,c.taxCode].map(vatKey))if(v.length>=11&&!byVat.has(v))byVat.set(v,c);}
  const exact=new Map();for(const m of (D.machines||[]).slice().sort((a,b)=>(b.active?1:0)-(a.active?1:0))){m.rch=null;for(const k of new Set([serKey(m.fiscalSerial),serKey(m.serial)]))if(k.length>=8&&!exact.has(k))exact.set(k,m);}
  const addY=(s,y)=>{const p=parseDate(s);if(!p)return null;const d=new Date(p);d.setFullYear(d.getFullYear()+y);return d;};
@@ -25,7 +26,7 @@ function deriveRch(){
   const x={...r,m,c,via,code:c?.code||null,label,verNext,ver,cert,z,off,
    low:r.dgfeFree>=0&&r.dgfeFree<=RC_FREE_LOW,silent:!off&&z!==null&&z<-RC_SILENT,noContract:!r.contract&&!off};
   x.search=norm([r.serial,r.part,r.type,r.client,r.vat,r.city,r.note,r.labels,r.firmware,r.state,c?.name,c?.city,m?.model].join(' '));
-  if(m)m.rch=x;if(c)c.rch.push(x);return x;});
+  if(m)m.rch=x;if(c)(c.rch||=[]).push(x);return x;});
  const live=devs.filter(r=>!r.off);
  RC={devs,live,update:live.filter(r=>r.update),noContract:live.filter(r=>r.noContract),verSoon:live.filter(r=>r.ver!==null&&r.ver<=RC_VER_SOON),
   certSoon:live.filter(r=>r.cert!==null&&r.cert<=RC_CERT_SOON),low:live.filter(r=>r.low),silent:live.filter(r=>r.silent),

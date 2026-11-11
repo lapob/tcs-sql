@@ -254,13 +254,23 @@ Le scritte seguono i numeri: *1 licenza* / *3 licenze*, *scaduta 132 giorni fa* 
 
 I clienti **senza** dispositivi attivi, licenze in corso, tecnico, pagamenti aperti, interventi negli ultimi 3 anni, ordini negli ultimi 2, note, preferito o dati dei portali vengono tolti dalla lista **Attivi** e messi in **Archiviati · N**. Non viene cancellato nulla: la ricerca li trova sempre, e appena ricevono una macchina, una licenza, un intervento o una nota tornano da soli tra gli attivi.
 
+### Clienti senza macchine attive (fuori da Studio, ripristinabili)
+
+I clienti che in MastroSQL non hanno **nessuna macchina attiva** escono da soli da Studio e finiscono in **Clienti eliminati** (cercabili per nome, codice, P.IVA o città), con la nota *senza macchine attive*. Non si perde nulla: MastroSQL e i portali non vengono toccati, e il cliente torna da solo appena Mastro gli assegna una macchina attiva. Restano sempre i clienti creati in Studio e quelli che un amministratore ripristina con **Ripristina**.
+
+### Interventi assegnati alle persone
+
+Nell'intervento il campo **Assegna a** è un menu con le persone del team, divise in Tecnici, Amministrazione e Amministratori (i nomi scritti a mano in passato restano selezionabili sotto *Altro*). L'intervento va nel profilo di quella persona: lo trova in **I miei** (per i tecnici è la scheda che si apre per prima) e riceve un avviso, sul telefono anche come notifica di sistema se l'ha consentita.
+
 ## Portali e accessi
 
-La scheda **Portali e accessi** (in Panoramica quando manca un accesso, sempre in *Sincronizzazione*) mostra lo stato di MY Zucchetti, DTR-Service, Ital Retail e RCH XDealer: verde collegato, giallo mai collegato, rosso accesso da rifare. Sulla postazione di sincronizzazione **Accedi di nuovo** apre la finestra del portale: accedi tu, Studio non salva le password e legge i dati in sola lettura.
+La scheda **Portali e accessi** (in Panoramica quando manca un accesso, sempre in *Sincronizzazione*) mostra lo stato di MY Zucchetti, DTR-Service, Ital Retail e RCH XDealer: verde collegato, giallo mai collegato, rosso accesso da rifare. Sulla postazione di sincronizzazione **Accedi di nuovo** apre la finestra del portale: accedi tu, Studio non salva le password e legge i dati in sola lettura. Per RCH XDealer la sessione si considera scaduta solo se il portale lo conferma due volte a 20 secondi di distanza (il passaggio automatico dal sito di accesso RCH non chiede più di rientrare), e i dispositivi senza matricola non bloccano più l'aggiornamento: vengono contati e saltati.
 
 ## Animazioni e scorrimento
 
 - **Android**: un solo movimento per azione. Aprendo una sezione la pagina entra da destra sopra quella precedente, che si scurisce e scorre un po' a sinistra; tornando indietro avviene l'esatto contrario, uguale con il gesto (la pagina segue il dito) e con il tasto. Le schede in basso cambiano con una dissolvenza.
+- **Sito sul telefono**: cambiando sezione la pagina si muove tutta insieme, una volta sola (sale entrando, scorre da sinistra tornando indietro): le schede non si sovrappongono più in movimento. I filtri stanno due per riga con il testo intero, e l'altezza segue lo schermo reale quando la barra del browser si nasconde (niente più fascia di vetro in basso).
+- **Menu di selezione** (sito e app Windows): la lista aperta ha angoli arrotondati, vetro, gruppi e la voce scelta evidenziata; su Android i menu usano lo stesso stile.
 - **Sito e app Windows**: barre di scorrimento sottili che compaiono solo quando passi sopra un'area o mentre scorri, nel colore del tema chiaro o scuro.
 
 ## Fluidità automatica
@@ -277,15 +287,18 @@ Studio sceglie da solo il profilo grafico per ogni dispositivo (*Impostazioni �
 
 ## Aggiornare il server
 
-Quando ricevi una nuova versione (cartella `server-update`), in PowerShell come amministratore:
+**Aggiornamento automatico (consigliato).** Una volta sola, in PowerShell come amministratore:
 ```
-powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\aggiorna-server.ps1
+powershell -ExecutionPolicy Bypass -File D:\TopCashSQL\aggiorna-server.ps1 -Installa
 ```
-Il servizio si ferma per pochi secondi; dati, utenti e sessioni restano invariati.
+Da quel momento l'attività pianificata *Top Cash Studio - Aggiornamento server* controlla ogni 10 minuti (e all'avvio del PC) la cartella `server-update`: se la versione è più nuova ferma il servizio per pochi secondi, copia i file, lo riavvia e verifica che risponda. Se non risponde rimette da sola la versione precedente e non riprova quella versione. Registro in `D:\TopCashSQL\.runtime\aggiorna-server.log`. Per disattivarlo: `-Rimuovi`.
+
+**A mano**, subito: lo stesso comando senza `-Installa`. Dati, utenti e sessioni restano invariati.
 
 ## Sicurezza e dati
 
 - Password salvate solo in forma cifrata (PBKDF2-SHA256, 600.000 iterazioni, come raccomanda OWASP); accessi limitati contro i tentativi ripetuti.
+- Il sito accetta solo i propri script (Content-Security-Policy) e, sull'indirizzo pubblico in HTTPS, obbliga i browser a usare sempre la connessione cifrata (HSTS).
 - Il server è **chiuso per impostazione predefinita**: ogni funzione richiede l'accesso, tranne le poche pubbliche (accesso, stato del server, download degli aggiornamenti).
 - Protezione CSRF, sessioni che scadono dopo 14 giorni di inattività, intestazioni di sicurezza.
 - **Backup automatico ogni giorno**, verificato con il controllo di integrità di SQLite:

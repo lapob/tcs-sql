@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>TopCash.Licenze</AssemblyName>
-    <Version>2.8.3</Version>
+    <Version>2.8.4</Version>
     <ApplicationIcon>topcash.ico</ApplicationIcon>
     <!-- Startup & runtime performance -->
     <TieredPGO>true</TieredPGO>
@@ -26,8 +26,6 @@
     <PackageReference Include="MySqlConnector" Version="2.6.2" />
     <!-- 6.2.x is MIT-licensed; 6.5+ moved to AGPL: keep the version pinned -->
     <PackageReference Include="PDFsharp" Version="[6.2.4]" />
-    <!-- PDFsharp 6.2.4 pulls Pkcs 8.0.1 (known CVEs): force the patched release -->
-    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
     <Content Include="ui\**\*" CopyToOutputDirectory="PreserveNewest" />
     <Resource Include="topcash.ico" />
   </ItemGroup>

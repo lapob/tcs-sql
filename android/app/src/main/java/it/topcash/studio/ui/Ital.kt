@@ -96,7 +96,7 @@ private val itabs = listOf("Tutti", "Da aggiornare", "Abbonamento", "DGFE", "Cer
                     F("Certificato", Dates.short(r.certDue) + (r.certDays?.let { " · " + Dates.relative(it) } ?: ""), tone(r.certDays, 90))
                     F("Attivazione", Dates.short(Dates.parse(d?.activated)))
                     F("Dati della cassa", if (r.seen == null) "mai ricevuti" else Dates.relative(r.seenDays))
-                    if (!d?.hw.isNullOrBlank()) F("Hardware", "v. ${d!!.hw}" + (d.wifi.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""))
+                    if (!d?.hw.isNullOrBlank()) F("Hardware", "v. ${d.hw}" + (d.wifi.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""))
                     if (r.via.isNotBlank()) F("Collegato per", r.via)
                 }
                 d?.updates.orEmpty().takeIf { it.isNotEmpty() }?.let { ups ->

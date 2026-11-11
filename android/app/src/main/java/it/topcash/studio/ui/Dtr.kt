@@ -100,7 +100,7 @@ private val dtabs = listOf("Tutti", "GE", "Errori", "Silenziose", "Certificati")
             Column(Modifier.fillMaxWidth()) {
                 HorizontalDivider(Modifier.padding(vertical = 10.dp))
                 val d = r.d
-                if (!d?.warning.isNullOrBlank()) Text(d!!.warning, style = MaterialTheme.typography.bodySmall, color = LocalStatus.current.bad, modifier = Modifier.padding(bottom = 8.dp))
+                if (!d?.warning.isNullOrBlank()) Text(d.warning, style = MaterialTheme.typography.bodySmall, color = LocalStatus.current.bad, modifier = Modifier.padding(bottom = 8.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                     RegFact("GE", "n. ${r.r.geNumber}" + (Dates.parse(d?.geInit)?.let { " · dal " + Dates.short(it) } ?: ""))
                     RegFact("Ultima chiusura Z", if (r.r.lastZ > 0) "n. ${r.r.lastZ}" else "—")
@@ -108,11 +108,11 @@ private val dtabs = listOf("Tutti", "GE", "Errori", "Silenziose", "Certificati")
                     RegFact("Certificato", Dates.short(r.certDue) + (r.certDays?.let { " · " + Dates.relative(it) } ?: ""), toneColor(r.certDays, 90))
                     RegFact("Verificazione periodica", Dates.short(Dates.parse(d?.lastVp)))
                     r.licence?.let { RegFact("Licenza ${it.name}", "${it.status} · fino al ${Dates.short(Dates.parse(it.to))}", toneColor(r.licDays, 45)) }
-                    if (!d?.vat.isNullOrBlank()) RegFact("Partita IVA", d!!.vat)
+                    if (!d?.vat.isNullOrBlank()) RegFact("Partita IVA", d.vat)
                     if (r.via.isNotBlank()) RegFact("Collegato per", r.via)
                 }
-                if (!d?.address.isNullOrBlank()) RegFact("Indirizzo di installazione", d!!.address.removeSuffix(" IT"))
-                if (!d?.extensions.isNullOrBlank()) RegFact("Estensioni GE", d!!.extensions)
+                if (!d?.address.isNullOrBlank()) RegFact("Indirizzo di installazione", d.address.removeSuffix(" IT"))
+                if (!d?.extensions.isNullOrBlank()) RegFact("Estensioni GE", d.extensions)
                 Events("Ultimi errori", d?.errors.orEmpty())
                 Events("Ultimi interventi", d?.works.orEmpty())
                 if (d == null) Text("Scheda di dettaglio non ancora letta: arriva con i prossimi aggiornamenti.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

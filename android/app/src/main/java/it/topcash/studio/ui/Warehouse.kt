@@ -253,7 +253,7 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
                     OutlinedTextField(query, { query = it; article = wh.find(it); menu = true }, Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
                         label = { Text("Articolo") }, singleLine = true, shape = MaterialTheme.shapes.medium,
                         supportingText = { article?.let { x -> Text("${x.a.code} · disponibili: " + wh.warehouses.filter { (x.perWarehouse[it.id] ?: 0.0) != 0.0 }.joinToString(" · ") { "${it.name} ${qty(x.perWarehouse[it.id]!!)}" }.ifBlank { "nessuna giacenza" }, maxLines = 2) } })
-                    ExposedDropdownMenu(menu && suggestions.isNotEmpty(), { menu = false }) {
+                    ExposedDropdownMenu(menu && suggestions.isNotEmpty(), { menu = false }, shape = RoundedCornerShape(18.dp), containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
                         suggestions.forEach { s -> DropdownMenuItem(text = { Column { Text(s.a.name, maxLines = 1); Text(s.a.code + " · " + qty(s.total) + " " + s.a.unit, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
                             onClick = { article = s; query = s.a.name; menu = false }) }
                     }
@@ -329,7 +329,7 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
         Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             ExposedDropdownMenuBox(menu && sugg.isNotEmpty(), { menu = it }, Modifier.weight(1f)) {
                 OutlinedTextField(query, { query = it; menu = true }, Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable), placeholder = { Text("Aggiungi ricambio…", maxLines = 1) }, singleLine = true, shape = MaterialTheme.shapes.medium)
-                ExposedDropdownMenu(menu && sugg.isNotEmpty(), { menu = false }) {
+                ExposedDropdownMenu(menu && sugg.isNotEmpty(), { menu = false }, shape = RoundedCornerShape(18.dp), containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
                     sugg.forEach { s -> DropdownMenuItem(text = { Text(s.a.name + " · " + qty(s.qtyIn(van)) + " " + s.a.unit + " sul furgone", maxLines = 1) }, onClick = { add(s) }) }
                 }
             }

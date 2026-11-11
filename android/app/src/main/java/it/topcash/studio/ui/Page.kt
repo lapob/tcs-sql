@@ -89,7 +89,7 @@ import it.topcash.studio.data.AppViewModel
                 title = { Column { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis); if (subtitle != null && scroll.state.collapsedFraction < 0.5f) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
                 navigationIcon = { if (onBack != null) IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Indietro") } },
                 actions = actions, scrollBehavior = scroll,
-                colors = TopAppBarDefaults.largeTopAppBarColors(containerColor = clear, scrolledContainerColor = clear),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = clear, scrolledContainerColor = clear),
             ) }
         },
         floatingActionButton = { FabSlot(fab) },

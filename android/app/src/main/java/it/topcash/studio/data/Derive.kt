@@ -109,6 +109,8 @@ class UClient(
     val rchDevices = mutableListOf<URch>()
     var pec = ""; var contact = ""; var category = ""
     var edit: ClientEdit? = null
+    /** left the app by itself: no active machine (see Archive) */
+    var autoGone = false
     val interventions = mutableListOf<UIntervention>()
     val orders = mutableListOf<UOrder>()
     val active get() = licenses.filter { it.current }
@@ -268,7 +270,7 @@ class Archive(val state: ArchiveState) {
             if (e.deleted) gone += c
         }
         map.values.forEach { c -> if (c.pec.isBlank()) c.pec = c.mastro?.pec.orEmpty() }
-        deleted = gone.sortedBy { it.name }
+        // "deleted" is set below, together with the customers without an active machine
         gone.forEach { map.remove(it.code) }
         // merged duplicates: their licences, machines, devices and history show under the main customer
         val aliases = HashMap<String, UClient>(); val mergedList = mutableListOf<UClient>()
@@ -283,8 +285,13 @@ class Archive(val state: ArchiveState) {
             t.mergedFrom += c; aliases[code] = t; mergedList += c; map.remove(code)
         }
         merged = mergedList
+        // customers without an active machine leave the app by themselves (restorable; back as soon as Mastro gives them one).
+        // Customers created in Studio and those an administrator restored stay.
+        val autoGone = map.values.filter { c -> c.edit?.created != true && c.edit?.keep != true && c.machines.none { it.m.active } }
+        autoGone.forEach { it.autoGone = true; map.remove(it.code) }
+        deleted = (gone + autoGone).sortedBy { it.name }
         assets = state.assets.map { a -> val c = map[a.clientCode] ?: aliases[a.clientCode]; UAsset(a, c).also { c?.assets?.add(it) } }
-        map.values.forEach { c ->
+        (map.values + deleted).forEach { c ->
             c.search = norm(c.contact + " " + c.category + " " + listOf(c.name, c.code, c.vat, c.taxCode, c.city, c.address, c.mastro?.pec, c.mastro?.code).joinToString(" ") + " " +
                 c.phones.joinToString(" ") + " " + c.emails.joinToString(" ") + " " + c.licenses.joinToString(" ") { it.r.serial } + " " + c.machines.joinToString(" ") { it.m.serial + " " + it.m.fiscalSerial } +
                 " " + c.assets.joinToString(" ") { it.a.name + " " + it.a.serial + " " + it.a.ip })

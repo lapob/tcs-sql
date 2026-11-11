@@ -166,3 +166,24 @@ html[data-nav="back"] .anim .reveal{animation-name:risein;animation-delay:min(ca
 .anim .reveal{animation:risein .42s cubic-bezier(.2,.8,.2,1) both;animation-delay:min(calc(var(--i,0)*30ms),180ms)}
 @keyframes risein{from{opacity:0;transform:translateY(8px)}}
 .anim tbody tr.reveal{animation:rowin .3s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(min(var(--i,0),12)*14ms)}
+
+/* ── selection menus: the open list follows the design too (customizable select, Chrome/Edge 135+; others keep the native list) */
+@supports (appearance:base-select){
+ .select,.select::picker(select){appearance:base-select}
+ .select{display:inline-flex;align-items:center;gap:6px;color:var(--text);font:inherit}
+ .select::picker-icon{display:none} /* the chevron is already drawn by the field */
+ .select::picker(select){margin-top:6px;padding:6px;min-width:anchor-size(width);max-height:min(60vh,420px);overflow:auto;border:1px solid var(--line-2,var(--line));border-radius:16px;
+  background:color-mix(in srgb,var(--surface) 94%,transparent);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);
+  box-shadow:0 18px 50px -12px rgba(8,12,30,.35),0 2px 6px rgba(8,12,30,.08);color:var(--text);
+  opacity:1;translate:0 0;transition:opacity .16s var(--out,ease),translate .2s var(--out,ease),display .2s allow-discrete,overlay .2s allow-discrete}
+ .select:not(:open)::picker(select){opacity:0;translate:0 -6px}
+ @starting-style{.select:open::picker(select){opacity:0;translate:0 -6px}}
+ .select option{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:10px;font-size:14px;cursor:pointer;transition:background-color .15s}
+ .select option:hover,.select option:focus-visible{background:var(--surface-2);outline:0}
+ .select option:checked{background:var(--accent-soft);color:var(--accent);font-weight:600}
+ .select option::checkmark{order:1;margin-left:auto;color:var(--accent)}
+ .select optgroup{padding-top:4px}
+ .select optgroup legend{padding:8px 12px 4px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
+ [data-perf="lite"] .select::picker(select){backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--surface)}
+ @media (prefers-reduced-motion:reduce){.select::picker(select){transition:none}}
+}

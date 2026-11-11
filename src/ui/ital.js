@@ -11,6 +11,7 @@ const IT_STALE=10;      // days without fresh device data
 
 function deriveItal(){
  const list=state.ital||[];if(!D){IT=null;return;}
+ for(const c of D.deleted||[])c.ital=[]; // a register can point to a removed customer
  const byName=new Map();for(const c of D.clients){c.ital=[];const k=dtrKey(c.name);if(k&&!byName.has(k))byName.set(k,c);}
  const exact=new Map();for(const m of (D.machines||[]).slice().sort((a,b)=>(b.active?1:0)-(a.active?1:0))){m.ital=null;for(const k of new Set([serKey(m.fiscalSerial),serKey(m.serial)]))if(k.length>=8&&!exact.has(k))exact.set(k,m);}
  const orders=new Map();for(const o of state.italOrders||[]){if(!orders.has(o.serial))orders.set(o.serial,[]);orders.get(o.serial).push(o);}
@@ -21,7 +22,7 @@ function deriveItal(){
   const x={...r,d,m,c,via,code:c?.code||null,label,sub,cert,seen,orders:(orders.get(r.serial)||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')),
    noSub:!r.subscribed,low:d&&d.dgfeFree>=0&&d.dgfeFree<=IT_FREE_LOW,stale:seen!==null&&seen<-IT_STALE,never:!!d&&!d.dataAt};
   x.search=norm([r.serial,r.type,r.client,r.note,d?.firmware,d?.rtState,c?.name,c?.city,m?.model].join(' '));
-  if(m)m.ital=x;if(c)c.ital.push(x);return x;});
+  if(m)m.ital=x;if(c)(c.ital||=[]).push(x);return x;});
  IT={devs,update:devs.filter(r=>r.update),noSub:devs.filter(r=>r.noSub),subSoon:devs.filter(r=>r.sub!==null&&r.sub<=IT_SUB_SOON),
   certSoon:devs.filter(r=>r.cert!==null&&r.cert<=IT_CERT_SOON),low:devs.filter(r=>r.low),stale:devs.filter(r=>r.stale||r.never),
   detailed:devs.filter(r=>r.d).length,linked:devs.filter(r=>r.c).length,orders:(state.italOrders||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')||b.number.localeCompare(a.number)),status:state.italStatus||{}};

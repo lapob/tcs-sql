@@ -162,16 +162,20 @@ private fun current(c: UClient, k: String) = when (k) { "name" -> c.name; "vat" 
 }
 
 @Composable fun DeletedClientsScreen(vm: AppViewModel, a: Archive, nav: NavHostController) {
-    Page(null, "Clienti eliminati", "${a.deleted.size} nascosti per tutto il team", onBack = { nav.popBackStack() }) {
+    var q by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
+    val list = androidx.compose.runtime.remember(a, q) { val n = it.topcash.studio.data.norm(q.trim()); if (n.isEmpty()) a.deleted else a.deleted.filter { it.search.contains(n) } }
+    val auto = a.deleted.count { it.autoGone }
+    Page(null, "Clienti eliminati", "${a.deleted.size} nascosti per tutto il team" + (if (auto > 0) " · $auto senza macchine attive" else ""), onBack = { nav.popBackStack() }) {
         if (a.deleted.isEmpty()) item(key = "none") { Empty(Icons.Rounded.Restore, "Nessun cliente eliminato", "Quando elimini un cliente lo ritrovi qui, pronto da ripristinare.") }
-        items(a.deleted.size, key = { a.deleted[it].code }) { i ->
-            val c = a.deleted[i]
+        else item(key = "search") { SearchField(q, { q = it }, "Cerca tra gli eliminati") }
+        items(list.size, key = { list[it].code }) { i ->
+            val c = list[i]
             CardBox(Modifier.padding(bottom = 8.dp).animateItem()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Avatar(c.name, c.code, 40.dp)
                     Column(Modifier.padding(start = 12.dp).weight(1f)) {
                         Text(c.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(listOfNotNull("Cod. " + c.code.trimStart('0'), c.edit?.updatedBy?.takeIf { it.isNotBlank() }?.let { "eliminato da $it" }).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(listOfNotNull("Cod. " + c.code.trimStart('0'), if (c.autoGone) "senza macchine attive" else c.edit?.updatedBy?.takeIf { it.isNotBlank() }?.let { "eliminato da $it" }).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     FilledTonalButton({ vm.deleteClient(c.code, false) }) { Text("Ripristina") }
                 }

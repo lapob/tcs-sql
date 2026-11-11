@@ -82,7 +82,13 @@ object Actions {
             Screen.Loading -> Box(Modifier.fillMaxSize())
             Screen.Setup -> SetupScreen(vm)
             Screen.Login -> LoginScreen(vm)
-            Screen.Main -> MainScreen(vm)
+            Screen.Main -> {
+                if (android.os.Build.VERSION.SDK_INT >= 33) {
+                    val ask = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {}
+                    androidx.compose.runtime.LaunchedEffect(Unit) { ask.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+                }
+                MainScreen(vm)
+            }
             Screen.Device -> DeviceScreen(vm)
         }
     }

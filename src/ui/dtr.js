@@ -27,6 +27,7 @@ function machineIndex(){
 function deriveDtr(){
  const list=state.dtr||[];if(!D){DT=null;return;}
  const byName=new Map(),byVat=new Map();
+ for(const c of D.deleted||[])c.dtr=[]; // a register can point to a removed customer (manual link or serial)
  for(const c of D.clients){c.dtr=[];const k=dtrKey(c.name);if(k&&!byName.has(k))byName.set(k,c);for(const v of [c.vat,c.taxCode].map(vatKey))if(v.length>=11&&!byVat.has(v))byVat.set(v,c);}
  const find=machineIndex();
  const top=list.reduce((m,r)=>Math.max(m,fwNum(r.firmware)),0);
@@ -46,7 +47,7 @@ function deriveDtr(){
    silent:seen!==null&&seen<-DTR_SILENT,old:top>0&&fwNum(r.firmware)<top,tagList:(r.tags||'').split(/\s+/).filter(Boolean),
    warn:!!d?.warning||recentErr.length>0,lowZ:remaining!==null&&remaining<=DTR_LOW_Z};
   x.search=norm([r.serial,r.client,r.alias,r.tags,r.firmware,d?.holder,d?.vat,d?.address,c?.name,c?.city,m?.model].join(' '));
-  if(m)m.dtr=x;if(c)c.dtr.push(x);return x;});
+  if(m)m.dtr=x;if(c)(c.dtr||=[]).push(x);return x;});
  const tags=[...new Set(regs.flatMap(r=>r.tagList))].sort();
  // active fiscal machines in Mastro that DTR does not know (or not with that serial)
  const missing=(D.machines||[]).filter(m=>m.active&&!m.dtr&&serKey(m.fiscalSerial).length>=8);

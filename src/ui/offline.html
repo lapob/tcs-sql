@@ -39,9 +39,6 @@ small{display:block;margin-top:16px;color:var(--muted)}
 <a class="btn" href="./">Riprova</a>
 <small id="t">Riprovo da solo tra 20 secondi.</small>
 </main>
-<script>
-var n=20,t=document.getElementById('t');
-setInterval(function(){n--;if(n<=0){location.reload();return;}t.textContent='Riprovo da solo tra '+n+' second'+(n===1?'o':'i')+'.';},1000);
-</script>
+<script src="offline.js"></script>
 </body>
 </html>

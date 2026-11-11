@@ -32,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -175,6 +176,41 @@ fun hueColor(key: String, dark: Boolean = false): Color { var h = 0; key.forEach
         Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
         Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
+}
+
+/** One option of [SelectField]; [group] starts a new labelled section when it changes. */
+data class SelectOption(val value: String, val label: String = value, val group: String = "", val supporting: String = "")
+
+/** Material 3 select: an outlined field that opens an anchored menu, grouped, with the chosen entry ticked. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable fun SelectField(label: String, value: String, options: List<SelectOption>, onChange: (String) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    var open by remember { mutableStateOf(false) }
+    val shown = options.firstOrNull { it.value == value }?.label ?: value.ifBlank { "Nessuno" }
+    androidx.compose.material3.ExposedDropdownMenuBox(open && enabled, { open = it }, modifier) {
+        androidx.compose.material3.OutlinedTextField(shown, {}, Modifier.fillMaxWidth().menuAnchor(androidx.compose.material3.ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+            readOnly = true, enabled = enabled, singleLine = true, label = { Text(label) }, shape = MaterialTheme.shapes.medium,
+            trailingIcon = { androidx.compose.material3.ExposedDropdownMenuDefaults.TrailingIcon(open) })
+        ExposedDropdownMenu(open && enabled, { open = false }, shape = RoundedCornerShape(18.dp), containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
+            var last = "\u0000"
+            options.forEach { o ->
+                if (o.group != last) { last = o.group; if (o.group.isNotBlank()) Text(o.group.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 4.dp)) }
+                val sel = o.value == value
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Column { Text(o.label, maxLines = 1, fontWeight = if (sel) FontWeight.SemiBold else null); if (o.supporting.isNotBlank()) Text(o.supporting, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
+                    trailingIcon = { if (sel) androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.Check, null, tint = MaterialTheme.colorScheme.primary) },
+                    onClick = { onChange(o.value); open = false })
+            }
+        }
+    }
+}
+
+/** Team as select options: technicians first, then office and administrators; a name typed in the past stays selectable. */
+fun teamOptions(team: List<it.topcash.studio.data.TeamMember>, current: String): List<SelectOption> {
+    val groupOf = mapOf("tecnico" to "Tecnici", "ufficio" to "Amministrazione", "admin" to "Amministratori", "owner" to "Amministratori")
+    val order = listOf("Tecnici", "Amministrazione", "Amministratori", "Team")
+    val people = team.map { SelectOption(it.name, it.name, groupOf[it.role] ?: "Team") }.sortedWith(compareBy({ order.indexOf(it.group) }, { it.label.lowercase() }))
+    val old = if (current.isNotBlank() && people.none { it.value.equals(current, true) }) listOf(SelectOption(current, current, "Altro")) else emptyList()
+    return listOf(SelectOption("", "Nessuno")) + people + old
 }
 
 /** Modal sheets open straight to full height (no half-way stop): Material 3 state API. */

@@ -9,6 +9,8 @@ namespace TopCash.Server;
 /// Every write bumps the version; browsers get a tiny "changed" event and re-download only if their ETag is stale.
 public sealed class Hub(Store store)
 {
+ /// The team (names and roles only, never anything else): interventions are assigned to a person, who finds them in "I miei".
+ public Func<object[]>? Team;
  static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
  readonly ConcurrentDictionary<Guid,Channel<string>> clients=new();
  readonly Lock gate=new();
@@ -42,7 +44,7 @@ public sealed class Hub(Store store)
     ("mastroClients",mv.Clients),("machines",mv.Machines),("interventions",mv.Interventions),("brandRule",mv.Excluded),("assets",store.Assets()),("renewals",store.Renewals()),("deviceLinks",store.DeviceLinks()),
     ("warehouses",store.Warehouses()),("articles",store.Articles()),("stockLevels",store.StockLevels()),("stock",store.Stock()),("movements",store.Movements()),("invoices",store.Invoices()),("dues",store.Dues()),("balances",store.Balances()),("dueNotes",store.DueNotes()),
     ("sources",store.Sources()),("events",store.Events()),("notes",store.Notes()),("metadata",store.Metadata()),("dtr",store.DtrRegisters()),("dtrStatus",store.DtrState()),("ital",store.ItalDevices()),("italOrders",store.ItalOrders()),("italStatus",store.ItalState()),("rch",store.RchDevices()),("rchStatus",store.RchState()),
-    ("rt",store.RtInfos()),("sites",store.Sites()),("riba",store.RibaList()),
+    ("rt",store.RtInfos()),("sites",store.Sites()),("riba",store.RibaList()),("team",Team?.Invoke()??[]),
     ("features",new{mail=store.MailReady(),backupError=Backups.Status(store).Error})};
    var sections=new Dictionary<string,(byte[],string)>(parts.Length);
    foreach(var(name,value) in parts){var b=JsonSerializer.SerializeToUtf8Bytes(value,value.GetType(),Json);sections[name]=(b,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(b),0,8));}

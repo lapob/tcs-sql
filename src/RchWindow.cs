@@ -21,7 +21,7 @@ public sealed class RchWindow : Window
  readonly TextBlock status=new(){Text="Accedi a RCH XDealer con le tue credenziali: la sessione resterà attiva su questo PC.",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(16,0,12,0),TextTrimming=TextTrimming.CharacterEllipsis};
  readonly DispatcherTimer keepAlive=new(){Interval=TimeSpan.FromMinutes(15)},schedule=new(){Interval=TimeSpan.FromHours(2)},detect=new(){Interval=TimeSpan.FromSeconds(2.5)};
  readonly Func<Task> changed;
- ISyncTarget target;CancellationTokenSource? cancel;bool initialized,running,quitting,hiddenStart,warned,probing;DateTime lastSync;
+ ISyncTarget target;CancellationTokenSource? cancel;bool initialized,running,quitting,hiddenStart,warned,probing;int misses;DateTime lastSync;
  public ISyncTarget Target{get=>target;set=>target=value;}
  public bool Authenticated{get;private set;}
  public Action? SignInRequired{get;set;}
@@ -120,7 +120,10 @@ public sealed class RchWindow : Window
   if(browser.CoreWebView2==null||running||probing)return;
   var src=browser.CoreWebView2.Source;if(src is null or "" or "about:blank")return;
   bool now=false;
-  if(OnPortal){probing=true;try{await Api("/dealer/api/v2/summary/counters",new{},CancellationToken.None);now=true;}catch{now=false;}finally{probing=false;}}
+  if(OnPortal){probing=true;try{await Api("/dealer/api/v2/summary/counters",new{},CancellationToken.None);now=true;}catch(UnauthorizedAccessException){now=false;}catch{return;}finally{probing=false;}}
+  // signed out only when confirmed twice, 20 s apart: the portal passes through RCH's sign-in site by itself to renew the session
+  if(!now&&Authenticated&&misses==0){misses=1;_=Dispatcher.InvokeAsync(async()=>{await Task.Delay(20000);await Detect();});return;}
+  misses=0;
   if(now==Authenticated&&(now||warned))return;
   Authenticated=now;
   if(now)
@@ -157,7 +160,7 @@ public sealed class RchWindow : Window
   running=true;cancel=new();var ct=cancel.Token;SetStatus("Lettura dei dispositivi RCH…");
   try
   {
-   var all=new List<List<string>>();var seen=new HashSet<string>(StringComparer.OrdinalIgnoreCase);int total=0;
+   var all=new List<List<string>>();var seen=new HashSet<string>(StringComparer.OrdinalIgnoreCase);int total=0,read=0;
    for(int page=1;page<=300;page++)
    {
     var data=await Api("/dealer/api/v2/devices",new Dictionary<string,object>{["page"]=page,["per_page"]=PerPage,
@@ -167,19 +170,22 @@ public sealed class RchWindow : Window
     if(page==1&&data.TryGetProperty("data",out var first)&&first.GetArrayLength()>0)
      await target.Log("info","RCH XDealer, campi del dispositivo: "+string.Join(",",first[0].EnumerateObject().Select(p=>p.Name)));
     var mapped=JsonSerializer.Deserialize<List<List<string>>>(JsonSerializer.Deserialize<string>(await browser.ExecuteScriptAsync($"JSON.stringify(({MapScript})({data.GetRawText()}))"))??"[]")??[];
-    int added=0;foreach(var r in mapped)if(r.Count==2&&seen.Add(r[0])){all.Add(r);added++;}
+    var got=data.TryGetProperty("data",out var rows)?rows.GetArrayLength():0;read+=got;
+    foreach(var r in mapped)if(r.Count==2&&seen.Add(r[0]))all.Add(r);
     SetStatus($"Lettura dispositivi RCH: {all.Count} di {total}…");
     var last=meta.TryGetProperty("last_page",out var lp)?lp.GetInt32():1;
-    if(all.Count>=total||page>=last||added==0)break;
+    if(read>=total||page>=last||got==0)break;
    }
    if(total==0){await Heartbeat(true,"Nessun dispositivo",0);SetStatus("Nessun dispositivo sul portale RCH.");return;}
-   if(all.Count<total)throw new InvalidDataException($"Letti {all.Count} dispositivi RCH su {total}: lettura incompleta, dati precedenti conservati.");
+   if(read<total)throw new InvalidDataException($"Letti {read} dispositivi RCH su {total}: lettura incompleta, dati precedenti conservati.");
+   if(read>all.Count)await target.Log("info",$"RCH XDealer: {read-all.Count} dispositivi senza matricola o doppi non importati.");
    var now=DateTimeOffset.Now.ToString("O");
    var msg=await target.Apply("rch","RCH","Dispositivi RCH XDealer",[..Store.RchHeaders],all,now);
    await Heartbeat(true,"Aggiornato",total);lastSync=DateTime.Now;
    SetStatus($"{msg} · prossimo aggiornamento tra 2 ore. Puoi nascondere questa finestra: resta collegata.");
   }
   catch(OperationCanceledException){SetStatus("Aggiornamento interrotto: dati precedenti conservati.");}
+  catch(ObjectDisposedException){} // Studio is closing
   catch(UnauthorizedAccessException ex){Authenticated=true;running=false;await Detect();SetStatus(ex.Message);}
   catch(Exception ex){SetStatus(ex.Message);await target.Log("error","RCH XDealer: "+ex.Message);}
   finally

@@ -71,6 +71,7 @@ import kotlinx.serialization.Serializable
     val features: Features = Features(),
     val dtr: List<DtrRegister> = emptyList(), val dtrStatus: DtrStatus = DtrStatus(),
     val ital: List<ItalDevice> = emptyList(), val italOrders: List<ItalOrder> = emptyList(), val italStatus: DtrStatus = DtrStatus(),
+    val team: List<TeamMember> = emptyList(),
     val rch: List<RchDevice> = emptyList(), val rchStatus: DtrStatus = DtrStatus(),
     val clientEdits: Map<String, ClientEdit> = emptyMap(), val licenseEdits: Map<String, LicenseEdit> = emptyMap(), val licenseCleanup: LicenseCleanup = LicenseCleanup(),
     val assets: List<Asset> = emptyList(), val renewals: Map<String, RenewalMark> = emptyMap(), val deviceLinks: Map<String, String> = emptyMap(),
@@ -88,6 +89,8 @@ import kotlinx.serialization.Serializable
 @Serializable data class DtrLicense(val from: String = "", val to: String = "", val status: String = "", val name: String = "", val type: String = "")
 @Serializable data class DtrEvent(val at: String = "", val text: String = "")
 @Serializable data class DtrStatus(val connected: Boolean = false, val lastSync: String = "", val checkedAt: String = "", val error: String = "")
+/** A person of the team (name and role only): interventions are assigned to them. */
+@Serializable data class TeamMember(val name: String = "", val username: String = "", val role: String = "")
 @Serializable data class Me(val username: String = "", val name: String = "", val role: String = "", val roleLabel: String = "", val admin: Boolean = false, val accounting: Boolean = true, val owner: Boolean = false) {
     /** Owner and administrator can do everything; the owner also manages other administrators. */
     val isAdmin get() = admin || role == "admin" || role == "owner"
@@ -132,7 +135,7 @@ object Catalog {
 /** Administrator's changes, kept apart from the synchronised copies (never overwritten by a sync). */
 @Serializable data class ClientEdit(val name: String = "", val vat: String = "", val taxCode: String = "", val city: String = "", val address: String = "", val phone: String = "",
     val email: String = "", val pec: String = "", val contact: String = "", val category: String = "", val created: Boolean = false, val deleted: Boolean = false,
-    val updatedAt: String = "", val updatedBy: String = "", val mergedInto: String = "")
+    val updatedAt: String = "", val updatedBy: String = "", val mergedInto: String = "", val keep: Boolean = false)
 @Serializable data class LicenseEdit(val expiry: String = "", val note: String = "", val hidden: Boolean = false, val updatedAt: String = "", val updatedBy: String = "")
 /** PC, server, printer, network device or software licence at a customer (no passwords on purpose). */
 @Serializable data class Asset(val id: String = "", val clientCode: String = "", val kind: String = "PC", val name: String = "", val brand: String = "", val serial: String = "",

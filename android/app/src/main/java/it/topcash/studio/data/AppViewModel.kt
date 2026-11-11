@@ -126,6 +126,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         hashes = (o2["hashes"] as? kotlinx.serialization.json.JsonObject)?.entries?.joinToString(",") { (k, v) -> k + "=" + (v as kotlinx.serialization.json.JsonPrimitive).content }.orEmpty()
                         Archive(json.decodeFromString<ArchiveState>(body)).also { it.warm() }
                     }
+                    _archive.value?.let { noticeAssigned(it.state.interventions, parsed.state.interventions) }
                     _archive.value = parsed; etag = tag
                     withContext(Dispatchers.IO) { cacheFile.writeText(body); tag?.let { etagFile.writeText(it) }; hashFile.writeText(hashes) }
                 }
@@ -202,6 +203,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun logout() = viewModelScope.launch {
         stream?.cancel(); stream = null; api.logout(); signedOut()
         withContext(Dispatchers.IO) { cacheFile.delete(); etagFile.delete(); hashFile.delete() }; _archive.value = null
+    }
+    /** Interventions just assigned to me by someone else: a system notification ("Interventi assegnati" channel). */
+    private fun noticeAssigned(prev: List<Intervention>, next: List<Intervention>) {
+        val me = _me.value ?: return
+        fun n(s: String) = s.trim().lowercase()
+        fun mine(i: Intervention?) = i != null && i.source == "app" && n(i.technician) == n(me.name)
+        val was = prev.associateBy { it.id }
+        val fresh = next.filter { mine(it) && it.status != "Chiuso" && n(it.updatedBy.ifBlank { it.createdBy }) != n(me.name) && !mine(was[it.id]) }
+        if (fresh.isEmpty()) return
+        val ctx = getApplication<Application>()
+        if (android.os.Build.VERSION.SDK_INT >= 33 && ctx.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return
+        val nm = ctx.getSystemService(android.app.NotificationManager::class.java) ?: return
+        nm.createNotificationChannel(android.app.NotificationChannel("assigned", "Interventi assegnati", android.app.NotificationManager.IMPORTANCE_HIGH).apply { description = "Quando qualcuno ti assegna un intervento" })
+        val first = fresh.first()
+        val title = if (fresh.size == 1) "Nuovo intervento assegnato a te" else "${fresh.size} nuovi interventi assegnati a te"
+        val text = if (fresh.size == 1) listOf(first.clientName, first.title).filter { it.isNotBlank() }.joinToString(" · ") else fresh.joinToString(", ") { it.clientName }.take(200)
+        val open = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.let { android.app.PendingIntent.getActivity(ctx, 7, it, android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT) }
+        val note = android.app.Notification.Builder(ctx, "assigned").setSmallIcon(it.topcash.studio.R.mipmap.ic_launcher).setContentTitle(title).setContentText(text)
+            .setStyle(android.app.Notification.BigTextStyle().bigText(text)).setAutoCancel(true).setContentIntent(open).build()
+        runCatching { nm.notify(("int-" + first.id).hashCode(), note) }
     }
     private fun signedOut() { _me.value = null; prefs.edit().remove("me").apply(); _screen.value = Screen.Login }
 

@@ -289,11 +289,31 @@ function clientsPage(){
   </tbody></table></div>${pager(list.length,size)}</div>`;
 }
 
+// ── team: interventions go to a person of the team, who finds them in "I miei" (and gets a notice)
+const TEAM_ROLE={tecnico:'Tecnici',ufficio:'Amministrazione',admin:'Amministratori',owner:'Amministratori'};
+function techOptions(sel){
+ const team=(state.team||[]),names=new Set(team.map(u=>norm(u.name)));
+ const groups={};for(const u of team){(groups[TEAM_ROLE[u.role]||'Team']||=[]).push(u.name);}
+ const order=['Tecnici','Amministrazione','Amministratori','Team'].filter(g=>groups[g]);
+ const old=sel&&!names.has(norm(sel))?`<optgroup label="Altro"><option selected>${esc(sel)}</option></optgroup>`:'';
+ return`<option value="">Nessuno</option>${order.map(g=>`<optgroup label="${g}">${groups[g].sort((a,b)=>a.localeCompare(b,'it')).map(n=>`<option${norm(n)===norm(sel)?' selected':''}>${esc(n)}</option>`).join('')}</optgroup>`).join('')}${old}`;
+}
+const mineInt=i=>me&&i.source==='app'&&norm(i.technician)===norm(me.name);
+/** new state: interventions newly assigned to me by someone else → notice (and system notification when allowed) */
+function noticeAssigned(prev,next){
+ if(!me||!prev)return;const was=new Map(prev.map(i=>[i.id,i]));
+ const fresh=next.filter(i=>mineInt(i)&&i.status!=='Chiuso'&&norm(i.updatedBy||i.createdBy||'')!==norm(me.name)&&!mineInt(was.get(i.id)||{}));
+ if(!fresh.length)return;
+ const t=fresh.length===1?`Nuovo intervento assegnato a te: ${fresh[0].clientName||fresh[0].client||''}${fresh[0].title?' · '+fresh[0].title:''}`:`${fresh.length} nuovi interventi assegnati a te`;
+ toast(t,'info');
+ try{if('Notification' in window&&Notification.permission==='granted'&&document.hidden)new Notification('Top Cash Studio',{body:t,tag:'int-'+fresh[0].id});}catch{}
+}
+
 function deletedClientsPage(){
- const list=D.deleted||[];
- return`${hero('Clienti <span class="grad">eliminati</span>.','Nascosti da Studio per tutto il team: i portali e Mastro non sono stati toccati. Ripristinali quando vuoi.',`<button class="btn" data-cview="all">${icon('arrow')}Torna ai clienti</button>`)}
- <div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Eliminati<span class="count">${fmt(list.length)}</span></h2></div></div>
- ${list.map(c=>`<div class="list-row">${markEl(c.name,c.code)}<div class="grow"><strong>${esc(c.name)}</strong><small>Cod. ${esc(c.code.replace(/^0+/,''))}${c.vat?' · P.IVA '+esc(c.vat):''}${c.edit?.updatedBy?` · eliminato da ${esc(c.edit.updatedBy)} ${esc(dTime(c.edit.updatedAt))}`:''}</small></div><button class="btn sm" data-restore-client="${esc(c.code)}">${icon('sync')}Ripristina</button></div>`).join('')||empty('check','Nessun cliente eliminato','')}</div>`;
+ const all=D.deleted||[],q=norm(ui.delQ||''),found=q?all.filter(c=>norm(c.name+' '+c.code+' '+(c.vat||'')+' '+(c.city||'')).includes(q)):all,list=found.slice(0,200);
+ return`${hero('Clienti <span class="grad">eliminati</span>.',`Nascosti da Studio per tutto il team: i portali e Mastro non sono stati toccati.${D.autoGone?` ${plur(D.autoGone,'cliente è uscito','clienti sono usciti')} da soli perché senza macchine attive: tornano appena Mastro gliene assegna una.`:''} Ripristinali quando vuoi.`,`<button class="btn" data-cview="all">${icon('arrow')}Torna ai clienti</button>`)}
+ <div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Eliminati<span class="count">${fmt(all.length)}</span></h2>${found.length>list.length?`<p>Ne mostro ${fmt(list.length)} su ${fmt(found.length)}: cerca per nome, codice, P.IVA o città.</p>`:''}</div><label class="search" style="max-width:280px">${icon('search')}<input data-del-q placeholder="Cerca tra gli eliminati" value="${esc(ui.delQ||'')}" aria-label="Cerca tra gli eliminati"></label></div>
+ ${list.map(c=>`<div class="list-row">${markEl(c.name,c.code)}<div class="grow"><strong>${esc(c.name)}</strong><small>Cod. ${esc(c.code.replace(/^0+/,''))}${c.vat?' · P.IVA '+esc(c.vat):''}${c.autoGone?' · senza macchine attive':c.edit?.updatedBy?` · eliminato da ${esc(c.edit.updatedBy)} ${esc(dTime(c.edit.updatedAt))}`:''}</small></div><button class="btn sm" data-restore-client="${esc(c.code)}">${icon('sync')}Ripristina</button></div>`).join('')||empty('check','Nessun cliente eliminato','')}</div>`;
 }
 const licEditBtn=r=>isAdmin()?`<button class="icon-btn sm" data-edit-lic="${esc(r.id)}" data-tip="Modifica licenza" aria-label="Modifica licenza">${icon('edit')}</button>`:'';
 const licNote=r=>{const e=D.licEdits?.[r.id];return e?`<span class="badge info" data-tip="${esc([e.note,e.updatedBy&&('Modificata da '+e.updatedBy)].filter(Boolean).join(' · '))}">${e.expiry?'scadenza corretta':'nota'}</span>`:'';};
@@ -412,7 +432,7 @@ const istCls=s=>({'Aperto':'info','Pianificato':'acc','In corso':'due','In attes
 const prioCls=p=>({'Urgente':'bad','Alta':'due','Bassa':''}[p]??'');
 function interventionsPage(){
  let list=D.interventions;const q=norm(ui.q);
- if(ui.itab==='open')list=list.filter(i=>i.status!=='Chiuso');else if(ui.itab==='mine')list=list.filter(i=>i.status!=='Chiuso'&&i.source==='app'&&me&&norm(i.technician)===norm(me.name));else if(ui.itab==='today')list=list.filter(i=>i.status!=='Chiuso'&&i.d&&dayDiff(i.d)<=0);else if(ui.itab==='closed')list=list.filter(i=>i.status==='Chiuso'&&i.source==='app');else if(ui.itab==='mastro')list=list.filter(i=>i.source==='mastro');
+ if(ui.itab==='open')list=list.filter(i=>i.status!=='Chiuso');else if(ui.itab==='mine')list=list.filter(i=>i.status!=='Chiuso'&&mineInt(i));else if(ui.itab==='today')list=list.filter(i=>i.status!=='Chiuso'&&i.d&&dayDiff(i.d)<=0);else if(ui.itab==='closed')list=list.filter(i=>i.status==='Chiuso'&&i.source==='app');else if(ui.itab==='mastro')list=list.filter(i=>i.source==='mastro');
  if(q)list=list.filter(i=>norm([i.client,i.title,i.work,i.technician,i.machine].join(' ')).includes(q));
  if(ui.tech)list=list.filter(i=>i.technician===ui.tech);
  if(!['date','client','prio'].includes(ui.sort.key))ui.sort={key:'date',dir:-1};
@@ -438,15 +458,13 @@ function openIntervention(id,clientCode){remember('i',id);
  const m=document.createElement('div');m.className='modal';
  const opts=(arr,sel)=>arr.map(x=>`<option${x===sel?' selected':''}>${esc(x)}</option>`).join('');
  const machOpts=cc=>{const cl=D.byCode.get(cc);return`<option value="">Nessuna macchina</option>`+(cl?.machines||[]).map(x=>`<option value="${esc(x.id)}"${x.id===v.machine?' selected':''}>${esc((x.model||'Macchina')+' · '+x.serial)}</option>`).join('');};
- const techs=[...new Set(D.interventions.map(i=>i.technician).filter(Boolean))];
  m.innerHTML=`<form class="modal-box wide" id="int-form" aria-label="Intervento">
   <h3>${it?.source==='mastro'?'Intervento dallo storico Mastro':signed?'Rapportino n. '+esc(it.reportNo):it?'Modifica intervento':'Nuovo intervento'}</h3>
   ${signed?`<div class="sign-banner">${icon('check')}<div><strong>Firmato da ${esc(it.signer)}</strong><small>${dTime(it.signedAt)} · rapportino n. ${esc(it.reportNo)} · non più modificabile</small></div></div>`:''}
   ${signed&&it.sentAt?`<div class="sign-sent">${icon('mail')}<span>PDF inviato a <strong>${esc(it.sentTo)}</strong> il ${dTime(it.sentAt)}</span></div>`:''}
   <label class="field">Cliente<input class="input" id="int-client" list="int-clients" value="${esc(c?c.name:'')}" placeholder="Scrivi per cercare un cliente…" ${ro?'disabled':''} required autocomplete="off"></label>
   <datalist id="int-clients">${D.clients.slice(0,3000).map(x=>`<option value="${esc(x.name)}">${esc([x.city,x.code.replace(/^0+/,'')].filter(Boolean).join(' · '))}</option>`).join('')}</datalist>
-  <div class="form-row"><label class="field">Data<input class="input" type="date" name="date" value="${esc(v.date||'')}" ${ro?'disabled':''}></label><label class="field">Tecnico<input class="input" name="technician" list="int-techs" value="${esc(v.technician||'')}" maxlength="80" ${ro?'disabled':''}></label></div>
-  <datalist id="int-techs">${techs.map(t=>`<option value="${esc(t)}">`).join('')}</datalist>
+  <div class="form-row"><label class="field">Data<input class="input" type="date" name="date" value="${esc(v.date||'')}" ${ro?'disabled':''}></label><label class="field">Assegna a<select class="select" name="technician" ${ro?'disabled':''}>${techOptions(v.technician||'')}</select></label></div>
   <label class="field">Titolo<input class="input" name="title" value="${esc(v.title)}" maxlength="200" required placeholder="es. Sostituzione stampante, verificazione periodica…" ${ro?'disabled':''}></label>
   <div class="form-row"><label class="field">Stato<select class="select" name="status" ${ro?'disabled':''}>${opts(ISTATES,v.status)}</select></label><label class="field">Priorità<select class="select" name="priority" ${ro?'disabled':''}>${opts(PRIOS,v.priority)}</select></label></div>
   <label class="field">Macchina<select class="select" name="machine" id="int-machine" ${ro?'disabled':''}>${machOpts(v.clientCode)}</select></label>
@@ -753,9 +771,11 @@ function go(p,keepQuery,fromHistory){if(!PAGES[p])return;const change=()=>{page=
 // Phones (every browser): the new page rises into place inside the scrolling area, under the glass bars, card by card.
 // Nothing is snapshotted, so nothing can ever be drawn over the bottom bar (Chrome, Safari, Firefox, Samsung Internet).
 const PHONE=matchMedia('(max-width:760px)');
-function pageIn(dir){const main=$('#main');if(!main?.animate||main.querySelector('.reveal'))return; // pages with cards already rise card by card (.anim .reveal)
- const kids=[...main.children].slice(0,7);const dx=dir==='back'?-14:0,dy=dir==='back'?0:12;
- kids.forEach((el,i)=>el.animate([{opacity:0,transform:`translate(${dx}px,${dy}px)`},{opacity:1,transform:'none'}],{duration:340,delay:i*28,easing:'cubic-bezier(.22,1,.36,1)',fill:'backwards'}));}
+// One layer moves, once: forward = rises in, back = slides in from the left. Cards never travel over one another.
+function pageIn(dir){const main=$('#main');if(!main?.animate)return;
+ main.getAnimations().forEach(a=>a.cancel());
+ main.animate(dir==='back'?[{opacity:0,transform:'translateX(-18px)'},{opacity:1,transform:'none'}]:[{opacity:0,transform:'translateY(10px)'},{opacity:1,transform:'none'}],
+  {duration:dir==='back'?260:300,easing:'cubic-bezier(.2,.8,.2,1)'});}
 // View Transitions with graceful fallback: a new navigation skips the running one, and aborted transitions are silent.
 let vt=null;
 function transition(fn,dir='fwd'){const pre=()=>{const c=transition.cleanup;transition.cleanup=null;c?.();};
@@ -951,6 +971,8 @@ function receive(v){
  if(v.type==='mastro'){mastroState=v;if(v.stage==='preview'){mastroState=null;mastroPreview(v);}if(page==='settings')render(false);if(v.ok===false)toast(v.error,'alert');return;}
  if(v.type==='host'){hostInfo={...hostInfo,...v};offerPublic();if(v.syncStation)document.documentElement.dataset.station='1';else delete document.documentElement.dataset.station;if(page==='settings'||page==='team'||page==='sync')render(false);return;}
  if(v.type!=='state')return;
+ if(v.interventions&&!firstState)noticeAssigned(state.interventions,v.interventions);
+ if(firstState&&me?.role==='tecnico'&&ui.itab==='open')ui.itab='mine';
  state={...state,...v,clients:v.clients||[],orders:v.orders||[],mastroClients:v.mastroClients||[],machines:v.machines||[],interventions:v.interventions||[],warehouses:v.warehouses||[],articles:v.articles||[],stockLevels:v.stockLevels||[],stock:v.stock||[],movements:v.movements||[],invoices:v.invoices||[],dues:v.dues||[],balances:v.balances||[],dueNotes:v.dueNotes||{},metadata:v.metadata||{},notes:v.notes||{}};derive();if(typeof applyEdits==='function')applyEdits();if(typeof deriveDtr==='function')deriveDtr();if(typeof deriveItal==='function')deriveItal();if(typeof deriveRch==='function')deriveRch();if(typeof deriveRegisters==='function')deriveRegisters();if(typeof deriveWork==='function')deriveWork();
  render(firstState);firstState=false;if(typeof pendingOpen!=='undefined'&&pendingOpen&&D.byCode.has(pendingOpen)){const pc=pendingOpen;pendingOpen='';openClient(pc);}else if(drawerCode){if(D.byCode.has(drawerCode)&&!D.deleted?.some(x=>x.code===drawerCode))openClient(drawerCode,true);else closeDrawer();}
  $('#splash')?.classList.add('gone');
