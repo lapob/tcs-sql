@@ -199,7 +199,7 @@ private fun deltaText(now: Double, prev: Double): String =
         Row(Modifier.fillMaxWidth().height(120.dp).padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.Bottom) {
             acc.months.forEachIndexed { i, (m, v) ->
                 val f by animateFloatAsState(if (shown) (kotlin.math.abs(v) / max).toFloat().coerceIn(0.03f, 1f) else 0f,
-                    spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessLow - i * 8f), label = "bar$i")
+                    spring(dampingRatio = 1f, stiffness = (Spring.StiffnessLow - i * 8f).coerceAtLeast(80f)), label = "bar$i")
                 Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
                     Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.BottomCenter) {
                         Box(Modifier.fillMaxWidth().fillMaxHeight().graphicsLayer { scaleY = f; transformOrigin = TransformOrigin(0.5f, 1f) }
@@ -227,7 +227,7 @@ private fun deltaText(now: Double, prev: Double): String =
             acc.flow.forEachIndexed { i, w ->
                 Row(Modifier.weight(1f).fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.Bottom) {
                     listOf(w.inc to st.ok, w.out to st.bad).forEachIndexed { j, (v, c) ->
-                        val f by animateFloatAsState(if (shown) (v / max).toFloat().coerceIn(0.02f, 1f) else 0f, spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessLow - i * 8f), label = "flow$i$j")
+                        val f by animateFloatAsState(if (shown) (v / max).toFloat().coerceIn(0.02f, 1f) else 0f, spring(dampingRatio = 1f, stiffness = (Spring.StiffnessLow - i * 8f).coerceAtLeast(80f)), label = "flow$i$j")
                         Box(Modifier.weight(1f).fillMaxHeight().graphicsLayer { scaleY = f; transformOrigin = TransformOrigin(0.5f, 1f) }
                             .clip(RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp)).background(c.copy(alpha = .8f)))
                     }

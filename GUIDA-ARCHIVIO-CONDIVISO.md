@@ -384,7 +384,8 @@ Altro dominio: `collega-esterno.ps1 -Dominio altro.it`. Se preferisci creare il 
 
 ### Sicurezza degli accessi e dispositivi
 
-- Da fuori ufficio basta **nome utente e password**: nessun codice da approvare.
+- **In ufficio** basta nome utente e password.
+- **Da fuori ufficio** un PC, telefono o browser nuovo mostra un **codice** (es. `K7Q-4M2`) e resta in attesa: un amministratore lo autorizza in **Utenti → Dispositivi** (controllando che il codice sia quello che gli detta il collega). Serve una volta sola per dispositivo; un dispositivo già usato in ufficio è già autorizzato. Finché non è autorizzato non può nemmeno provare la password. Gli amministratori vedono il numero di richieste su **Utenti** e un avviso quando ne arriva una nuova. (Dalla 2.8.11; tra la 2.7.5 e la 2.8.10 il codice non veniva chiesto e i dispositivi usati in quel periodo restano autorizzati: controllali nell'elenco.)
 - **Protezione anti-tentativi** (solo da fuori ufficio): 5 password sbagliate in 15 minuti sospendono quell'utente da fuori per 15 minuti (il tempo raddoppia a ogni nuova sospensione, fino a 24 ore); 20 errori in un'ora dallo stesso indirizzo sospendono quell'indirizzo per un'ora. In ufficio si entra sempre, così nessuno può bloccare i colleghi dalla loro scrivania.
 - **Utenti → Dispositivi** elenca ogni PC, telefono e browser che ha fatto accesso, con ultimo utente, ultimo accesso e indirizzo IP; **Blocca** chiude subito l'accesso da fuori a un telefono perso o di un ex collaboratore (che vedrà il proprio codice, es. `K7Q-4M2`), **Sblocca** lo riapre.
 - **Utenti → Accessi e sicurezza** mostra gli accessi da fuori ufficio, le sospensioni per troppi tentativi e le modifiche a utenti e dispositivi; è visibile solo agli amministratori, come gli indirizzi IP dell'ufficio.

@@ -81,11 +81,11 @@ import kotlinx.coroutines.launch
 /** Brand tile: pops in with a spring; shrinks smoothly when the keyboard is open or the screen is short. */
 @Composable private fun Logo() {
     val s = remember { Animatable(0.6f) }; val a = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { launch { a.animateTo(1f) }; s.animateTo(1f, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow)) }
+    LaunchedEffect(Unit) { launch { a.animateTo(1f) }; s.animateTo(1f, spring(Spring.DampingRatioLowBouncy, Spring.StiffnessLow)) }
     val ime = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
     val screenH = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp
     val target = when { ime -> 52.dp; screenH < 640 -> 68.dp; screenH > 900 -> 104.dp; else -> 88.dp }
-    val size by androidx.compose.animation.core.animateDpAsState(target, spring(Spring.DampingRatioLowBouncy, Spring.StiffnessMediumLow), label = "logo")
+    val size by androidx.compose.animation.core.animateDpAsState(target, spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow), label = "logo")
     Image(painterResource(R.drawable.logo_tile), "Top Cash Service", Modifier.size(size).graphicsLayer { scaleX = s.value; scaleY = s.value; alpha = a.value })
 }
 
@@ -139,7 +139,7 @@ import kotlinx.coroutines.launch
     }
 }
 
-/** Outside the office: shown when an administrator blocked this phone (Utenti → Dispositivi), or briefly while it is checked. */
+/** Outside the office: a new phone waits for an administrator (Utenti → Dispositivi), a blocked one stays out. Polls on its own. */
 @Composable fun DeviceScreen(vm: AppViewModel) {
     val d by vm.device.collectAsStateWithLifecycle()
     val blocked = d.status == "revoked"
@@ -148,10 +148,10 @@ import kotlinx.coroutines.launch
     LaunchedEffect(blocked) { if (!blocked) while (true) { kotlinx.coroutines.delay(8000); if (vm.checkDevice()) break } }
     AuthFrame {
         Logo()
-        Text(if (blocked) "Dispositivo bloccato" else "Verifica del telefono", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground,
+        Text(if (blocked) "Dispositivo bloccato" else "Autorizza questo telefono", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center, modifier = Modifier.padding(top = 22.dp).appear(1))
         Text(if (blocked) "L'amministratore ha bloccato l'accesso da fuori ufficio per questo telefono. Se è un errore, comunicagli questo codice: può sbloccarlo da Utenti → Dispositivi."
-             else "Sto verificando questo telefono con il server dell'ufficio.",
+             else "Per sicurezza, da fuori ufficio Top Cash si apre solo sui dispositivi approvati. Comunica questo codice a un amministratore: lo trova in Utenti → Dispositivi. Serve una volta sola.",
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
             modifier = Modifier.widthIn(max = 460.dp).padding(top = 8.dp, bottom = 22.dp).appear(2))
         if (d.code.isNotEmpty()) androidx.compose.foundation.layout.Row(
@@ -163,7 +163,7 @@ import kotlinx.coroutines.launch
         }
         if (!blocked) androidx.compose.foundation.layout.Row(Modifier.padding(top = 22.dp).appear(4), verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-            Text("  Un attimo: si apre da solo", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("  In attesa di approvazione: si apre da solo", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         TextButton({ checking = true; scope.launch { vm.checkDevice(); checking = false } }, Modifier.padding(top = 12.dp), enabled = !checking) { Text(if (checking) "Controllo…" else "Controlla ora") }
         TextButton({ vm.changeServer() }) { Text("Cambia server") }

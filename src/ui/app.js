@@ -564,11 +564,11 @@ function securityCard(){const list=(usersData.security||[]).slice(0,25);
 function devicesCard(){const list=usersData.devices||[];const pend=list.filter(d=>d.status==='pending').length;
  const badge=d=>d.status==='approved'?'<span class="badge ok">Attivo</span>':d.status==='pending'?'<span class="badge due">In attesa</span>':'<span class="badge bad">Bloccato</span>';
  return`<div class="card reveal devices-card" style="--i:3"><div class="card-head"><div><h2>Dispositivi${pend?`<span class="count due">${pend} in attesa</span>`:`<span class="count">${list.length}</span>`}</h2>
-  <p>Ogni PC, telefono o browser che accede compare qui, con l’ultimo utente e l’ultimo accesso. Da fuori ufficio basta nome utente e password; <strong>Blocca</strong> chiude subito l’accesso a un dispositivo perso o di un ex collaboratore.</p></div></div>
+  <p>Ogni PC, telefono o browser che accede compare qui, con l’ultimo utente e l’ultimo accesso. In ufficio basta nome utente e password; da fuori ufficio un dispositivo nuovo entra solo dopo che lo <strong>autorizzi</strong> (controlla che il codice sia quello che ti comunica il collega). <strong>Blocca</strong> chiude subito l’accesso a un dispositivo perso o di un ex collaboratore.</p></div></div>
   ${list.length?`<div class="table-wrap"><table><thead><tr><th>Codice</th><th>Dispositivo</th><th>Ultimo utente</th><th>Ultimo accesso</th><th>Stato</th><th></th></tr></thead><tbody>
   ${list.map(d=>`<tr><td><span class="mono" style="font-weight:650">${esc(d.id)}</span>${d.id===usersData.thisDevice?' <span class="badge acc">questo</span>':''}</td><td><strong>${esc(d.name)}</strong><small class="muted" style="display:block">${esc(d.platform||'')}${d.remote?' · da fuori ufficio':''}</small></td>
    <td>${esc(d.user||'—')}</td><td>${d.lastSeen?dTime(d.lastSeen):'—'}<small class="muted" style="display:block">${esc(d.lastIp||'')}</small></td><td>${badge(d)}</td>
-   <td><div class="btn-row">${d.status!=='approved'?`<button class="btn sm accent" data-dev="${esc(d.id)}" data-dev-act="approve">${icon('check')}Sblocca</button>`:''}${d.status!=='revoked'?`<button class="btn sm ghost" data-dev="${esc(d.id)}" data-dev-act="revoke">Blocca</button>`:''}<button class="btn sm ghost" data-dev="${esc(d.id)}" data-dev-act="delete" data-tip="Elimina dall’elenco" aria-label="Elimina">${icon('close')}</button></div></td></tr>`).join('')}
+   <td><div class="btn-row">${d.status!=='approved'?`<button class="btn sm accent" data-dev="${esc(d.id)}" data-dev-act="approve">${icon('check')}${d.status==='pending'?'Autorizza':'Sblocca'}</button>`:''}${d.status!=='revoked'?`<button class="btn sm ghost" data-dev="${esc(d.id)}" data-dev-act="revoke">Blocca</button>`:''}<button class="btn sm ghost" data-dev="${esc(d.id)}" data-dev-act="delete" data-tip="Elimina dall’elenco" aria-label="Elimina">${icon('close')}</button></div></td></tr>`).join('')}
   </tbody></table></div>`:empty('shield','Nessun dispositivo','Compariranno qui al primo accesso di ogni PC, telefono o browser.')}</div>`;}
 function accountCard(i){if(!WEB||!me)return'';return`<form class="card reveal" style="--i:${i}" id="pwd-form"><h2>Il tuo account</h2><p class="sub">${esc(me.name)} · ${esc(me.username)} · ${esc(me.roleLabel)}</p>
  <div style="display:grid;gap:10px;margin-top:14px"><label class="field">Password attuale<input class="input" type="password" name="current" required autocomplete="current-password"></label><label class="field">Nuova password (min. 10 caratteri)<input class="input" type="password" name="password" required minlength="10" autocomplete="new-password"></label>
@@ -626,7 +626,7 @@ function lanCard(i){
  const urls=(LAN&&LAN.urls&&LAN.urls.length?LAN.urls:[location.origin]);
  return`<div class="card reveal" style="--i:${i}"><h2>Accesso dalla rete</h2><p class="sub">Dagli altri PC, tablet e telefoni dell’ufficio apri uno di questi indirizzi nel browser e accedi con il tuo utente. Sul telefono puoi poi scegliere «Aggiungi a schermata Home».</p>
   <div class="lan-list">${urls.map((u,k)=>`<div class="lan-row"><code>${esc(u)}</code>${k===0?'<span class="badge ok">consigliato</span>':''}<button class="btn sm ghost" data-copy="${esc(u)}">${icon('copy')}Copia</button></div>`).join('')}</div>
-  ${pub?`<p class="sub" style="margin-top:14px">Da fuori ufficio (connessione cifrata, con nome utente e password):</p><div class="lan-list"><div class="lan-row"><code>${esc(pub)}</code><span class="badge acc">pubblico</span><button class="btn sm ghost" data-copy="${esc(pub)}">${icon('copy')}Copia</button></div></div>`:''}
+  ${pub?`<p class="sub" style="margin-top:14px">Da fuori ufficio (connessione cifrata, dispositivi autorizzati e nome utente e password):</p><div class="lan-list"><div class="lan-row"><code>${esc(pub)}</code><span class="badge acc">pubblico</span><button class="btn sm ghost" data-copy="${esc(pub)}">${icon('copy')}Copia</button></div></div>`:''}
   <p class="muted" style="font-size:12px;margin-top:8px">Perché l’indirizzo non cambi, nel router riserva l’IP a questo PC (prenotazione DHCP).${pub?'':' Fuori ufficio usa l’indirizzo esterno o la VPN.'}</p></div>`;
 }
 function serverCard(i){
@@ -774,7 +774,7 @@ function render(animate){
  if(typeof renewalItems==='function'){const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v?fmt(v):'';};try{set('nav-renewals',renewalItems().filter(x=>x.n<=30&&!['Rinnovato','Perso'].includes(x.status)).length) /* only what needs a call within 30 days, not the whole 4-month list */;set('nav-route',routeStops().length);set('nav-inventory',(D.assetsDue||[]).length);}catch(e){console.warn(e);}}
  $('#nav-clients').textContent=fmt(D.clients.length);$('#nav-licenses').textContent=fmt(D.current.length);$('#nav-orders').textContent=D.orders.length?fmt(D.orders.length):'';$('#nav-interventions').textContent=D.openInterventions.length||'';$('#nav-machines').textContent=D.machines.length?fmt(D.machines.length):'';if(typeof DT!=='undefined'&&DT&&$('#nav-dtr'))$('#nav-dtr').textContent=DT.status?.error?'!':DT.silent.length?fmt(DT.silent.length):'';if(typeof IT!=='undefined'&&IT&&$('#nav-ital'))$('#nav-ital').textContent=IT.status?.error?'!':IT.update.length?fmt(IT.update.length):'';if(typeof RC!=='undefined'&&RC&&$('#nav-rch'))$('#nav-rch').textContent=RC.status?.error?'!':RC.low.length?fmt(RC.low.length):'';if(typeof W!=='undefined'&&W)$('#nav-warehouse').textContent=W.below.length||'';if(typeof A!=='undefined'&&A){$('#nav-accounting').textContent=A.overdue.length?fmt(A.overdue.length):'';const p7=A.payOpen.filter(x=>x.days!==null&&x.days<=7).length;$('#nav-accpay').textContent=p7?fmt(p7):'';}
  $('#nav-due').textContent=agendaItems(0,30).length||'';const late=D.tasks.filter(c=>c.meta.followupState!=='Completato'&&c.meta.nextContact&&days(c.meta.nextContact)<=0).length;$('#nav-tasks').textContent=late||'';
- $('#alerts-dot').classList.toggle('on',D.due30.length>0);$('#nav-more-dot').textContent=($('#nav-due').textContent||$('#nav-tasks').textContent)?'•':'';
+ $('#alerts-dot').classList.toggle('on',D.due30.length>0);$('#nav-more-dot').textContent=($('#nav-due').textContent||$('#nav-tasks').textContent||$('#nav-team')?.textContent)?'•':'';checkDevices();
  $('#nav-sync-dot').className='sync-dot '+(state.syncRunning?'run':state.portalConnected?'on':'');
  $('#sync-pill').hidden=!state.syncRunning;$('#sync-pill-text').textContent=state.syncProgress||'Sincronizzazione…';
  sideStatus();
@@ -884,8 +884,8 @@ document.addEventListener('click',e=>{
  if(ds.itab){ui.itab=ds.itab;ui.p=1;return render(false);}
  if(ds.mtab){ui.mtab=ds.mtab;ui.p=1;return render(false);}
  if(ds.devAct){(async()=>{const d=(usersData.devices||[]).find(x=>x.id===ds.dev);
-  if(ds.devAct!=='approve'&&!await ask({title:ds.devAct==='revoke'?'Bloccare il dispositivo?':'Eliminare il dispositivo?',text:`${esc(d?.name||ds.dev)} (${esc(ds.dev)}) ${ds.devAct==='delete'?'sparisce dall’elenco; se accede di nuovo con utente e password ricomparirà da solo':'non potrà più accedere da fuori ufficio finché non lo sblocchi'}.`,ok:ds.devAct==='revoke'?'Blocca':'Elimina',danger:true}))return;
-  try{await post('/api/devices/'+encodeURIComponent(ds.dev)+'/'+ds.devAct);toast(ds.devAct==='approve'?'Dispositivo sbloccato':ds.devAct==='revoke'?'Dispositivo bloccato':'Dispositivo eliminato','shield');usersData=await api('/api/users');render(false);}catch(x){toast(x.message,'alert');}})();return;}
+  if(ds.devAct!=='approve'&&!await ask({title:ds.devAct==='revoke'?'Bloccare il dispositivo?':'Eliminare il dispositivo?',text:`${esc(d?.name||ds.dev)} (${esc(ds.dev)}) ${ds.devAct==='delete'?'sparisce dall’elenco; se riprova da fuori ufficio dovrà essere autorizzato di nuovo':'non potrà più accedere da fuori ufficio finché non lo sblocchi'}.`,ok:ds.devAct==='revoke'?'Blocca':'Elimina',danger:true}))return;
+  try{await post('/api/devices/'+encodeURIComponent(ds.dev)+'/'+ds.devAct);toast(ds.devAct==='approve'?'Dispositivo autorizzato':ds.devAct==='revoke'?'Dispositivo bloccato':'Dispositivo eliminato','shield');usersData=await api('/api/users');render(false);pendAt=0;checkDevices();}catch(x){toast(x.message,'alert');}})();return;}
  if(ds.int)return openIntervention(ds.int);
  if(ds.newint)return openIntervention(null,ds.newint);
  if(ds.cview){ui.clientView=ds.cview;ui.p=1;return render(false);}
@@ -1070,18 +1070,26 @@ function deviceName(){const u=navigator.userAgent;const os=/iPhone/.test(u)?'iPh
  const br=host?'App Top Cash':/Edg\//.test(u)?'Edge':/Chrome\//.test(u)?'Chrome':/Firefox\//.test(u)?'Firefox':/Safari\//.test(u)?'Safari':'Browser';return os+' · '+br;}
 const devicePlatform=()=>host?'Windows (app)':'Browser';
 let devTimer=0;
+// administrators: devices asking for access from outside the office (counter on Utenti, a toast when a new one arrives).
+// Asked at most every 20 s, with a last check after a burst of changes so a new request is never missed.
+let pendLast=-1,pendAt=0,pendTimer=0;
+function checkDevices(){if(!WEB||!me||!isAdmin())return;const wait=20000-(Date.now()-pendAt);
+ if(wait>0){if(!pendTimer)pendTimer=setTimeout(()=>{pendTimer=0;checkDevices();},wait);return;}
+ pendAt=Date.now();api('/api/devices/pending').then(r=>{const n=r?.count||0,el=$('#nav-team');if(el)el.textContent=n||'';
+  if(pendLast>=0&&n>pendLast)toast(n===1?'Un dispositivo chiede l’accesso da fuori ufficio: autorizzalo in Utenti → Dispositivi':`${n} dispositivi chiedono l’accesso da fuori ufficio: autorizzali in Utenti → Dispositivi`,'shield');
+  pendLast=n;}).catch(()=>{});}
 function showDevice(status,code){
  $('#splash')?.classList.add('gone');es?.close();clearTimeout(devTimer);const a=$('#auth');a.hidden=false;const blocked=status==='revoked';
  a.innerHTML=`<div class="auth-card device-card">
   <img src="assets/tcs-app@2x.png" alt="Top Cash Service" class="auth-logo">
-  <h1>${blocked?'Dispositivo bloccato':'Verifica del dispositivo'}</h1>
-  <p>${blocked?'L’amministratore ha bloccato l’accesso da fuori ufficio per questo dispositivo. Se è un errore, comunicagli questo codice: può sbloccarlo da <strong>Utenti → Dispositivi</strong>.':'Sto verificando questo dispositivo con il server dell’ufficio.'}</p>
+  <h1>${blocked?'Dispositivo bloccato':'Autorizza questo dispositivo'}</h1>
+  <p>${blocked?'L’amministratore ha bloccato l’accesso da fuori ufficio per questo dispositivo. Se è un errore, comunicagli questo codice: può sbloccarlo da <strong>Utenti → Dispositivi</strong>.':'Per sicurezza, da fuori ufficio Top Cash Studio si apre solo sui dispositivi approvati. Comunica questo codice a un amministratore: lo trova in <strong>Utenti → Dispositivi</strong>. Serve una volta sola per dispositivo.'}</p>
   ${code?`<div class="device-code" aria-label="Codice dispositivo">${esc(code)}</div>`:''}
-  ${blocked?'':`<p class="device-wait"><span class="spinner"></span>Un attimo: la pagina si apre da sola.</p>`}
+  ${blocked?'':`<p class="device-wait"><span class="spinner"></span>In attesa dell’approvazione: la pagina si apre da sola.</p>`}
   <button class="btn ghost" type="button" id="dev-retry">${icon('sync')}Controlla ora</button></div>`;
- const check=async()=>{try{const h=await post('/api/device/hello',{name:deviceName(),platform:devicePlatform()});if(h.status!=='revoked')return location.reload();if(h.status!==status||h.code!==code)return showDevice(h.status,h.code);}catch{}if(!blocked)devTimer=setTimeout(check,8000);};
+ const check=async()=>{try{const h=await post('/api/device/hello',{name:deviceName(),platform:devicePlatform()});if(h.status==='approved'||!h.remote)return location.reload();if(h.status!==status||h.code!==code)return showDevice(h.status,h.code);}catch{}if(!blocked)devTimer=setTimeout(check,8000);};
  $('#dev-retry').addEventListener('click',()=>{clearTimeout(devTimer);check();});
- if(!blocked)devTimer=setTimeout(check,8000);
+ if(!blocked)devTimer=setTimeout(check,code?8000:0); // no code yet (a parallel request arrived before the device cookie): ask for it at once
 }
 function startWeb(){$('#auth').hidden=true;applyRole();etag='';raw=null;loadState();openStream();if(host)host.postMessage({action:'hostInfo'});learnPublic();}
 async function logout(){try{await post('/api/logout');}catch{}try{await caches.delete('tcs-api');}catch{}me=null;location.reload();}
@@ -1097,7 +1105,7 @@ async function bootWeb(){
  // the three first requests leave together: one round trip instead of three (it counts outside the office, through the tunnel)
  earlyState=fetch('/api/state',{credentials:'same-origin',cache:'no-store'}).catch(()=>null);
  const hello=post('/api/device/hello',{name:deviceName(),platform:devicePlatform()}).catch(()=>null),session=api('/api/session');session.catch(()=>{});
- try{const h=await hello;if(h?.remote&&h.status==='revoked'){earlyState=null;return showDevice(h.status,h.code);} // no answer (server down, no network): go on with the saved copy, the offline bar says so
+ try{const h=await hello;if(h?.remote&&h.status!=='approved'){earlyState=null;return showDevice(h.status,h.code);} // no answer (server down, no network): go on with the saved copy, the offline bar says so
   const s=await session;if(s.setupNeeded)return showAuth('setup');if(!s.user)return showAuth('login');me=s.user;startWeb();}
  catch{$('#splash')?.classList.add('gone');$('#main').innerHTML=`<div class="error-box"><img src="assets/tcs-app@2x.png" alt="Top Cash Service" class="tile"><h2>Server non raggiungibile</h2><p>Il server dell’ufficio non risponde: può essere spento o senza connessione. Controlla anche la tua rete.</p><p class="muted" style="font-size:13px;margin-top:6px">Riprovo da solo ogni 20 secondi.</p><p style="margin-top:16px"><button class="btn accent" data-action-local="reload">Riprova ora</button></p></div>`;setTimeout(()=>location.reload(),20000);}
 }

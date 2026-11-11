@@ -196,11 +196,23 @@ class Api(context: Context) {
             if (u.scheme != "https" || !u.host.contains('.')) return null
             return "https://${u.host}${if (u.port != 443) ":" + u.port else ""}/"
         }
+        /** LAN names and private addresses (192.168.x, 10.x, 172.16-31.x, Tailscale 100.64/10, link-local, *.local). */
+        fun isPrivateHost(host: String): Boolean {
+            val h = host.lowercase().trim('[', ']')
+            if (!h.contains('.') && !h.contains(':')) return true
+            if (h == "localhost" || listOf(".local", ".lan", ".home", ".internal", ".localhost").any { h.endsWith(it) }) return true
+            if (h.contains(':')) return h == "::1" || h.startsWith("fe80") || h.startsWith("fc") || h.startsWith("fd")
+            val p = h.split('.').map { it.toIntOrNull() ?: return false }
+            if (p.size != 4) return false
+            return p[0] == 10 || p[0] == 127 || (p[0] == 192 && p[1] == 168) || (p[0] == 172 && p[1] in 16..31) || (p[0] == 169 && p[1] == 254) || (p[0] == 100 && p[1] in 64..127)
+        }
         /** "192.168.1.220" -> "http://192.168.1.220:8470/" (default Top Cash port), keeps explicit scheme/port. */
         fun normalize(input: String): String? {
             var s = input.trim(); if (s.isEmpty()) return null
             if (!s.contains("://")) s = "http://$s"
-            val u = s.toHttpUrlOrNull() ?: return null
+            var u = s.toHttpUrlOrNull() ?: return null
+            // plain http only inside the office network: a public address always goes through https (password and device key never in clear)
+            if (u.scheme == "http" && !isPrivateHost(u.host)) { s = s.replaceFirst(Regex("^http://", RegexOption.IGNORE_CASE), "https://"); u = s.toHttpUrlOrNull() ?: return null }
             val explicitPort = Regex("^[a-zA-Z]+://[^/]+:\\d+").containsMatchIn(s)
             val port = if (explicitPort) u.port else if (u.scheme == "http") 8470 else u.port
             val portPart = if ((u.scheme == "http" && port == 80) || (u.scheme == "https" && port == 443)) "" else ":$port"

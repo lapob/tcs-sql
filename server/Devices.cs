@@ -49,7 +49,10 @@ public sealed class Devices
   if(Find(key) is DeviceInfo d)return d;
   using var c=Open();
   using(var del=c.CreateCommand()){del.CommandText="DELETE FROM devices WHERE status='pending' AND created<$t";del.Parameters.AddWithValue("$t",DateTimeOffset.Now.AddDays(-7).ToString("O"));del.ExecuteNonQuery();}
-  using(var cnt=c.CreateCommand()){cnt.CommandText="SELECT count(*) FROM devices WHERE status='pending'";if((long)cnt.ExecuteScalar()!>=MaxPending)throw new InvalidDataException("Troppe richieste di accesso in attesa: l'amministratore deve prima approvarle o rifiutarle.");}
+  // requests are free to make from outside: one address keeps at most 2 waiting, and when the list is full the oldest
+  // request leaves instead of the new one being refused (nobody can fill the list and lock the colleagues out)
+  using(var ipq=c.CreateCommand()){ipq.CommandText="DELETE FROM devices WHERE id IN (SELECT id FROM devices WHERE status='pending' AND last_ip=$ip ORDER BY created DESC LIMIT -1 OFFSET 1)";ipq.Parameters.AddWithValue("$ip",ip);ipq.ExecuteNonQuery();}
+  using(var old=c.CreateCommand()){old.CommandText="DELETE FROM devices WHERE id IN (SELECT id FROM devices WHERE status='pending' ORDER BY created DESC LIMIT -1 OFFSET $keep)";old.Parameters.AddWithValue("$keep",MaxPending-1);old.ExecuteNonQuery();}
   var id=NewCode();var now=DateTimeOffset.Now.ToString("O");
   using var q=c.CreateCommand();
   q.CommandText="INSERT INTO devices(id,key_hash,name,platform,status,user,created,last_seen,last_ip,remote) VALUES($id,$h,$n,$p,'pending',$u,$c,$c,$ip,$r)";

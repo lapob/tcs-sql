@@ -49,7 +49,6 @@ svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke
 .aurora i:nth-child(3){--c:#bfdbfe;bottom:-40vw;left:30vw;opacity:.2}
 :root[data-theme="dark"] .aurora i{opacity:.13}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .aurora i{opacity:.13}}
-@keyframes drift{to{transform:translate3d(6vw,4vw,0) scale(1.15)}}
 
 /* Sidebar */
 .sidebar{position:fixed;z-index:5;inset:12px auto 12px 12px;width:var(--sidebar);display:flex;flex-direction:column;gap:14px;padding:18px 14px 14px;background:var(--glass);backdrop-filter:blur(24px) saturate(1.6);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow)}
@@ -472,7 +471,8 @@ main{view-transition-name:main-content}
 .auth-err{color:var(--bad);font-size:13px;min-height:18px}
 .check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-2);cursor:pointer}
 .check input{width:16px;height:16px;accent-color:var(--accent)}
-.offline-bar{position:fixed;z-index:60;top:calc(env(safe-area-inset-top) + 64px);left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:99px;background:var(--due-soft);color:var(--due);border:1px solid color-mix(in srgb,var(--due) 30%,transparent);font-size:12.5px;font-weight:600;backdrop-filter:blur(10px);animation:pop .4s var(--spring);max-width:calc(100vw - 24px)}
+.offline-bar{position:fixed;z-index:60;top:calc(env(safe-area-inset-top) + 64px);left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:99px;background:var(--due-soft);color:var(--due);border:1px solid color-mix(in srgb,var(--due) 30%,transparent);font-size:12.5px;font-weight:600;backdrop-filter:blur(10px);animation:barin .32s var(--soft) both;max-width:calc(100vw - 24px)}
+@keyframes barin{from{opacity:0;transform:translate(-50%,-8px)}}
 .offline-bar svg{width:15px;height:15px}
 
 @media (max-width:1280px){.kpis{grid-template-columns:repeat(2,1fr)}.layout-2{grid-template-columns:1fr}.layout-half{grid-template-columns:1fr}}
@@ -719,8 +719,6 @@ tbody tr[data-client]:active,tbody tr[data-int]:active,.card[data-go]:active{tra
 .modal-box{animation:panelin .42s var(--soft) both;will-change:transform,opacity;transform-origin:50% 40%}
 .modal.out .modal-box{animation:panelout .2s var(--soft-in) both}
 .modal-box.wide{overscroll-behavior:contain;scrollbar-gutter:stable}
-.modal-box.wide>*{animation:rise .5s var(--soft) both}
-.modal-box.wide>*:nth-child(2){animation-delay:40ms}.modal-box.wide>*:nth-child(3){animation-delay:70ms}.modal-box.wide>*:nth-child(4){animation-delay:100ms}.modal-box.wide>*:nth-child(n+5){animation-delay:130ms}
 @keyframes panelin{from{opacity:0;transform:translateY(14px) scale(.975)}}
 @keyframes panelout{to{opacity:0;transform:translateY(8px) scale(.985)}}
 @keyframes fadeout{to{opacity:0}}
@@ -729,13 +727,11 @@ tbody tr[data-client]:active,tbody tr[data-int]:active,.card[data-go]:active{tra
 .backdrop{animation:fade .32s var(--soft) both}.backdrop.out{animation:fadeout .24s var(--soft-in) both}
 @keyframes drawerin{from{transform:translateX(calc(100% + 24px));opacity:.6}}
 @keyframes drawerout{to{transform:translateX(calc(100% + 24px));opacity:.6}}
-.drawer .d-body>*{animation:rise .5s var(--soft) both}
-.drawer .d-body>*:nth-child(2){animation-delay:50ms}.drawer .d-body>*:nth-child(3){animation-delay:90ms}.drawer .d-body>*:nth-child(n+4){animation-delay:120ms}
 .drawer.keep .d-body>*{animation:none}
 @media (max-width:760px){
  .modal{place-items:end center;padding:0}
  .modal-box.wide{width:100%;max-height:92vh;border-radius:24px 24px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));animation:sheetin .46s var(--soft) both}
- .modal.out .modal-box.wide{animation:sheetout .24s var(--soft-in) both}
+ .modal.out .modal-box.wide{animation:sheetout .2s var(--soft-in) both}
  .drawer{animation-name:sheetin}.drawer.out{animation-name:sheetout}
 }
 /* ── Forms in panels */

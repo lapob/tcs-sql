@@ -101,12 +101,13 @@ app.Use(async(ctx,next)=>
  {
   ctx.Response.Headers.StrictTransportSecurity="max-age=31536000";
   if(ctx.Request.Path.StartsWithSegments("/api"))ctx.Response.Headers.CacheControl="no-store"; // private data never kept by Cloudflare or a shared proxy (/api/state sets its own revalidation)
-  // outside the office anyone may try with username and password; only a device the administrator blocked is refused
+  // outside the office only devices approved by an administrator reach the API (login included: an unknown device
+  // cannot even try passwords). The app shell is public and harmless; the update download stays open for the apps.
   var p=ctx.Request.Path;
-  if(p.StartsWithSegments("/api")&&!p.StartsWithSegments("/api/device/hello")&&!p.StartsWithSegments("/api/health")&&dev?.Status==Devices.Revoked)
+  if(p.StartsWithSegments("/api")&&!p.StartsWithSegments("/api/device/hello")&&!p.StartsWithSegments("/api/health")&&!(HttpMethods.IsGet(ctx.Request.Method)&&p.StartsWithSegments("/api/update"))&&dev?.Status!=Devices.Approved)
   {
    ctx.Response.StatusCode=403;
-   await ctx.Response.WriteAsJsonAsync(new{error="Questo dispositivo è stato bloccato dall'amministratore.",device=dev.Status,code=dev.Id});
+   await ctx.Response.WriteAsJsonAsync(new{error=dev?.Status==Devices.Revoked?"Questo dispositivo è stato bloccato dall'amministratore.":"Dispositivo non ancora autorizzato per l'accesso da fuori ufficio.",device=dev?.Status??"unknown",code=dev?.Id??""});
    return;
   }
  }
@@ -198,8 +199,8 @@ app.MapPost("/api/login",async(HttpContext ctx,LoginRequest r)=>
   {
    var d=devices.Find(key)??devices.Register(key,r.DeviceName??"",r.Platform??"",Ip(ctx),IsRemote(ctx),v.Value.User.Name);
    devices.Touch(key,Ip(ctx),IsRemote(ctx),v.Value.User.Name);
-   // signing in with valid credentials is enough: the device is recorded (and can be blocked from Utenti → Dispositivi)
-   if(d.Status==Devices.Pending)devices.SetStatus(d.Id,Devices.Approved,v.Value.User.Name);
+   // in the office valid credentials are enough; from outside the device was already approved by an administrator
+   if(d.Status==Devices.Pending&&!IsRemote(ctx))devices.SetStatus(d.Id,Devices.Approved,v.Value.User.Name);
   }catch(InvalidDataException){}
  }
  return Results.Ok(Me(v.Value.User));
@@ -226,11 +227,13 @@ app.MapPost("/api/device/hello",(HttpContext ctx,DeviceHello r)=>
  var who=ctx.User.Identity?.IsAuthenticated==true?Who(ctx):"";
  if(dev==null&&(remote||who!=""))
  {
-  try{dev=devices.Register(key,r?.Name??"",r?.Platform??"",Ip(ctx),remote,who);}
+  // one notice per address: repeated requests from the same place do not flood the security log
+  var seen=remote&&devices.List().Any(d=>d.Status==Devices.Pending&&d.LastIp==Ip(ctx));
+  try{dev=devices.Register(key,r?.Name??"",r?.Platform??"",Ip(ctx),remote,who);if(remote&&!seen){store.Log("users",$"Nuova richiesta di accesso da fuori ufficio: dispositivo {dev.Id} ({dev.Name}), da approvare in Utenti → Dispositivi.");hub.Changed();}}
   catch(InvalidDataException ex){return Bad(ex.Message);}
  }
- // no approval step any more: credentials are the gate, a blocked device stays blocked
- if(dev!=null&&dev.Status==Devices.Pending){devices.SetStatus(dev.Id,Devices.Approved,who==""?"automatico":who);dev=devices.Find(key);}
+ // a device first seen in the office is trusted; outside the office it waits for an administrator (Utenti → Dispositivi)
+ if(dev!=null&&dev.Status==Devices.Pending&&!remote){devices.SetStatus(dev.Id,Devices.Approved,who==""?"ufficio":who);dev=devices.Find(key);}
  return Results.Ok(new{status=dev?.Status??(remote?"unknown":"office"),code=dev?.Id??"",remote,name=dev?.Name??""});
 }).RequireRateLimiting("login").AllowAnonymous();
 app.MapPost("/api/devices/{id}/{action}",(HttpContext ctx,string id,string action,DeviceRename? r)=>
@@ -248,6 +251,8 @@ app.MapPost("/api/devices/{id}/{action}",(HttpContext ctx,string id,string actio
  }catch(InvalidDataException ex){return Bad(ex.Message);}
  return Results.Ok();
 }).RequireAuthorization("admin");
+// requests waiting for approval (outside the office): the administrators see a counter on Utenti
+app.MapGet("/api/devices/pending",()=>Results.Ok(new{count=devices.List().Count(d=>d.Status==Devices.Pending)})).RequireAuthorization("admin");
 app.MapGet("/api/users",(HttpContext ctx)=>Results.Ok(new{security=store.SecurityEvents(),devices=devices.List(),thisDevice=(ctx.Items["device"] as DeviceInfo)?.Id??"",tunnelPort,users=users.List().Select(u=>new{u.Username,u.Name,u.Role,roleLabel=Roles.Label(u.Role),u.Disabled,u.Created,u.LastLogin}),syncTokenCreated=users.SyncTokenCreated(),stationLastContact=hub.LastStationContact==default?"":hub.LastStationContact.ToString("O"),connected=hub.Connected})).RequireAuthorization("admin");
 // only an owner can create, change or remove an owner (and nobody else can lock the owner out)
 IResult? OwnerOnly(HttpContext ctx,string? targetUser,string? newRole)

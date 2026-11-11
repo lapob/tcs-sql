@@ -110,10 +110,6 @@ th{letter-spacing:.02em;text-transform:uppercase;font-size:10.5px}
 
 /* ── overlays: blur + spring, entering from where they belong */
 .modal{background:oklch(18% .03 265 / .36);backdrop-filter:blur(5px)}
-.modal-box{animation:popin .55s var(--spring) both}
-@keyframes popin{from{opacity:0;transform:translateY(12px) scale(.94)}}
-.drawer{animation:drawin .6s var(--spring-soft) both}
-@keyframes drawin{from{transform:translateX(104%)}}
 .toast{backdrop-filter:blur(10px);box-shadow:var(--shadow-lg)}
 
 /* ── page change: a soft blur-through cross-fade (view transitions) */
@@ -128,8 +124,6 @@ html[data-nav="back"]::view-transition-new(main-content){animation:vtbackin .5s 
 @keyframes vtbackin{from{opacity:0;transform:translateX(-40px)}}
 html[data-nav="back"] .anim .reveal{animation-name:fadein;animation-delay:0s}
 @keyframes fadein{from{opacity:0}}
-.anim .reveal{animation:risein .6s var(--spring-soft) both;animation-delay:min(calc(var(--i,0)*40ms),320ms)}
-@keyframes risein{from{opacity:0;transform:translateY(16px) scale(.985)}}
 
 /* ── live updates: changed numbers tick, their card glows once, menu counters pop */
 .tick-up,.tick-down{display:inline-block;animation:tick .7s var(--spring) both}
@@ -137,8 +131,8 @@ html[data-nav="back"] .anim .reveal{animation-name:fadein;animation-delay:0s}
 @keyframes tick{0%{transform:translateY(0)}25%{transform:translateY(-4px) scale(1.07)}100%{transform:none}}
 .card.live{animation:liveglow 1.4s var(--out) both}
 @keyframes liveglow{0%{box-shadow:var(--hl),var(--shadow),0 0 0 0 var(--accent-ring)}30%{box-shadow:var(--hl),var(--shadow),0 0 0 6px color-mix(in srgb,var(--accent) 14%,transparent)}100%{box-shadow:var(--hl),var(--shadow),0 0 0 14px transparent}}
-.pop{animation:pop .5s var(--spring) both}
-@keyframes pop{0%{transform:scale(1)}35%{transform:scale(1.35)}100%{transform:scale(1)}}
+.pop{animation:badgepop .5s var(--spring) both}
+@keyframes badgepop{0%{transform:scale(1)}35%{transform:scale(1.35)}100%{transform:scale(1)}}
 
 /* ── scrollbars & selection */
 ::selection{background:color-mix(in srgb,var(--accent) 28%,transparent)}
