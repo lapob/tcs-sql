@@ -30,7 +30,7 @@ public sealed partial class Store
   InitSettings(c);
   InitDtr(c);
   InitItal(c);InitRch(c);
-  InitEdits(c);InitWork(c);
+  InitEdits(c);InitWork(c);InitNovita(c);
  }
  public List<ClientRecord> Clients(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM clients";using var r=q.ExecuteReader();var list=new List<ClientRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<ClientRecord>(r.GetString(0))!);return list;}
  public List<OrderRecord> Orders(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM orders";using var r=q.ExecuteReader();var list=new List<OrderRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<OrderRecord>(r.GetString(0))!);return list;}
@@ -225,6 +225,32 @@ public sealed partial class Store
   store.MarkReportSent(rv.Id,"cliente@prova.it","test");
   if(store.Interventions().Single(x=>x.Id==rv.Id).SentTo!="cliente@prova.it")throw new Exception("Invio non registrato");
   store.SaveMail(new("",587,"starttls","","",true,"",null,"",false),"test");if(store.Mail().Password.Length!=0||store.MailReady())throw new Exception("Disattivazione email");
+  // 2.9.0: photos (also in the PDF), stops of the round done, machines to check, notices for the phones, weekly summary
+  static byte[] Jpg(){var px=new byte[64*48*4];for(var k=0;k<px.Length;k+=4){px[k]=200;px[k+1]=90;px[k+2]=40;}
+   var bmp=System.Windows.Media.Imaging.BitmapSource.Create(64,48,96,96,System.Windows.Media.PixelFormats.Bgr32,null,px,64*4);
+   var enc=new System.Windows.Media.Imaging.JpegBitmapEncoder{QualityLevel=80};enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));using var ms=new MemoryStream();enc.Save(ms);return ms.ToArray();}
+  var jpg=Jpg();
+  try{store.AddPhoto(rv.Id,[1,2,3],"test");throw new Exception("Foto non valida accettata");}catch(InvalidDataException){}
+  try{store.AddPhoto("mi1",jpg,"test");throw new Exception("Foto su intervento storico accettata");}catch(InvalidDataException){}
+  try{store.AddPhoto(rv.Id,jpg,"Mario");throw new Exception("Foto su rapportino firmato accettata");}catch(InvalidDataException){}
+  store.UnsignIntervention(rv.Id,"test");
+  var ph=store.AddPhoto(rv.Id,jpg,"Mario");if(store.Photos()[rv.Id].Single().Id!=ph.Id||store.Photo(ph.Id)?.Length!=jpg.Length)throw new Exception("Foto: salvataggio");
+  store.SignIntervention(rv.Id,"Mario Rossi","1.5",sig,true,"test");
+  var pdf2=InterventionReport.Build(store,rv.Id);if(pdf2.Length<=pdf.Length)throw new Exception("Foto nel PDF");
+  File.WriteAllBytes(Path.Combine(folder,"rapportino-con-foto.pdf"),pdf2);
+  store.DeletePhoto(ph.Id,"test");if(store.Photos().ContainsKey(rv.Id))throw new Exception("Foto: eliminazione");
+  store.SaveRouteDone("i"+rv.Id,true,"Mario");if(store.RouteDone()["i"+rv.Id].Day!=DateTime.Today.ToString("yyyy-MM-dd"))throw new Exception("Giro: tappa fatta");
+  store.SaveRouteDone("i"+rv.Id,false,"Mario");if(store.RouteDone().Count!=0)throw new Exception("Giro: tappa da rifare");
+  store.SaveMachineFlags(["m1","m1"],"dismessa","test");if(store.MachineFlags().Single().Value.State!="dismessa")throw new Exception("Macchine: dismessa");
+  try{store.SaveMachineFlags(["m1"],"boh","test");throw new Exception("Macchine: scelta non valida accettata");}catch(InvalidDataException){}
+  store.SaveMachineFlags(["m1"],"","test");if(store.MachineFlags().Count!=0)throw new Exception("Macchine: di nuovo da controllare");
+  var since=DateTimeOffset.Now.AddMinutes(-1);
+  var na=store.SaveIntervention(new("","M15","Cliente Mastro","2026-11-12","","Cassa ferma","","Aperto","Luca","Urgente","","","","","",""),"Ufficio");
+  if(store.Notices("Luca",since,false).SingleOrDefault(n=>n.Id==na.Id)?.Kind!="assigned"||store.Notices("Ufficio",since,true).Any(n=>n.Id==na.Id)
+   ||store.Notices("Mario",since,true).SingleOrDefault(n=>n.Id==na.Id)?.Kind!="urgent"||store.Notices("Mario",since,false).Any(n=>n.Id==na.Id))throw new Exception("Avvisi sul telefono");
+  var wk=WeeklyReport.Message(store,"ufficio@prova.it",DateTime.Today);if(!(wk.HtmlBody??"").Contains("Interventi aperti")||!(wk.HtmlBody??"").Contains("Cassa ferma")||!(wk.TextBody??"").Contains("Verificazioni"))throw new Exception("Riepilogo settimanale");
+  try{store.SaveWeekly(true,"","test");throw new Exception("Riepilogo senza destinatario");}catch(InvalidDataException){}
+  store.AddPhoto(na.Id,jpg,"Luca");store.DeleteIntervention(na.Id);if(store.Photos().ContainsKey(na.Id))throw new Exception("Foto rimaste dopo l'eliminazione");
 #endif
   // backups: verified local copy + external copy; missing drive reported (and recovered) without losing the local backup
   var ext=Path.Combine(folder,"esterno");

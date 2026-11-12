@@ -104,6 +104,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
     }
     Page(vm, "Interventi", "${a.openInterventions.size} da completare", state = state,
         fab = { ExtendedFloatingActionButton(onClick = onNew, expanded = expanded, icon = { Icon(Icons.Rounded.Add, null) }, text = { Text("Nuovo intervento") }) }) {
+        item(key = "pending") { PendingBanner(vm) }
         item(key = "search") { SearchField(q, { q = it }, "Cerca cliente, lavoro, tecnico", Modifier.padding(top = 2.dp)) }
         item(key = "tabs") { ChoiceChips(itabs, tab, { tab = it }, Modifier.padding(top = 10.dp)) }
         if (a.technicians.isNotEmpty()) item(key = "techs") {
@@ -127,7 +128,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(x.i.title.ifBlank { "Intervento" }, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     prioTone(x.i.priority)?.let { Pill(x.i.priority, it, Modifier.padding(start = 8.dp, end = 6.dp)) }
-                    Pill(x.i.status, Archive.toneOf(x.i.status), if (prioTone(x.i.priority) == null) Modifier.padding(start = 8.dp) else Modifier)
+                    Pill(if (x.i.id in a.pending) "Da inviare" else x.i.status, if (x.i.id in a.pending) Tone.Info else Archive.toneOf(x.i.status), if (prioTone(x.i.priority) == null) Modifier.padding(start = 8.dp) else Modifier)
                 }
                 if (showClient) Text(x.clientName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
                 Text(listOf(x.date?.let { Dates.short(it) + " · " + Dates.relative(Dates.daysFromToday(it)) }, x.i.technician.takeIf { it.isNotBlank() },
@@ -146,7 +147,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
     var later by remember { mutableStateOf(false) }
     FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         androidx.compose.material3.AssistChip(onSign, { Text("Firma") }, leadingIcon = { Icon(Icons.Rounded.Draw, null, Modifier.size(16.dp)) })
-        androidx.compose.material3.AssistChip({ vm.printReport(i, ctx) }, { Text("Stampa") }, leadingIcon = { Icon(Icons.Rounded.Print, null, Modifier.size(16.dp)) })
+        if (!i.id.startsWith("local-")) androidx.compose.material3.AssistChip({ vm.printReport(i, ctx) }, { Text("Stampa") }, leadingIcon = { Icon(Icons.Rounded.Print, null, Modifier.size(16.dp)) })
         androidx.compose.material3.AssistChip({ vm.saveIntervention(i.copy(status = "Chiuso"), quiet = true) { vm.notify("Intervento chiuso") } }, { Text("Chiudi") },
             leadingIcon = { Icon(Icons.Rounded.Verified, null, Modifier.size(16.dp)) })
         Box {
@@ -272,6 +273,9 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
             PartsEditor(a, parts, tech, ro) { parts = it }
             Gap(10.dp)
             OutlinedTextField(work, { work = it.take(20000) }, Modifier.fillMaxWidth(), enabled = !ro, label = { Text("Lavoro svolto / note") }, minLines = 4, shape = MaterialTheme.shapes.medium)
+            // photos: before the signature they can be added; after it they are part of the report
+            if (existing?.i?.source != "mastro") PhotosSection(vm, a, existing?.i?.id, editable = !ro)
+            if (existing != null && existing.i.id in a.pending) Pill("Da inviare · salvato sul telefono", Tone.Info, Modifier.padding(top = 10.dp))
             existing?.i?.let { e -> Text(if (ro) "Importato da MastroSQL${if (e.total.isNotBlank() && e.total != "0") " · totale " + e.total + " €" else ""}" else "Creato da ${e.createdBy.ifBlank { "—" }}${if (e.updatedBy.isNotBlank() && e.updated != e.created) " · modificato da " + e.updatedBy else ""}",
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp)) }
             Gap(16.dp)
@@ -299,14 +303,14 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
             }
             if (!ro && existing != null) androidx.compose.material3.FilledTonalButton({
                 saving = true
-                vm.saveIntervention(current(), quiet = true) { r -> vm.printReport(r, ctx) }.invokeOnCompletion { saving = false }
+                vm.saveIntervention(current(), quiet = true, offline = false) { r -> vm.printReport(r, ctx) }.invokeOnCompletion { saving = false }
             }, Modifier.fillMaxWidth().padding(top = 10.dp).height(52.dp), enabled = !saving && clientCode.isNotEmpty() && title.isNotBlank(), shape = MaterialTheme.shapes.medium) {
                 Icon(Icons.Rounded.Print, null); Text("Stampa da portare dal cliente", Modifier.padding(start = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
             // the customer signs on the spot: the current edits are saved first, then the pad opens
             if (!ro) OutlinedButton({
                 saving = true
-                vm.saveIntervention(current(), quiet = true) { r -> signing = r }.invokeOnCompletion { saving = false }
+                vm.saveIntervention(current(), quiet = true, offline = false) { r -> signing = r }.invokeOnCompletion { saving = false }
             }, Modifier.fillMaxWidth().padding(top = 10.dp).height(52.dp), enabled = !saving && clientCode.isNotEmpty() && title.isNotBlank(), shape = MaterialTheme.shapes.medium) {
                 Icon(Icons.Rounded.Draw, null); Text("Fai firmare il rapportino al cliente", Modifier.padding(start = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }

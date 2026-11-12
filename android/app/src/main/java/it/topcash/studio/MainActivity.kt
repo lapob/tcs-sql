@@ -53,7 +53,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: android.content.Intent) { super.onNewIntent(intent); handleShortcut(intent) }
     private fun handleShortcut(i: android.content.Intent?) {
-        vm.shortcut.value = when (i?.action) { "it.topcash.studio.NEW_INTERVENTION" -> "new"; "it.topcash.studio.LOAD_STOCK" -> "load"; "it.topcash.studio.SEARCH_CLIENT" -> "search"; "it.topcash.studio.ROUTE" -> "route"; else -> return }
+        vm.shortcut.value = when (i?.action) { "it.topcash.studio.NEW_INTERVENTION" -> "new"; "it.topcash.studio.LOAD_STOCK" -> "load"; "it.topcash.studio.SEARCH_CLIENT" -> "search"; "it.topcash.studio.ROUTE" -> "route"
+            // tap on a notification: open that intervention
+            it.topcash.studio.data.Notifier.OPEN -> i.getStringExtra(it.topcash.studio.data.Notifier.EXTRA_ID)?.takeIf { s -> s.isNotBlank() }?.let { id -> "int:$id" } ?: return
+            else -> return }
     }
 }
 

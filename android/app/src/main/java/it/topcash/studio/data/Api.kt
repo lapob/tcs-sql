@@ -162,6 +162,18 @@ class Api(context: Context) {
     suspend fun updateMe(name: String) { post("/api/me", json.encodeToString(UserPatch(name = name))) }
     suspend fun changePassword(current: String, password: String) { post("/api/password", json.encodeToString(PasswordChange(current, password))) }
     suspend fun deleteIntervention(id: String) { post("/api/interventions/" + java.net.URLEncoder.encode(id, "UTF-8") + "/delete") }
+    // 2.9.0: round done, machines to check, photos, notices
+    suspend fun routeDone(key: String, done: Boolean) { post("/api/route/done", json.encodeToString(RouteDoneRequest(key, done))) }
+    suspend fun flagMachines(ids: List<String>, state: String) { post("/api/machines/flag", json.encodeToString(MachineFlagRequest(ids, state))) }
+    suspend fun addPhoto(interventionId: String, jpg: ByteArray): PhotoInfo =
+        json.decodeFromString(post("/api/interventions/" + enc(interventionId) + "/photos", json.encodeToString(PhotoRequest(android.util.Base64.encodeToString(jpg, android.util.Base64.NO_WRAP)))))
+    suspend fun deletePhoto(id: String) { post("/api/photos/" + enc(id) + "/delete") }
+    suspend fun photo(id: String): ByteArray = withContext(Dispatchers.IO) {
+        try {
+            http.newCall(Request.Builder().url(url("/api/photos/" + enc(id) + ".jpg")).get().build()).execute().use { r -> if (!r.isSuccessful) throw r.error(); r.body.bytes() }
+        } catch (e: ApiException) { throw e } catch (e: IOException) { throw ApiException("Server non raggiungibile") }
+    }
+    suspend fun notices(since: String): NoticesResponse = json.decodeFromString(get("/api/notices?since=" + enc(since)))
 
     /** Returns null when the archive did not change (HTTP 304). With [have] (the fingerprints of the saved sections)
      *  only the sections that changed are downloaded ("partial": true in the answer). */
@@ -206,6 +218,13 @@ class Api(context: Context) {
         })
 
     companion object {
+        /** The same connection the app uses (addresses, device key, session cookie), for the background check. */
+        fun fromPrefs(ctx: Context): Api? {
+            val p = ctx.getSharedPreferences("topcash", Context.MODE_PRIVATE)
+            val server = p.getString("server", "").orEmpty(); if (server.isBlank()) return null
+            val key = p.getString("device_key", "").orEmpty()
+            return Api(ctx.applicationContext).apply { deviceKey = key; bases = listOf(server, p.getString("server_ext", "").orEmpty()).filter { it.isNotBlank() }; base = server }
+        }
         /** External address: "topcash.example.it" -> "https://topcash.example.it/" (the tunnel always uses https). */
         fun normalizeExternal(input: String): String? {
             var s = input.trim(); if (s.isEmpty()) return null

@@ -47,7 +47,7 @@ public sealed class Hub(Store store)
     ("mastroClients",mv.Clients),("machines",mv.Machines),("interventions",mv.Interventions),("brandRule",mv.Excluded),("assets",store.Assets()),("renewals",store.Renewals()),("deviceLinks",store.DeviceLinks()),
     ("warehouses",store.Warehouses()),("articles",store.Articles()),("stockLevels",store.StockLevels()),("stock",store.Stock()),("movements",store.Movements()),("invoices",RecentInvoices()),("dues",store.Dues()),("balances",store.Balances()),("dueNotes",store.DueNotes()),
     ("sources",store.Sources()),("events",store.Events()),("notes",store.Notes()),("metadata",store.Metadata()),("dtr",store.DtrRegisters()),("dtrStatus",store.DtrState()),("ital",store.ItalDevices()),("italOrders",store.ItalOrders()),("italStatus",store.ItalState()),("rch",store.RchDevices()),("rchStatus",store.RchState()),
-    ("rt",store.RtInfos()),("sites",store.Sites()),("riba",store.RibaList()),("team",Team?.Invoke()??[]),
+    ("rt",store.RtInfos()),("machineFlags",store.MachineFlags()),("routeDone",store.RouteDone()),("photos",store.Photos()),("sites",store.Sites()),("riba",store.RibaList()),("team",Team?.Invoke()??[]),
     ("features",new{mail=store.MailReady(),backupError=Backups.Status(store).Error})};
    var sections=new Dictionary<string,(byte[],string)>(parts.Length);
    foreach(var(name,value) in parts){var b=JsonSerializer.SerializeToUtf8Bytes(value,value.GetType(),Json);sections[name]=(b,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(b),0,8));}

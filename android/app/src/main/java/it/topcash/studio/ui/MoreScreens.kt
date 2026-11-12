@@ -61,11 +61,12 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
     val list = remember(a, tab, q) {
         val n = norm(q.trim())
         a.machines.filter { m ->
-            when (tab) { "Attive" -> m.m.active; "Verificazioni" ->m.m.active && m.verDays != null && m.verDays <= 60; "Abbonamenti" -> m.m.subscribed; else -> true } &&
+            when (tab) { "Attive" -> m.m.active; "Verificazioni" -> m.m.active && !m.stale && m.verDays != null && m.verDays <= 60; "Abbonamenti" -> m.m.subscribed; else -> true } &&
                 (n.isEmpty() || norm(m.clientName + " " + m.m.model + " " + m.m.serial + " " + m.m.fiscalSerial).contains(n))
         }.sortedBy { if (tab == "Abbonamenti") it.contractEnd ?: java.time.LocalDate.MAX else it.nextVerification ?: java.time.LocalDate.MAX }
     }
     Page(null, "Registratori di cassa", "Tutti · ${a.machines.count { it.m.active }} attivi · ${a.verificationsDue.size} verificazioni entro 60 gg", onBack = { nav.popBackStack() }) {
+        if (a.staleMachines.isNotEmpty()) item(key = "stale") { StaleMachinesCard(a, nav, Modifier.padding(bottom = 10.dp)) }
         item(key = "search") { SearchField(q, { q = it }, "Cerca cliente o matricola") }
         item(key = "tabs") { ChoiceChips(mtabs, tab, { tab = it }, Modifier.padding(vertical = 10.dp)) }
         if (a.machines.isEmpty()) item(key = "none") { Empty(Icons.Rounded.PointOfSale, "Nessuna macchina in archivio", "Importa il parco macchine da MastroSQL dall'app Windows (Impostazioni → Importa da MastroSQL).") }
@@ -82,7 +83,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
                 Text(if (showClient) m.clientName else m.m.model.ifBlank { "Macchina" }, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text((if (showClient) m.m.model + " · " else "") + m.m.serial + (if (m.m.fiscalSerial.isNotBlank()) " · " + m.m.fiscalSerial else ""), style = MaterialTheme.typography.bodySmall.tabular, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Pill(if (m.m.active) "Attiva" else "Dismessa", if (m.m.active) Tone.Ok else Tone.Neutral)
+            Pill(when { m.flag == "dismessa" -> "Dismessa in Studio"; m.stale -> "Da controllare"; m.m.active -> "Attiva"; else -> "Dismessa" }, when { m.stale -> Tone.Due; m.m.active -> Tone.Ok; else -> Tone.Neutral })
         }
         FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
             MiniFact("Ultima verificazione", Dates.short(m.verification))

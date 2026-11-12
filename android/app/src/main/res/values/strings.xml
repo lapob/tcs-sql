@@ -6,6 +6,6 @@
     <string name="sc_new_short">Nuovo</string>
     <string name="sc_load">Carico merce</string>
     <string name="sc_load_short">Carico</string>
-    <string name="sc_search">Cerca cliente</string>
+    <string name="sc_search">Cerca in tutto l\'archivio</string>
     <string name="sc_search_short">Cerca</string>
 </resources>

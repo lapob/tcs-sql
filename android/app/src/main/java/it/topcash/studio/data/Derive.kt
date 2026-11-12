@@ -40,7 +40,12 @@ private fun idKey(s: String?) = (s ?: "").uppercase().removePrefix("IT").replace
 enum class Tone { Ok, Due, Bad, Info, Accent, Neutral }
 
 data class ULicense(val r: LicenseRecord, val expiry: LocalDate?, val days: Long?, val status: String, val current: Boolean, val family: String)
-data class UMachine(val m: Machine, var client: UClient?, val clientName: String, val verification: LocalDate?, val nextVerification: LocalDate?, val verDays: Long?, val contractEnd: LocalDate?, val endDays: Long?)
+data class UMachine(val m: Machine, var client: UClient?, val clientName: String, val verification: LocalDate?, val nextVerification: LocalDate?, val verDays: Long?, val contractEnd: LocalDate?, val endDays: Long?,
+    val flag: String = "", val mastroActive: Boolean = m.active) {
+    /** Verification overdue for over a year and nobody said whether it still works: left out of round and deadlines until the office decides. */
+    val stale get() = m.active && flag != "attiva" && verDays != null && verDays < -STALE_DAYS
+    companion object { const val STALE_DAYS = 365L }
+}
 /** A DTR register linked to the app's customer: by Mastro machine serial, then VAT number, then name ([via]). */
 class URegister(val r: DtrRegister, val client: UClient?, val machine: UMachine?, val via: String) {
     val d get() = r.detail
@@ -211,9 +216,11 @@ class Archive(val state: ArchiveState) {
             if (c.city.isBlank()) c.city = m.city; if (c.address.isBlank()) c.address = m.address
             m.phones.filter { it !in c.phones }.forEach(c.phones::add); m.emails.filter { it !in c.emails }.forEach(c.emails::add)
         }
-        machines = state.machines.filterNot { rtDropped(it.model) }.map { m ->
+        machines = state.machines.filterNot { rtDropped(it.model) }.map { m0 ->
+            // "dismessa in Studio": no longer active here, Mastro untouched
+            val flag = state.machineFlags[m0.id]?.state.orEmpty(); val m = if (flag == "dismessa") m0.copy(active = false) else m0
             val c = mastroTo[m.clientCode]; val ver = Dates.parse(m.verification); val next = ver?.plusYears(2); val end = Dates.parse(m.contractEnd)
-            UMachine(m, c, c?.name ?: "Cliente Mastro ${m.clientCode}", ver, next, Dates.daysFromToday(next), end, Dates.daysFromToday(end)).also { c?.machines?.add(it) }
+            UMachine(m, c, c?.name ?: "Cliente Mastro ${m.clientCode}", ver, next, Dates.daysFromToday(next), end, Dates.daysFromToday(end), flag, m0.active).also { c?.machines?.add(it) }
         }
         // DTR-Service registers → Mastro machine by serial (a missing manufacturer prefix is tolerated when unambiguous), else VAT, else name
         fun serKey(s: String?) = (s ?: "").uppercase().replace(Regex("[^A-Z0-9]"), "")
@@ -302,6 +309,8 @@ class Archive(val state: ArchiveState) {
         byCode = HashMap(map).apply { putAll(aliases) }
     }
 
+    /** Interventions saved on the phone without network, not yet on the server ("Da inviare"). */
+    var pending: Set<String> = emptySet()
     /** Warehouse: stock per location, average costs, reorder state. */
     val wh: WarehouseView by lazy { WarehouseView(state) }
     /** Accounting mirror of MastroSQL (invoices, instalments, balances) linked to the app's clients. */
@@ -310,7 +319,12 @@ class Archive(val state: ArchiveState) {
     val due30 by lazy { currentLicenses.filter { (it.days ?: -1) in 0..30 && it.status != "Rinnovata" } }
     val overdue by lazy { currentLicenses.filter { (it.days ?: 0) < 0 && it.status != "Rinnovata" } }
     val openInterventions by lazy { interventions.filter { it.i.status != "Chiuso" } }
-    val verificationsDue by lazy { machines.filter { it.m.active && it.verDays != null && it.verDays <= 60 } }
+    val verificationsDue by lazy { machines.filter { it.m.active && !it.stale && it.verDays != null && it.verDays <= 60 } }
+    /** Machines to check: verification overdue for over a year, the office decides "dismessa" or "ancora attiva". */
+    val staleMachines by lazy { machines.filter { it.stale }.sortedBy { it.verDays ?: 0 } }
+    fun photos(interventionId: String) = state.photos[interventionId].orEmpty()
+    /** Stop of today's round already done (marks of other days don't count). */
+    fun routeDone(key: String) = state.routeDone[key]?.day == LocalDate.now().toString()
     val contractsDue by lazy { machines.filter { it.m.subscribed && it.endDays != null && it.endDays <= 60 } }
     val dtrErrors by lazy { registers.filter { it.warn } }
     val dtrSilent by lazy { registers.filter { it.silent } }
@@ -335,7 +349,7 @@ class Archive(val state: ArchiveState) {
 
     /** Runs the heavy derived views off the main thread right after loading, so no screen pays for them on its first frame. */
     fun warm() {
-        acc; wh; currentLicenses; due30; overdue; openInterventions; verificationsDue; contractsDue
+        acc; wh; currentLicenses; due30; overdue; openInterventions; verificationsDue; staleMachines; contractsDue
         dtrErrors; dtrSilent; dtrGeSoon; dtrCertSoon; italUpdate; italNoSub; italLow
         rchLive; rchVer; rchLow; rchSilent; rchUpdate; assetsDue; technicians
         deadlines(-7, 60); deadlines(0, 120); deadlines(-60, 180); deadlines(-90, 120)
@@ -344,7 +358,7 @@ class Archive(val state: ArchiveState) {
     private fun buildDeadlines(fromDays: Long, toDays: Long): List<Deadline> = buildList {
         currentLicenses.forEach { l -> if (l.expiry != null && l.days != null && l.days in fromDays..toDays) add(Deadline("Licenza", l.expiry, l.days, byCode[l.r.clientCode], l.r.client, "${Catalog.family(l.family)} · ${l.r.serial}", "lic|${l.r.id}|${l.expiry}")) }
         machines.forEach { m ->
-            if (m.m.active && m.nextVerification != null && m.verDays != null && m.verDays in fromDays..toDays) add(Deadline("Verificazione", m.nextVerification, m.verDays, m.client, m.clientName, "${m.m.model} · ${m.m.serial}", "ver|${m.m.id}|${m.nextVerification}"))
+            if (m.m.active && !m.stale && m.nextVerification != null && m.verDays != null && m.verDays in fromDays..toDays) add(Deadline("Verificazione", m.nextVerification, m.verDays, m.client, m.clientName, "${m.m.model} · ${m.m.serial}", "ver|${m.m.id}|${m.nextVerification}"))
             if (m.m.subscribed && m.contractEnd != null && m.endDays != null && m.endDays in fromDays..toDays) add(Deadline("Abbonamento", m.contractEnd, m.endDays, m.client, m.clientName, "${m.m.model} · ${m.m.serial}", "con|${m.m.id}|${m.contractEnd}"))
         }
         registers.forEach { r ->

@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.sse.EventSource
@@ -62,7 +63,64 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var foreground = false
     private var backoff = 2_000L
 
-    init { start() }
+    /** The archive as the server sent it; what is shown is this plus the changes still waiting to be sent ([Outbox]). */
+    @Volatile private var rawState: ArchiveState? = null
+    private var flushing: Job? = null
+    /** Changes made without network, waiting to be sent (the UI shows "Da inviare"). */
+    val outbox = Outbox.items
+    private val photoDir = File(app.cacheDir, "photos")
+
+    init { Outbox.init(app); start(); watchOutbox() }
+
+    /** Server archive + changes not sent yet: the technician sees his work at once, with or without network. */
+    private fun overlay(s: ArchiveState): ArchiveState {
+        val ops = Outbox.items.value; if (ops.isEmpty()) return s
+        val me = _me.value?.name.orEmpty(); val now = java.time.OffsetDateTime.now().toString(); val today = java.time.LocalDate.now().toString()
+        var ints = s.interventions
+        val edits = ops.filter { it.kind == Outbox.INTERVENTION }.mapNotNull { runCatching { json.decodeFromString<Intervention>(it.body) }.getOrNull() }
+        if (edits.isNotEmpty()) {
+            val map = LinkedHashMap<String, Intervention>(); ints.forEach { map[it.id] = it }
+            edits.forEach { e -> val old = map[e.id]
+                map[e.id] = old?.copy(clientCode = e.clientCode, clientName = e.clientName.ifBlank { old.clientName }, date = e.date, machine = e.machine, title = e.title, work = e.work,
+                    status = e.status, technician = e.technician, priority = e.priority, parts = e.parts, updatedBy = me.ifBlank { old.updatedBy }, updated = now)
+                    ?: e.copy(source = "app", created = now, createdBy = me, updated = now, updatedBy = me)
+            }
+            ints = map.values.toList()
+        }
+        var route = s.routeDone
+        ops.filter { it.kind == Outbox.ROUTE }.forEach { op -> runCatching { json.decodeFromString<RouteDoneRequest>(op.body) }.getOrNull()?.let { r ->
+            route = if (r.done) route + (r.key to RouteMark(today, now, me)) else route - r.key } }
+        var notes = s.notes
+        ops.filter { it.kind == Outbox.NOTE }.forEach { op -> runCatching { json.decodeFromString<NoteRequest>(op.body) }.getOrNull()?.let { notes = notes + (it.code to it.note) } }
+        return s.copy(interventions = ints, routeDone = route, notes = notes)
+    }
+    private fun build(s: ArchiveState): Archive = Archive(overlay(s)).also { a -> a.pending = Outbox.items.value.filter { it.kind == Outbox.INTERVENTION }.map { it.ref }.toSet() }
+    /** A change queued: shown at once. A change sent: the fresh archive comes from the server (no flicker back to the old copy). */
+    private fun watchOutbox() = viewModelScope.launch {
+        var last = Outbox.items.value.size
+        Outbox.items.collectLatest { l ->
+            val grew = l.size >= last; last = l.size
+            if (grew) rawState?.let { st -> _archive.value = withContext(Dispatchers.Default) { build(st).also { it.warm() } } }
+            else if (_screen.value == Screen.Main) refresh()
+        }
+    }
+    /** Sends what was saved without network; called when the network is back (every update) and by the background check. */
+    fun flushOutbox(announce: Boolean = true) {
+        if (Outbox.items.value.isEmpty() || flushing?.isActive == true) return
+        flushing = viewModelScope.launch {
+            val r = Outbox.flush(api)
+            if (announce && r.sent > 0) _messages.tryEmit(if (r.sent == 1) "Inviata la modifica fatta senza rete" else "Inviate ${r.sent} modifiche fatte senza rete")
+            r.failed.take(3).forEach { _messages.tryEmit("Non inviata · $it") }
+        }
+    }
+    private fun nowMs() = System.currentTimeMillis()
+    private fun queueIntervention(i: Intervention): Intervention {
+        val q = if (i.id.isBlank()) i.copy(id = "local-" + Outbox.newId()) else i
+        Outbox.add(PendingOp(Outbox.newId(), Outbox.INTERVENTION, json.encodeToString(Intervention.serializer(), q), q.id,
+            listOf(q.clientName, q.title).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "Intervento" }, nowMs()))
+        return q
+    }
+    private val offlineText = "Senza rete: salvato sul telefono, parte da solo appena torna la connessione"
 
     private fun start() = viewModelScope.launch {
         if (server.isBlank()) { _screen.value = Screen.Setup; return@launch }
@@ -80,7 +138,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             _me.value = s.user; prefs.edit().putString("me", json.encodeToString(Me.serializer(), s.user)).apply()
             sendCrashLog()
             learnPublic(s.publicUrl)
-            _screen.value = Screen.Main; refresh(); connect()
+            _screen.value = Screen.Main; refresh(); connect(); runCatching { NoticeJob.schedule(getApplication()) }
         } catch (e: ApiException) {
             if (e.device.isNotEmpty()) { _device.value = DeviceStatus(e.device, e.code, true); _screen.value = Screen.Device; return@launch }
             // offline: show the last saved archive if we have one
@@ -99,7 +157,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 cacheFile.delete()
             }
             if (!sections.complete) return@withContext
-            val ar = Archive(sections.decode()); _archive.value = ar; etag = etagFile.takeIf { it.exists() }?.readText(); ar.warm() // shown at once, the rest is prepared here in the background
+            val st = sections.decode(); rawState = st; val ar = build(st); _archive.value = ar; etag = etagFile.takeIf { it.exists() }?.readText(); ar.warm() // shown at once, the rest is prepared here in the background
         } catch (e: kotlinx.coroutines.CancellationException) { throw e
         } catch (e: Throwable) {
             // unreadable copy (or not enough memory for it): start clean, the archive is downloaded again
@@ -134,7 +192,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             var partial = sections.split(download, staging)
                             if (partial && !sections.complete) { tag = api.stateTo(download, null).orEmpty(); partial = sections.split(download, staging) } // no complete copy here: whole archive
                             sections.commit(staging, partial); download.delete()
-                            Archive(sections.decode()).also { it.warm() }
+                            sections.decode().let { st -> rawState = st; build(st) }.also { it.warm() }
                         }
                     } catch (e: kotlinx.coroutines.CancellationException) { throw e
                     } catch (e: ApiException) { throw e
@@ -148,6 +206,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     withContext(Dispatchers.IO) { etag?.let { etagFile.writeText(it) } ?: etagFile.delete(); hashFile.writeText(sections.hashes()) }
                 }
                 _online.value = true
+                flushOutbox()
             } catch (e: ApiException) {
                 if (e.status == 401) { signedOut(); return@launch }
                 if (e.device.isNotEmpty()) { stream?.cancel(); stream = null; _device.value = DeviceStatus(e.device, e.code, true); _screen.value = Screen.Device; return@launch }
@@ -213,33 +272,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun login(user: String, password: String): String? = try {
         val me = api.login(user.trim(), password); _me.value = me; prefs.edit().putString("last_user", user.trim()).apply(); prefs.edit().putString("me", json.encodeToString(Me.serializer(), me)).apply()
-        _screen.value = Screen.Main; refresh(); connect(); null
+        _screen.value = Screen.Main; refresh(); connect(); runCatching { NoticeJob.schedule(getApplication()) }; null
     } catch (e: ApiException) { if (e.device.isNotEmpty()) { _device.value = DeviceStatus(e.device, e.code, true); _screen.value = Screen.Device }; e.message }
     val lastUser: String get() = prefs.getString("last_user", "").orEmpty()
 
     fun logout() = viewModelScope.launch {
-        stream?.cancel(); stream = null; api.logout(); signedOut()
+        stream?.cancel(); stream = null
+        runCatching { Outbox.flush(api) } // what was saved without network leaves before the session closes
+        api.logout(); signedOut(); runCatching { NoticeJob.cancel(getApplication()) }; prefs.edit().remove("notices_at").apply()
         withContext(Dispatchers.IO) { cacheFile.delete(); sections.clear(); etagFile.delete(); hashFile.delete() }; _archive.value = null
     }
-    /** Interventions just assigned to me by someone else: a system notification ("Interventi assegnati" channel). */
+    /** Interventions just assigned to me by someone else, new urgent ones: a system notification (announced once, also by the background check). */
     private fun noticeAssigned(prev: List<Intervention>, next: List<Intervention>) {
         val me = _me.value ?: return
-        fun n(s: String) = s.trim().lowercase()
-        fun mine(i: Intervention?) = i != null && i.source == "app" && n(i.technician) == n(me.name)
-        val was = prev.associateBy { it.id }
-        val fresh = next.filter { mine(it) && it.status != "Chiuso" && n(it.updatedBy.ifBlank { it.createdBy }) != n(me.name) && !mine(was[it.id]) }
-        if (fresh.isEmpty()) return
-        val ctx = getApplication<Application>()
-        if (android.os.Build.VERSION.SDK_INT >= 33 && ctx.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return
-        val nm = ctx.getSystemService(android.app.NotificationManager::class.java) ?: return
-        nm.createNotificationChannel(android.app.NotificationChannel("assigned", "Interventi assegnati", android.app.NotificationManager.IMPORTANCE_HIGH).apply { description = "Quando qualcuno ti assegna un intervento" })
-        val first = fresh.first()
-        val title = if (fresh.size == 1) "Nuovo intervento assegnato a te" else "${fresh.size} nuovi interventi assegnati a te"
-        val text = if (fresh.size == 1) listOf(first.clientName, first.title).filter { it.isNotBlank() }.joinToString(" · ") else fresh.joinToString(", ") { it.clientName }.take(200)
-        val open = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.let { android.app.PendingIntent.getActivity(ctx, 7, it, android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT) }
-        val note = android.app.Notification.Builder(ctx, "assigned").setSmallIcon(it.topcash.studio.R.mipmap.ic_launcher).setContentTitle(title).setContentText(text)
-            .setStyle(android.app.Notification.BigTextStyle().bigText(text)).setAutoCancel(true).setContentIntent(open).build()
-        runCatching { nm.notify(("int-" + first.id).hashCode(), note) }
+        runCatching { Notifier.fromArchive(getApplication(), me, prev, next) }
     }
     private fun signedOut() { _me.value = null; prefs.edit().remove("me").apply(); _screen.value = Screen.Login }
 
@@ -321,10 +367,68 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         try { api.changePassword(current, password); _messages.tryEmit("Password aggiornata: accedi di nuovo"); onDone(true); logout() }
         catch (x: ApiException) { _messages.tryEmit(x.message ?: "Password non aggiornata"); onDone(false) }
     }
-    fun saveNote(code: String, note: String) = act("Nota salvata e condivisa") { api.saveNote(code, note) }
+    fun saveNote(code: String, note: String) = viewModelScope.launch {
+        try { api.saveNote(code, note); Outbox.drop(Outbox.NOTE, code); _messages.tryEmit("Nota salvata e condivisa"); refresh() }
+        catch (e: ApiException) {
+            if (e.status == 0) { Outbox.add(PendingOp(Outbox.newId(), Outbox.NOTE, json.encodeToString(NoteRequest.serializer(), NoteRequest(code, note)), code, "Nota cliente", nowMs())); _messages.tryEmit(offlineText) }
+            else _messages.tryEmit(e.message ?: "Nota non salvata")
+        }
+    }
     fun saveMeta(code: String, meta: ClientMeta, message: String = "Promemoria aggiornato") = act(message) { api.saveMeta(code, meta) }
-    fun saveIntervention(i: Intervention, quiet: Boolean = false, onDone: (Intervention) -> Unit) = viewModelScope.launch {
-        try { val r = api.saveIntervention(i); if (!quiet) _messages.tryEmit("Intervento salvato"); onDone(r); refresh() } catch (e: ApiException) { _messages.tryEmit(e.message ?: "Salvataggio non riuscito") }
+    /** [offline]: without network the change is kept on the phone and sent later (not for signing or printing, which need the server). */
+    fun saveIntervention(i: Intervention, quiet: Boolean = false, offline: Boolean = true, onDone: (Intervention) -> Unit) = viewModelScope.launch {
+        if (i.id.startsWith("local-")) { // created without network and not sent yet: the newest version replaces the queued one
+            if (!offline) { _messages.tryEmit("Serve la connessione: l'intervento non è ancora arrivato in ufficio"); return@launch }
+            val q = queueIntervention(i); if (!quiet) { _messages.tryEmit("Intervento salvato"); onDone(q) }; flushOutbox(); return@launch
+        }
+        try { val r = api.saveIntervention(i); Outbox.drop(Outbox.INTERVENTION, i.id); if (!quiet) _messages.tryEmit("Intervento salvato"); onDone(r); refresh() }
+        catch (e: ApiException) {
+            if (e.status == 0 && offline) { val q = queueIntervention(i); _messages.tryEmit(offlineText); if (!quiet) onDone(q) }
+            else _messages.tryEmit(e.message ?: "Salvataggio non riuscito")
+        }
+    }
+    /** A stop of today's round done (or back to do): shown at once, sent now or as soon as there is network. */
+    fun markRoute(key: String, done: Boolean) = viewModelScope.launch {
+        Outbox.add(PendingOp(Outbox.newId(), Outbox.ROUTE, json.encodeToString(RouteDoneRequest.serializer(), RouteDoneRequest(key, done)), key, "Tappa del giro", nowMs()))
+        if (flushing?.isActive == true) return@launch
+        val r = Outbox.flush(api)
+        if (r.offline) _messages.tryEmit("Senza rete: tappa segnata sul telefono, la vede anche l'ufficio appena torna la connessione")
+        r.failed.take(3).forEach { _messages.tryEmit("Non inviata · $it") }
+    }
+    // ── photos of the intervention: kept on the phone until they reach the server
+    fun addPhotos(interventionId: String, jpgs: List<ByteArray>) = viewModelScope.launch {
+        if (jpgs.isEmpty()) return@launch
+        withContext(Dispatchers.IO) { jpgs.forEach { jpg -> val id = Outbox.newId(); Outbox.photoFile(id).writeBytes(jpg); Outbox.add(PendingOp(id, Outbox.PHOTO, "", interventionId, "Foto", nowMs())) } }
+        flushing?.join()
+        val r = Outbox.flush(api)
+        when {
+            r.offline -> _messages.tryEmit("Senza rete: foto tenute sul telefono, partono da sole appena torna la connessione")
+            interventionId.startsWith("local-") -> _messages.tryEmit("Foto tenute sul telefono: partono con l'intervento")
+            r.failed.isEmpty() -> _messages.tryEmit(if (jpgs.size == 1) "Foto aggiunta" else "${jpgs.size} foto aggiunte")
+        }
+        r.failed.take(3).forEach { _messages.tryEmit("Non inviata · $it") }
+    }
+    fun deletePhoto(id: String, pending: Boolean) {
+        if (pending) { Outbox.remove(id); _messages.tryEmit("Foto tolta"); return }
+        act("Foto tolta") { api.deletePhoto(id); withContext(Dispatchers.IO) { File(photoDir, "$id.jpg").delete() } }
+    }
+    /** A photo of the server, kept in the cache (a photo never changes). */
+    suspend fun photo(id: String): ByteArray? = withContext(Dispatchers.IO) {
+        val f = File(photoDir, "$id.jpg")
+        if (f.exists()) return@withContext runCatching { f.readBytes() }.getOrNull()
+        runCatching { api.photo(id) }.getOrNull()?.also { b -> runCatching { photoDir.mkdirs(); f.writeBytes(b) } }
+    }
+    /** Machines to check: "dismessa" (left the customer) or "attiva" (still in use); "" undoes the decision. */
+    fun flagMachines(ids: List<String>, state: String, onDone: () -> Unit = {}) = viewModelScope.launch {
+        try {
+            api.flagMachines(ids, state); onDone(); refresh()
+            val one = ids.size == 1
+            _messages.tryEmit(when (state) {
+                "dismessa" -> if (one) "Macchina segnata come dismessa" else "${ids.size} macchine segnate come dismesse"
+                "attiva" -> if (one) "Macchina confermata ancora attiva" else "${ids.size} macchine confermate ancora attive"
+                else -> if (one) "Macchina di nuovo da controllare" else "${ids.size} macchine di nuovo da controllare"
+            })
+        } catch (e: ApiException) { _messages.tryEmit(e.message ?: "Operazione non riuscita") }
     }
     fun saveDueNote(id: String, status: String, note: String) = act(if (status.isBlank()) "Nota salvata" else "Scadenza segnata come “$status”") { api.saveDueNote(id, status, note) }
     fun deleteIntervention(id: String) = act("Intervento eliminato") { api.deleteIntervention(id) }

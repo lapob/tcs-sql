@@ -1,3 +1,3 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- only the report cache is shared with other apps (read-only, temporary grant) -->
-<paths><cache-path name="reports" path="reports/" /><cache-path name="updates" path="updates/" /></paths>
+<!-- only the report cache is shared with other apps (read-only, temporary grant); camera/ is where the camera app writes the photo just taken -->
+<paths><cache-path name="reports" path="reports/" /><cache-path name="updates" path="updates/" /><cache-path name="camera" path="camera/" /></paths>

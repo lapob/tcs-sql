@@ -75,6 +75,7 @@ import kotlinx.serialization.Serializable
     val rch: List<RchDevice> = emptyList(), val rchStatus: DtrStatus = DtrStatus(),
     val clientEdits: Map<String, ClientEdit> = emptyMap(), val licenseEdits: Map<String, LicenseEdit> = emptyMap(), val licenseCleanup: LicenseCleanup = LicenseCleanup(),
     val assets: List<Asset> = emptyList(), val renewals: Map<String, RenewalMark> = emptyMap(), val deviceLinks: Map<String, String> = emptyMap(),
+    val machineFlags: Map<String, MachineFlag> = emptyMap(), val routeDone: Map<String, RouteMark> = emptyMap(), val photos: Map<String, List<PhotoInfo>> = emptyMap(),
     val version: Long = 0,
 )
 /** Server capabilities: [mail] = signed reports can be e-mailed to the customer from the server. */
@@ -161,3 +162,15 @@ object Catalog {
 @Serializable data class UserCreate(val username: String, val name: String, val role: String, val password: String)
 @Serializable data class UserPatch(val role: String? = null, val disabled: Boolean? = null, val name: String? = null, val password: String? = null)
 @Serializable data class PasswordChange(val current: String, val password: String)
+
+// ── 2.9.0: machines to check, round of the day, photos, notices
+/** Office decision on a machine whose verification is overdue for over a year: "dismessa" (left the customer) or "attiva" (still in use). */
+@Serializable data class MachineFlag(val state: String = "", val at: String = "", val by: String = "")
+/** A stop of today's round marked as done ([day] ISO), shared with the whole team. */
+@Serializable data class RouteMark(val day: String = "", val at: String = "", val by: String = "")
+@Serializable data class PhotoInfo(val id: String = "", val intervention: String = "", val at: String = "", val by: String = "", val size: Int = 0)
+@Serializable data class RouteDoneRequest(val key: String, val done: Boolean)
+@Serializable data class MachineFlagRequest(val ids: List<String>, val state: String)
+@Serializable data class PhotoRequest(val data: String)
+@Serializable data class Notice(val id: String = "", val kind: String = "", val title: String = "", val client: String = "", val priority: String = "", val by: String = "", val at: String = "")
+@Serializable data class NoticesResponse(val now: String = "", val items: List<Notice> = emptyList())

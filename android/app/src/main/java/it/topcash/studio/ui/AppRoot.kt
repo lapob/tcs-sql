@@ -124,9 +124,16 @@ private val accRoutes = setOf("acc", "accRec", "accInv", "accPay")
     val admin = me?.isAdmin == true
     // launcher shortcuts (long-press on the app icon)
     val sc by vm.shortcut.collectAsStateWithLifecycle()
-    LaunchedEffect(sc, archive != null, admin) {
-        if (archive == null) return@LaunchedEffect
-        when (sc) { "new" -> editor = EditorRequest(); "load" -> if (admin) movement = "carico" to null else vm.notify("Il magazzino è riservato all'amministratore"); "search" -> { nav.switchTab("clients"); vm.focusSearch.value = true }; "route" -> nav.navigate("route") { launchSingleTop = true }; else -> return@LaunchedEffect }
+    LaunchedEffect(sc, archive, admin) {
+        val ar = archive ?: return@LaunchedEffect
+        val s = sc ?: return@LaunchedEffect
+        if (s.startsWith("int:")) {
+            // tap on a notification: the intervention opens as soon as the archive has it (a fresh one arrives with the update)
+            val id = s.removePrefix("int:")
+            if (ar.interventions.none { it.i.id == id }) { vm.refresh(); return@LaunchedEffect }
+            editor = EditorRequest(interventionId = id); vm.shortcut.value = null; return@LaunchedEffect
+        }
+        when (s) { "new" -> editor = EditorRequest(); "load" -> if (admin) movement = "carico" to null else vm.notify("Il magazzino è riservato all'amministratore"); "search" -> nav.navigate("search") { launchSingleTop = true }; "route" -> nav.navigate("route") { launchSingleTop = true }; else -> return@LaunchedEffect }
         vm.shortcut.value = null
     }
     val entry by nav.currentBackStackEntryAsState()
@@ -200,6 +207,8 @@ private val accRoutes = setOf("acc", "accRec", "accInv", "accPay")
                     screen("inventory") { InventoryScreen(vm, it, nav) }
                     screen("renewals") { RenewalsScreen(vm, it, nav) }
                     screen("route") { RouteScreen(vm, it, nav) { id -> editor = EditorRequest(interventionId = id) } }
+                    screen("search") { SearchScreen(vm, it, nav) { id -> editor = EditorRequest(interventionId = id) } }
+                    screen("machinesCheck") { MachinesCheckScreen(vm, it, nav) }
                     screen("users") { if (admin) UsersScreen(vm, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("deleted") { if (admin) DeletedClientsScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("warehouse") { if (admin) WarehouseScreen(vm, it, nav) { t, art -> movement = t to art } else LaunchedEffect(Unit) { nav.switchTab("home") } }

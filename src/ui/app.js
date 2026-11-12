@@ -98,7 +98,10 @@ function derive(){
  const allM=state.machines||[];const keptM=allM.filter(m=>!rtDropped(m.model));
  const machines=keptM.map(m=>{if(/^[0\s.-]*$/.test(m.fiscalSerial||''))m={...m,fiscalSerial:''};if(/^[0\s.-]*$/.test(m.serial||''))m={...m,serial:''};const c=mastroTo.get(m.clientCode);const ver=parseDate(m.verification);
   const verNext=ver?new Date(ver.getFullYear()+2,ver.getMonth(),ver.getDate()):null; // periodic verification of fiscal devices: every 2 years
-  const x={...m,c,client:c?.name||('Cliente Mastro '+m.clientCode),code:c?.code||null,ver,verNext,verDays:dayDiff(verNext),end:parseDate(m.contractEnd),endDays:dayDiff(parseDate(m.contractEnd))};if(c)c.machines.push(x);return x;});
+  const flag=state.machineFlags?.[m.id]?.state||''; // decided in Studio: "dismessa" (gone) or "attiva" (still there)
+  const x={...m,c,client:c?.name||('Cliente Mastro '+m.clientCode),code:c?.code||null,ver,verNext,verDays:dayDiff(verNext),end:parseDate(m.contractEnd),endDays:dayDiff(parseDate(m.contractEnd)),mastroActive:m.active,active:m.active&&flag!=='dismessa',flag};
+  // verification overdue for over a year: probably no longer at the customer, out of the round and the deadlines until someone decides
+  x.stale=x.active&&flag!=='attiva'&&x.verDays!==null&&x.verDays<-365;if(c)c.machines.push(x);return x;});
  const interventions=(state.interventions||[]).map(i=>{const c=i.source==='mastro'?mastroTo.get(i.clientCode):byCode.get(i.clientCode);
   const x={...i,c,code:c?.code||null,client:c?.name||i.clientName||'—',d:parseDate(i.date)};if(c)c.interventions.push(x);return x;}).sort((a,b)=>(b.d||0)-(a.d||0));
  for(const c of list){c.search=norm([c.name,c.code,c.vat,c.taxCode,c.city,c.address,...c.phones,...c.emails,c.mastro?.pec,c.mastro?.code,...c.records.map(r=>r.serial),...c.machines.map(m=>m.serial+' '+m.fiscalSerial)].join(' '));}
@@ -110,7 +113,8 @@ function derive(){
   tasks:list.filter(c=>c.meta.nextContact||c.meta.followupState&&c.meta.followupState!=='Completato'),
   orders30:orders.filter(o=>o.d&&dayDiff(o.d)>=-30),
   openInterventions:interventions.filter(i=>i.status!=='Chiuso'),
-  verDue:machines.filter(m=>m.active&&m.verDays!==null&&m.verDays<=60),
+  verDue:machines.filter(m=>m.active&&!m.stale&&m.verDays!==null&&m.verDays<=60),
+  stale:machines.filter(m=>m.stale),
   contractDue:machines.filter(m=>m.subscribed&&m.endDays!==null&&m.endDays<=60)};
  if(typeof deriveWarehouse==='function')deriveWarehouse();
  if(typeof deriveAccounting==='function')deriveAccounting();
@@ -212,7 +216,7 @@ const AG_KIND={lic:['Licenza Zucchetti','info'],ver:['Verificazione','acc'],con:
 function agendaItems(from,to){
  const out=[];const add=(k,d,n,title,sub,attr,ref)=>{if(d&&n!==null&&n>=from&&n<=to)out.push({k,d,n,title,sub,attr,ref});};
  for(const r of D.current){const d=parseDate(r.expiry);add('lic',d,dayDiff(d),r.client,`${famLabel(famOfScope(r.scope))} · ${r.serial}`,`data-client="${esc(r.clientCode)}"`,r.id);}
- for(const m of D.machines){if(m.active)add('ver',m.verNext,m.verDays,m.client,`${m.model||'Macchina'} · ${m.serial}`,m.code?`data-client="${esc(m.code)}"`:'',m.id);
+ for(const m of D.machines){if(m.active&&!m.stale)add('ver',m.verNext,m.verDays,m.client,`${m.model||'Macchina'} · ${m.serial}`,m.code?`data-client="${esc(m.code)}"`:'',m.id);
   if(m.subscribed)add('con',m.end,m.endDays,m.client,`${m.model||'Macchina'} · ${m.serial}`,m.code?`data-client="${esc(m.code)}"`:'',m.id);}
  if(typeof workAgenda==='function')workAgenda(add);
  if(typeof DT!=='undefined'&&DT)for(const r of DT.regs){const nm=r.c?.name||r.client,a=`data-dtr="${esc(r.serial)}"`;
@@ -441,7 +445,7 @@ function settingsPage(){const t=store.get('theme','auto');
    <div class="stat-line"><span>Clienti</span><strong>${fmt(D.clients.length)}</strong></div><div class="stat-line"><span>Schede anagrafiche</span><strong>${fmt((state.clients||[]).length)}</strong></div><div class="stat-line"><span>Licenze</span><strong>${fmt(state.records.length)}</strong></div><div class="stat-line"><span>Ordini</span><strong>${fmt((state.orders||[]).length)}</strong></div><div class="stat-line"><span>Ultima lettura</span><strong>${esc(lastCapture())}</strong></div>
    <div class="btn-row" style="margin-top:14px"><button class="btn sm" data-action="dataFolder">${icon('folder')}Apri cartella dati</button></div></div>
  </div><div class="stack">
-  ${accountCard(3)}${lanCard(3)}${typeof updateCard==='function'?updateCard(3):''}${serverCard(3)}${mailCard(3)}${backupCard(3)}${mastroCard(3)}${typeof brandsCard==='function'?brandsCard(3):''}
+  ${accountCard(3)}${lanCard(3)}${typeof updateCard==='function'?updateCard(3):''}${serverCard(3)}${mailCard(3)}${weeklyCard(3)}${backupCard(3)}${mastroCard(3)}${typeof brandsCard==='function'?brandsCard(3):''}
   <div class="card reveal need-export" style="--i:3"><h2>Backup ed esportazioni</h2><p class="sub">Crea una copia completa prima di spostare o archiviare i dati. Il backup contiene dati dei clienti: conservalo in un posto sicuro.</p><div class="btn-row" style="margin-top:14px"><button class="btn accent sm" data-action="backup">${icon('shield')}Backup database</button><button class="btn sm" data-action="exportClients">${icon('users')}Anagrafica CSV</button><button class="btn sm" data-action="export">${icon('key')}Licenze CSV</button><button class="btn sm" data-action="calendar">${icon('calendar')}Scadenze .ics</button></div></div>
   <div class="card reveal" style="--i:4"><h2>Scorciatoie</h2><div style="margin-top:10px"><div class="stat-line"><span>Ricerca rapida ovunque</span><span><kbd>Ctrl</kbd> <kbd>K</kbd></span></div><div class="stat-line"><span>Vai alle sezioni</span><span><kbd>Alt</kbd> <kbd>1</kbd>…<kbd>8</kbd></span></div><div class="stat-line"><span>Chiudi scheda o ricerca</span><kbd>Esc</kbd></div></div></div>
   <div class="card reveal" style="--i:5"><div style="display:flex;gap:16px;align-items:center"><img src="assets/tcs-app@2x.png" alt="" class="auth-logo" style="margin:0"><div><h2>Top Cash Studio</h2><p class="sub">Top Cash Service S.r.l. · Versione ${esc(UPD?.host?.current||UPD?.serverVersion||'2.7')} · Windows · .NET 10 · WebView2 · SQLite</p></div></div></div>
@@ -492,9 +496,10 @@ function openIntervention(id,clientCode){remember('i',id);
   <label class="field">Macchina<select class="select" name="machine" id="int-machine" ${ro?'disabled':''}>${machOpts(v.clientCode)}</select></label>
   ${typeof partsSection==='function'?partsSection(it?.parts||[],ro,v.technician):''}
   <label class="field">Lavoro svolto / note<textarea class="textarea" name="work" maxlength="20000" ${ro?'disabled':''} placeholder="Descrizione del problema e del lavoro eseguito…">${esc(v.work||'')}</textarea></label>
+  ${photoSection(it)}
   ${it?`<p class="muted" style="font-size:12px">${it.source==='mastro'?'Importato da MastroSQL'+(it.total&&it.total!=='0'?' · totale documento '+esc(it.total)+' €':''):`Creato ${it.created?dTime(it.created):''} ${it.createdBy?'da '+esc(it.createdBy):''}${it.updated&&it.updated!==it.created?` · modificato ${dTime(it.updated)} ${it.updatedBy?'da '+esc(it.updatedBy):''}`:''}`}</p>`:''}
   <div class="btn-row">${it&&it.source==='app'?(signed?`<button type="button" class="btn ghost need-export" data-m="unsign">Annulla firma</button><button type="button" class="btn" data-m="pdf">${icon('download')}PDF</button><button type="button" class="btn" data-m="print">${icon('print')}Stampa</button>${mailOn()?`<button type="button" class="btn accent" data-m="mail">${icon('mail')}Invia al cliente</button>`:''}`:`<button type="button" class="btn" data-m="print">${icon('print')}Stampa</button><button type="button" class="btn" data-m="later">${icon('clock')}Posticipa</button><button type="button" class="btn" data-m="sign">${icon('check')}Firma e rapportino</button>`):''}${it&&!ro?`<button type="button" class="btn ghost need-export" data-m="del" style="margin-right:auto;color:var(--bad)">Elimina</button>`:''}${c?`<button type="button" class="btn ghost" data-m="client">Apri cliente</button>`:''}<button type="button" class="btn ghost" data-m="0">${ro?'Chiudi':'Annulla'}</button>${ro?'':`<button class="btn accent" type="submit">${icon('check')}Salva</button>`}</div></form>`;
- document.body.append(m);hideTip();
+ document.body.append(m);hideTip();bindPhotos(m,it);
  const form=m.querySelector('form');const clientInput=m.querySelector('#int-client');
  const resolve=()=>{const n=clientInput.value.trim();return D.clients.find(x=>x.name===n)||D.clients.find(x=>norm(x.name)===norm(n))||null;};
  clientInput.addEventListener('change',()=>{const cl=resolve();m.querySelector('#int-machine').innerHTML=machOpts(cl?.code);});
@@ -793,7 +798,7 @@ function render(animate){
  main.innerHTML=`<div class="page">${html()}</div>`;lastRendered=page;
  $('#crumb').textContent=PAGES[page];
  $$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.page===page));$('#nav-more')?.classList.toggle('active',!MAIN_TABS.includes(page));moveIndicator();
- if(typeof renewalItems==='function'){const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v?fmt(v):'';};try{set('nav-renewals',renewalItems().filter(x=>x.n<=30&&!['Rinnovato','Perso'].includes(x.status)).length) /* only what needs a call within 30 days, not the whole 4-month list */;set('nav-route',(()=>{const st=routeStops(),t=routeMine([...new Set(st.map(s=>s.tech).filter(Boolean))]);return st.filter(s=>s.rank===0&&(!t||s.tech===t||!s.tech)).length;})()) /* only the urgent stops, not the whole list */;set('nav-inventory',(D.assetsDue||[]).length);}catch(e){console.warn(e);}}
+ if(typeof renewalItems==='function'){const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v?fmt(v):'';};try{set('nav-renewals',renewalItems().filter(x=>x.n<=30&&!['Rinnovato','Perso'].includes(x.status)).length) /* only what needs a call within 30 days, not the whole 4-month list */;set('nav-route',(()=>{const st=routeStops(),t=routeMine([...new Set(st.map(s=>s.tech).filter(Boolean))]);return st.filter(s=>s.rank===0&&!routeIsDone(s)&&(!t||s.tech===t||!s.tech)).length;})()) /* only the urgent stops, not the whole list */;set('nav-inventory',(D.assetsDue||[]).length);}catch(e){console.warn(e);}}
  $('#nav-clients').textContent=fmt(D.clients.length);$('#nav-licenses').textContent=fmt(D.current.length);$('#nav-orders').textContent=D.orders.length?fmt(D.orders.length):'';$('#nav-interventions').textContent=D.openInterventions.length||'';$('#nav-machines').textContent=D.machines.length?fmt(D.machines.length):'';if(typeof DT!=='undefined'&&DT&&$('#nav-dtr'))$('#nav-dtr').textContent=DT.status?.error?'!':DT.silent.length?fmt(DT.silent.length):'';if(typeof IT!=='undefined'&&IT&&$('#nav-ital'))$('#nav-ital').textContent=IT.status?.error?'!':IT.update.length?fmt(IT.update.length):'';if(typeof RC!=='undefined'&&RC&&$('#nav-rch'))$('#nav-rch').textContent=RC.status?.error?'!':RC.low.length?fmt(RC.low.length):'';if(typeof W!=='undefined'&&W)$('#nav-warehouse').textContent=W.below.length||'';if(typeof A!=='undefined'&&A){$('#nav-accounting').textContent=A.overdue.length?fmt(A.overdue.length):'';const p7=A.payOpen.filter(x=>x.days!==null&&x.days<=7).length;$('#nav-accpay').textContent=p7?fmt(p7):'';}
  $('#nav-due').textContent=agendaItems(0,30).length||'';const late=D.tasks.filter(c=>c.meta.followupState!=='Completato'&&c.meta.nextContact&&days(c.meta.nextContact)<=0).length;$('#nav-tasks').textContent=late||'';
  $('#alerts-dot').classList.toggle('on',D.due30.length>0);$('#nav-more-dot').textContent=($('#nav-due').textContent||$('#nav-tasks').textContent||$('#nav-team')?.textContent)?'•':'';checkDevices();
@@ -1159,3 +1164,81 @@ if(WEB){if(host)host.addEventListener('message',e=>receive(e.data));bootWeb();}
 else if(host){host.addEventListener('message',e=>receive(e.data));send('ready');send('hostInfo');}
 else if(window.__PREVIEW_STATE){setTimeout(()=>receive(window.__PREVIEW_STATE),400);}
 else{setTimeout(()=>{$('#splash')?.classList.add('gone');$('#main').innerHTML=`<div class="error-box"><img src="assets/tcs-app@2x.png" alt="Top Cash Service" class="tile"><h2>Apri l’app Windows</h2><p>Avvia <strong>TopCash.Licenze.exe</strong> per consultare il database dei clienti.</p></div>`;},600);}
+
+// ───────────────────────── 2.9.0 photos of an intervention: taken on the phone or added from the PC, shrunk before sending
+const photoUrl=id=>'/api/photos/'+encodeURIComponent(id)+'.jpg';
+const photosOf=id=>state.photos?.[id]||[];
+const canDropPhoto=(p,it)=>!it?.signedAt&&(canAccounting()||norm(p.by)===norm(me?.name||''));
+function photoTile(p,it){return`<div class="photo" data-photo="${esc(p.id)}"><button type="button" class="photo-open" data-photo-open="${esc(p.id)}" aria-label="Apri la foto"><img src="${photoUrl(p.id)}" loading="lazy" alt="Foto dell'intervento" decoding="async"></button>${canDropPhoto(p,it)?`<button type="button" class="photo-x" data-photo-del="${esc(p.id)}" aria-label="Togli la foto" data-tip="Togli la foto">${icon('close')}</button>`:''}</div>`;}
+function photoSection(it){
+ if(!WEB)return'';
+ if(!it)return`<div class="field photos-field"><span class="field-head">Foto</span><p class="muted photo-hint">${icon('camera')}Salva l’intervento, poi riaprilo per aggiungere le foto.</p></div>`;
+ if(it.source!=='app')return'';
+ const ps=photosOf(it.id);const signed=!!it.signedAt;
+ if(signed&&!ps.length)return'';
+ return`<div class="field photos-field"><span class="field-head"><span>Foto <span class="count" id="photo-n">${ps.length||''}</span></span><small class="muted">${signed?'sono nel PDF del rapportino':'prima e dopo il lavoro: finiscono anche nel PDF'}</small></span>
+  <div class="photo-grid" id="int-photos">${ps.map(p=>photoTile(p,it)).join('')}${signed?'':`<label class="photo-add" data-tip="Scatta o scegli foto (anche più di una)"><input type="file" accept="image/*" multiple hidden>${icon('camera')}<span>Aggiungi</span></label>`}</div></div>`;
+}
+/** Resizes to at most 1600 px on the long side (JPEG 82%): a phone photo of 4 MB becomes ~300 KB. */
+async function shrinkPhoto(file){
+ let bmp;try{bmp=await createImageBitmap(file,{imageOrientation:'from-image'});}catch{throw new Error('Formato non supportato: usa una foto JPEG o PNG.');}
+ const k=Math.min(1,1600/Math.max(bmp.width,bmp.height));const w=Math.round(bmp.width*k),h=Math.round(bmp.height*k);
+ const cv=document.createElement('canvas');cv.width=w;cv.height=h;const g=cv.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,w,h);g.drawImage(bmp,0,0,w,h);bmp.close?.();
+ const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',.82));if(!blob)throw new Error('Foto non leggibile.');
+ return await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=()=>rej(new Error('Foto non leggibile.'));fr.readAsDataURL(blob);});
+}
+function bindPhotos(box,it){
+ const grid=box.querySelector('#int-photos');if(!grid)return;
+ const count=()=>{const n=grid.querySelectorAll('.photo:not(.busy)').length;const e=box.querySelector('#photo-n');if(e)e.textContent=n||'';};
+ grid.addEventListener('change',async e=>{const inp=e.target.closest('input[type=file]');if(!inp)return;const files=[...inp.files];inp.value='';if(!files.length)return;
+  const add=grid.querySelector('.photo-add');let ok=0;
+  for(const f of files){const ph=document.createElement('div');ph.className='photo busy';ph.innerHTML='<span class="spin"></span>';grid.insertBefore(ph,add);
+   try{const data=await shrinkPhoto(f);const p=await post('/api/interventions/'+encodeURIComponent(it.id)+'/photos',{data});
+    (state.photos||={})[it.id]=[...photosOf(it.id),p];const tmp=document.createElement('div');tmp.innerHTML=photoTile(p,it);ph.replaceWith(tmp.firstElementChild);ok++;}
+   catch(x){ph.remove();toast(x.message,'alert');break;}
+   count();}
+  if(ok)toast(ok===1?'Foto aggiunta':ok+' foto aggiunte','camera');});
+ grid.addEventListener('click',async e=>{
+  const del=e.target.closest('[data-photo-del]');
+  if(del){e.preventDefault();e.stopPropagation();if(!await ask({title:'Togliere la foto?',text:'La foto viene tolta dall’intervento per tutti.',ok:'Togli',danger:true}))return;
+   try{await post('/api/photos/'+encodeURIComponent(del.dataset.photoDel)+'/delete');const tile=del.closest('.photo');tile.classList.add('gone');setTimeout(()=>{tile.remove();count();},220);
+    if(state.photos?.[it.id])state.photos[it.id]=state.photos[it.id].filter(p=>p.id!==del.dataset.photoDel);toast('Foto tolta','trash');}catch(x){toast(x.message,'alert');}return;}
+  const op=e.target.closest('[data-photo-open]');if(op){e.preventDefault();openPhoto(it,op.dataset.photoOpen);}});
+}
+function openPhoto(it,id){
+ const list=photosOf(it.id);let i=Math.max(0,list.findIndex(p=>p.id===id));if(!list.length)return;
+ const v=document.createElement('div');v.className='lightbox';v.setAttribute('role','dialog');v.setAttribute('aria-label','Foto');
+ const draw=()=>{const p=list[i];v.innerHTML=`<img src="${photoUrl(p.id)}" alt="Foto ${i+1} di ${list.length}"><div class="lb-bar"><span>${i+1} / ${list.length} · ${esc(p.by)}${p.at?' · '+dTime(p.at):''}</span><a class="btn sm" href="${photoUrl(p.id)}" download="foto-${esc(p.id)}.jpg">${icon('download')}Scarica</a><button class="btn sm" data-lb="x">${icon('close')}Chiudi</button></div>${list.length>1?`<button class="lb-nav prev" data-lb="-1" aria-label="Foto precedente">${icon('chevron')}</button><button class="lb-nav next" data-lb="1" aria-label="Foto successiva">${icon('chevron')}</button>`:''}`;};
+ const close=()=>{v.classList.add('out');setTimeout(()=>v.remove(),200);document.removeEventListener('keydown',key,true);};
+ const key=e=>{if(e.key==='Escape'){e.stopPropagation();e.preventDefault();close();}else if(e.key==='ArrowRight'){i=(i+1)%list.length;draw();}else if(e.key==='ArrowLeft'){i=(i-1+list.length)%list.length;draw();}};
+ v.addEventListener('click',e=>{const b=e.target.closest('[data-lb]');if(e.target===v||b?.dataset.lb==='x')return close();if(b){i=(i+ +b.dataset.lb+list.length)%list.length;draw();}});
+ document.addEventListener('keydown',key,true);draw();document.body.append(v);
+}
+// ───────────────────────── 2.9.0 the round of the day: stops marked as done (shared with the team, kept for the day)
+function routeIsDone(s){return!!s.key&&state.routeDone?.[s.key]?.day===isoDay(today);}
+document.addEventListener('click',e=>{const b=e.target.closest?.('[data-route-done]');if(!b)return;e.preventDefault();e.stopPropagation();
+ const k=b.dataset.routeDone,on=!(state.routeDone?.[k]?.day===isoDay(today));state.routeDone={...(state.routeDone||{})};
+ if(on)state.routeDone[k]={day:isoDay(today),at:new Date().toISOString(),by:me?.name||''};else delete state.routeDone[k];
+ const row=b.closest('.list-row');if(row){row.classList.toggle('done',on);b.classList.toggle('on',on);b.setAttribute('aria-pressed',on);}
+ clearTimeout(routeDoneTimer);routeDoneTimer=setTimeout(()=>render(false),on?420:0); // the tick shows, then the stop moves to the bottom of its place
+ if(WEB)post('/api/route/done',{key:k,done:on}).catch(x=>{toast(x.message,'alert');});else send('routeDone',{key:k,done:on});
+ toast(on?'Tappa fatta':'Tappa di nuovo da fare',on?'check':'repeat');},true);
+var routeDoneTimer;
+// ───────────────────────── 2.9.0 weekly summary by e-mail (administrators)
+var weeklyCfg=null;
+function weeklyCard(i){if(!WEB||!(me?.role==='admin'||me?.role==='owner'))return'';
+ if(!weeklyCfg){api('/api/settings/weekly').then(d=>{weeklyCfg=d;if(page==='settings')render(false);}).catch(()=>{});return`<div class="card reveal" style="--i:${i}"><h2>Riepilogo settimanale</h2><p class="sub">Caricamento…</p></div>`;}
+ const w=weeklyCfg;
+ return`<form class="card reveal" style="--i:${i}" id="weekly-form"><h2>Riepilogo settimanale ${w.enabled?'<span class="badge ok">attivo</span>':'<span class="badge">non attivo</span>'}</h2>
+  <p class="sub">Ogni lunedì mattina un’email con interventi aperti (urgenti per primi), chiusi della settimana, verificazioni dei prossimi 30 giorni, macchine da controllare, licenze in scadenza e magazzino sotto scorta. Parte dalla casella di “Email rapportini”.</p>
+  <label class="field">Destinatari<input class="input" name="to" value="${esc(w.to||'')}" placeholder="ufficio@topcash.it, titolare@topcash.it" maxlength="400"></label>
+  <label class="check"><input type="checkbox" name="enabled" ${w.enabled?'checked':''}> Invia il riepilogo ogni lunedì</label>
+  ${w.lastSent?`<div class="stat-line"><span>Ultimo invio</span><strong>${dTime(w.lastSent)}</strong></div>`:''}
+  ${w.lastError?`<p class="sub" style="color:var(--bad)">${esc(w.lastError)}</p>`:''}
+  ${mailOn()?'':`<p class="sub" style="color:var(--due)">Prima attiva “Email rapportini”: il riepilogo parte da quella casella.</p>`}
+  <div class="btn-row" style="margin-top:12px"><button type="button" class="btn sm ghost" data-weekly-now>${icon('mail')}Invia adesso</button><button class="btn sm accent" type="submit">${icon('check')}Salva</button></div></form>`;}
+document.addEventListener('submit',async e=>{if(e.target.id!=='weekly-form')return;e.preventDefault();const f=new FormData(e.target),b=e.target.querySelector('[type=submit]');b.disabled=true;
+ try{weeklyCfg=await post('/api/settings/weekly',{enabled:f.get('enabled')==='on',to:f.get('to')||''});toast(weeklyCfg.enabled?'Riepilogo settimanale attivo: arriva ogni lunedì':'Riepilogo settimanale salvato','mail');render(false);}catch(x){toast(x.message,'alert');b.disabled=false;}});
+document.addEventListener('click',async e=>{const b=e.target.closest?.('[data-weekly-now]');if(!b)return;const to=b.closest('form')?.querySelector('[name=to]')?.value.trim()||'';
+ if(!to){toast('Scrivi prima i destinatari','alert');return;}b.disabled=true;b.classList.add('busy');
+ try{await post('/api/settings/weekly/send',{enabled:true,to});toast('Riepilogo inviato a '+to,'mail');}catch(x){toast(x.message,'alert');}b.disabled=false;b.classList.remove('busy');});

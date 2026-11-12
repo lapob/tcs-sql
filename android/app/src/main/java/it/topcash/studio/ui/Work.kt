@@ -1,5 +1,9 @@
 package it.topcash.studio.ui
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
@@ -281,7 +285,7 @@ private fun renTone(s: String) = when (s) { "Rinnovato" -> Tone.Ok; "Perso" -> T
 // ───────────────────────── Giro di oggi
 /** One stop of the day. [rank] orders the work: 0 urgent (urgent job, overdue verification), 1 soon (high priority,
  *  verification within 30 days, journal almost full), 2 normal job, 3 register reporting errors (often solved remotely). */
-private class Stop(val c: UClient?, val kind: String, val tone: Tone, val text: String, val tech: String, val rank: Int, val key: String, val open: () -> Unit)
+private class Stop(val c: UClient?, val kind: String, val tone: Tone, val text: String, val tech: String, val rank: Int, val key: String, val open: () -> Unit) { var done = false }
 private const val ROUTE_SHOW = 6
 private fun urgentLabel(n: Int) = if (n == 1) "1 urgente" else "$n urgenti"
 private const val ROUTE_SPLIT = 20
@@ -302,14 +306,15 @@ private val routeKinds = listOf("Intervento" to "Interventi", "Verificazione" to
                 val r = when (i.i.priority) { "Urgente" -> 0; "Alta" -> 1; else -> 2 }
                 add(Stop(i.client, "Intervento", when (r) { 0 -> Tone.Bad; 1 -> Tone.Due; else -> Tone.Info }, i.i.title.ifBlank { "Intervento" }, i.i.technician, r, "i" + i.i.id) { onOpenIntervention(i.i.id) })
             }
-            a.machines.filter { it.m.active && it.verDays != null && it.verDays <= 30 }.forEach { m ->
+            // a verification overdue for over a year waits for the office's decision (Macchine da controllare), not in the round
+            a.machines.filter { it.m.active && !it.stale && it.verDays != null && it.verDays <= 30 }.forEach { m ->
                 val late = (m.verDays ?: 0) < 0
                 add(Stop(m.client, "Verificazione", if (late) Tone.Bad else Tone.Due, "${m.m.model} · ${m.m.serial} · ${Dates.relative(m.verDays)}", "", if (late) 0 else 1, "m" + m.m.id) { m.client?.let { nav.openClient(it.code) } })
             }
             a.italLow.forEach { r -> add(Stop(r.client, "DGFE quasi pieno", Tone.Due, "${r.r.serial} · ${r.d?.dgfeFree}% libero", "", 1, "it" + r.r.serial) { r.client?.let { nav.openClient(it.code) } }) }
             a.rchLow.forEach { r -> add(Stop(r.client, "DGFE quasi pieno", Tone.Due, "${r.r.serial} · ${r.r.dgfeFree}% libero", "", 1, "rc" + r.r.serial) { r.client?.let { nav.openClient(it.code) } }) }
             a.dtrErrors.forEach { r -> add(Stop(r.client, "Errore DTR", Tone.Bad, r.r.serial, "", 3, "d" + r.r.serial) { r.client?.let { nav.openClient(it.code) } }) }
-        }
+        }.onEach { it.done = a.routeDone(it.key) }
     }
     val techs = remember(stops) { stops.map { it.tech }.filter { it.isNotBlank() }.distinct().sorted() }
     // a technician opens the page on his own stops (name match), everyone else on the whole team
@@ -325,11 +330,15 @@ private val routeKinds = listOf("Intervento" to "Interventi", "Verificazione" to
         fun city(s: Stop) = (s.c?.city ?: s.c?.mastro?.city).orEmpty().trim().ifBlank { "Senza località" }
         val big = shown.groupingBy(::city).eachCount().filter { it.value > ROUTE_SPLIT && it.key != "Senza località" }.keys
         shown.groupBy { s -> val c = city(s); val cap = s.c?.mastro?.cap.orEmpty().trim(); if (c in big && cap.isNotBlank()) "$c $cap" else c }
-            .mapValues { (_, v) -> v.sortedWith(compareBy({ it.rank }, { it.c?.name.orEmpty() })) }
-            .entries.sortedWith(compareBy({ it.key == "Senza località" }, { it.value.first().rank }, { -it.value.count { s -> s.rank <= 1 } }, { -it.value.size }, { it.key }))
+            // done stops go to the bottom of their place, places all done after the others
+            .mapValues { (_, v) -> v.sortedWith(compareBy({ it.done }, { it.rank }, { it.c?.name.orEmpty() })) }
+            .entries.sortedWith(compareBy({ it.value.all { s -> s.done } }, { it.key == "Senza località" }, { it.value.first().rank }, { -it.value.count { s -> s.rank <= 1 } }, { -it.value.size }, { it.key }))
     }
-    val urgent = shown.count { it.rank == 0 }
+    val urgent = shown.count { it.rank == 0 && !it.done }
+    val doneCount = shown.count { it.done }
     Page(vm, "Giro di oggi", "${shown.size} tappe in ${groups.size} zone" + if (urgent > 0) " · " + urgentLabel(urgent) else "", onBack = { nav.popBackStack() }) {
+        item(key = "pending") { PendingBanner(vm) }
+        if (shown.isNotEmpty()) item(key = "progress") { RouteProgress(doneCount, shown.size) }
         if (techs.isNotEmpty()) item(key = "tech") { ChoiceChips(listOf("Tutti") + techs, tech, { tech = it }, Modifier.padding(bottom = 6.dp)) }
         if (kinds.size > 1) item(key = "kind") { ChoiceChips(listOf("Tutto") + kinds.map { it.second }, kind, { kind = it }, Modifier.padding(bottom = 10.dp)) }
         if (groups.isEmpty()) item(key = "none") { Empty(Icons.Rounded.Route, "Giornata libera", if (tech == "Tutti") "Nessun intervento aperto né verificazione imminente." else "Nessuna tappa per $tech.") }
@@ -338,12 +347,12 @@ private val routeKinds = listOf("Intervento" to "Interventi", "Verificazione" to
                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(top = 10.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(place, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        val u = ss.count { it.rank == 0 }
-                        Text((if (ss.size == 1) "1 tappa" else "${ss.size} tappe") + if (u > 0) " · " + urgentLabel(u) else "", style = MaterialTheme.typography.bodySmall,
+                        val u = ss.count { it.rank == 0 && !it.done }; val d = ss.count { it.done }
+                        Text(if (d == ss.size) "Tutto fatto" else (if (ss.size == 1) "1 tappa" else "${ss.size} tappe") + (if (d > 0) " · $d fatte" else "") + if (u > 0) " · " + urgentLabel(u) else "", style = MaterialTheme.typography.bodySmall,
                             color = if (u > 0) LocalStatus.current.bad else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     // the route follows the order of the list: the most urgent addresses first (Maps takes up to 10)
-                    val places = ss.mapNotNull { it.c?.fullAddress?.takeIf { s -> s.isNotBlank() } }.distinct().take(10)
+                    val places = ss.filter { !it.done }.mapNotNull { it.c?.fullAddress?.takeIf { s -> s.isNotBlank() } }.distinct().take(10)
                     if (places.isNotEmpty()) FilledTonalButton({
                         val dest = places.last(); val way = places.dropLast(1)
                         val url = "https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=" + Uri.encode(dest) + if (way.isNotEmpty()) "&waypoints=" + Uri.encode(way.joinToString("|")) else ""
@@ -354,14 +363,16 @@ private val routeKinds = listOf("Intervento" to "Interventi", "Verificazione" to
             val expanded = place in open
             val rows = if (expanded) ss else ss.take(ROUTE_SHOW)
             items(rows.size, key = { "s$place" + rows[it].key }) { idx -> val s = rows[idx]
-                CardBox(Modifier.padding(bottom = 8.dp).animateItem(), onClick = s.open, padding = PaddingValues(start = 14.dp, end = 4.dp, top = 10.dp, bottom = 10.dp)) {
+                val fade by androidx.compose.animation.core.animateFloatAsState(if (s.done) 0.55f else 1f, androidx.compose.animation.core.tween(260), label = "done")
+                CardBox(Modifier.padding(bottom = 8.dp).animateItem(), onClick = s.open, padding = PaddingValues(start = 2.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
+                        RouteCheck(s.done) { vm.markRoute(s.key, !s.done) }
+                        Column(Modifier.weight(1f).padding(vertical = 4.dp).graphicsLayer { alpha = fade }) {
                             Text(s.c?.name ?: "Cliente da abbinare", style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(listOf(s.text, s.c?.fullAddress.orEmpty(), s.tech).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
-                        Pill(s.kind, s.tone, Modifier.padding(start = 8.dp))
+                        Pill(if (s.done) "Fatto" else s.kind, if (s.done) Tone.Ok else s.tone, Modifier.padding(start = 8.dp))
                         s.c?.phone?.takeIf { it.isNotBlank() }?.let { tel -> IconButton({ runCatching { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + tel.replace(" ", "")))) } }) { Icon(Icons.Rounded.Call, "Chiama ${s.c.name}") } }
                             ?: Spacer(Modifier.width(10.dp))
                     }
@@ -373,5 +384,29 @@ private val routeKinds = listOf("Intervento" to "Interventi", "Verificazione" to
                 }
             }
         }
+    }
+}
+
+/** Tick of a stop: one tap = done (the whole team sees it), again = back to do. */
+@Composable private fun RouteCheck(done: Boolean, onToggle: () -> Unit) {
+    val scale by androidx.compose.animation.core.animateFloatAsState(if (done) 1f else 0.86f, androidx.compose.animation.core.spring(dampingRatio = 0.5f, stiffness = 500f), label = "tick")
+    val tint by androidx.compose.animation.animateColorAsState(if (done) LocalStatus.current.ok else MaterialTheme.colorScheme.outline, label = "tick-color")
+    IconButton(onToggle) {
+        Icon(if (done) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked, if (done) "Fatto: tocca per rimetterla da fare" else "Segna come fatta",
+            Modifier.size(26.dp).graphicsLayer { scaleX = scale; scaleY = scale }, tint = tint)
+    }
+}
+
+/** "4 di 11 fatte": a thin bar that fills as the day goes on. */
+@Composable private fun RouteProgress(done: Int, total: Int) {
+    val p by androidx.compose.animation.core.animateFloatAsState(if (total == 0) 0f else done.toFloat() / total, androidx.compose.animation.core.tween(420), label = "progress")
+    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(if (done == total) "Giro completato" else "$done di $total fatte", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f),
+                color = if (done == total) LocalStatus.current.ok else MaterialTheme.colorScheme.onSurface)
+            Text("${(p * 100).toInt()}%", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        androidx.compose.material3.LinearProgressIndicator({ p }, Modifier.fillMaxWidth().padding(top = 6.dp).height(6.dp).clip(androidx.compose.foundation.shape.CircleShape),
+            color = LocalStatus.current.ok, trackColor = MaterialTheme.colorScheme.surfaceContainerHighest, drawStopIndicator = {}, gapSize = 0.dp)
     }
 }

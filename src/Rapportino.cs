@@ -245,6 +245,34 @@ public static class InterventionReport
   g.DrawString(Company, small, new XSolidBrush(Muted), M + sw + 24, y, XStringFormats.TopLeft); y += 18;
   Text("Il cliente con la firma conferma l'esecuzione dell'intervento e l'utilizzo del materiale indicati. Documento generato da Top Cash Studio.", small, Muted, M, W - 2 * M);
 
+  // ── photos taken during the intervention: two per row, each fitted in its frame (at most 12)
+  var photos = s.Photos().GetValueOrDefault(id) ?? [];
+  if (photos.Count > 0)
+  {
+   NewPage(); Section($"Documentazione fotografica ({photos.Count})");
+   double pw = (W - 2 * M - 14) / 2, ph = pw * 0.75; int col = 0;
+   foreach (var p in photos.Take(12))
+   {
+    var bytes = s.Photo(p.Id); if (bytes == null) continue;
+    if (col == 0) Need(ph + 26);
+    var x = M + col * (pw + 14);
+    g.DrawRoundedRectangle(new XPen(Line, 0.8), new XSolidBrush(Soft), x, y, pw, ph, 10, 10);
+    try
+    {
+     using var ms = new MemoryStream(bytes); using var img = XImage.FromStream(ms);
+     double iw = img.PointWidth, ih = img.PointHeight, sc = Math.Min((pw - 12) / iw, (ph - 12) / ih);
+     g.DrawImage(img, x + (pw - iw * sc) / 2, y + (ph - ih * sc) / 2, iw * sc, ih * sc);
+    }
+    catch { g.DrawString("foto non leggibile", small, new XSolidBrush(Muted), new XRect(x, y, pw, ph), XStringFormats.Center); }
+    var at = DateTimeOffset.TryParse(p.At, CultureInfo.InvariantCulture, DateTimeStyles.None, out var pa) ? pa.ToLocalTime().ToString("d MMM yyyy HH:mm", It) : "";
+    g.DrawString($"{at} · {p.By}", small, new XSolidBrush(Muted), x + 2, y + ph + 4, XStringFormats.TopLeft);
+    if (col == 1) y += ph + 22;
+    col = 1 - col;
+   }
+   if (col == 1) y += ph + 22;
+   if (photos.Count > 12) Text($"Altre {photos.Count - 12} foto sono conservate in Top Cash Studio.", small, Muted, M, W - 2 * M);
+  }
+
   Footer(); g.Dispose();
   using var outMs = new MemoryStream(); doc.Save(outMs, false); return outMs.ToArray();
  }

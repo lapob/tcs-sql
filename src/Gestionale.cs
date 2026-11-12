@@ -127,6 +127,8 @@ public sealed partial class Store
    if(q.ExecuteNonQuery()==0)throw new InvalidDataException("Intervento non trovato o non eliminabile.");}
   // spare parts go back to their location
   using(var m=c.CreateCommand()){m.Transaction=tx;m.CommandText="DELETE FROM movements WHERE intervention=$i AND type='intervento'";m.Parameters.AddWithValue("$i",id);m.ExecuteNonQuery();}
+  // its photos go with it
+  using(var f=c.CreateCommand()){f.Transaction=tx;f.CommandText="DELETE FROM photos WHERE intervention=$i";f.Parameters.AddWithValue("$i",id);f.ExecuteNonQuery();}
   tx.Commit();
  }
 }

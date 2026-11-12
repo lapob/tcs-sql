@@ -1161,3 +1161,66 @@ td .svc{padding:3px 8px;font-size:11px;margin:0 4px 4px 0}td small svg{width:12p
 .int-dot.p-due{box-shadow:0 0 0 3px var(--due-soft)}.int-dot.p-ok{box-shadow:0 0 0 3px var(--ok-soft)}
 /* a field title with its short explanation on the same line, aligned on the baseline */
 .field-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}.field-head small{font-size:11.5px;font-weight:400}
+
+/* ── 2.9.0 round of the day: a round tick marks the stop as done (shared with the team for the day) */
+.route-progress{display:flex;align-items:center;gap:14px;margin:0 0 16px;font-size:13.5px;color:var(--text-2)}
+.route-progress .rp-bar{flex:1;max-width:420px;height:8px;border-radius:99px;background:var(--bg-2);overflow:hidden;border:1px solid var(--line)}
+.route-progress .rp-bar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--ok),color-mix(in srgb,var(--ok) 70%,#7dd3a8));transition:width .5s var(--ease)}
+.route-progress b{color:var(--text)}
+.route-check{flex:none;display:grid;place-items:center;width:28px;height:28px;padding:0;border-radius:50%;border:2px solid var(--line-2);background:var(--surface);color:transparent;cursor:pointer;transition:background .25s var(--ease),border-color .25s,color .25s,transform .25s var(--spring)}
+.route-check svg{width:15px;height:15px;stroke-width:3;transform:scale(.4);transition:transform .3s var(--spring)}
+.route-check:hover{border-color:var(--ok);color:color-mix(in srgb,var(--ok) 55%,transparent)}
+.route-check:hover svg{transform:scale(.85)}
+.route-check:active{transform:scale(.9)}
+.route-check.on{background:var(--ok);border-color:var(--ok);color:#fff}
+.route-check.on svg{transform:scale(1)}
+.route-check:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.list-row.route-stop{transition:background .2s,opacity .35s var(--ease)}
+.list-row.route-stop.done{opacity:.58}
+.list-row.route-stop.done strong{text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--text) 35%,transparent)}
+.list-row.route-stop.done .badge{filter:saturate(.3)}
+
+/* ── 2.9.0 photos of an intervention */
+.photos-field .field-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.photos-field .field-head small{font-weight:400;font-size:12px}
+.photo-hint{display:flex;align-items:center;gap:8px;margin:4px 0 0;font-size:13px}
+.photo-hint svg{width:16px;height:16px;flex:none}
+.photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;margin-top:6px}
+.photo,.photo-add{position:relative;aspect-ratio:1;border-radius:12px;overflow:hidden;background:var(--bg-2);border:1px solid var(--line);animation:pop .35s var(--spring) both}
+.photo.gone{animation:pop .22s reverse both}
+.photo-open{display:block;width:100%;height:100%;padding:0;border:0;background:none;cursor:zoom-in}
+.photo-open img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .35s var(--ease)}
+.photo-open:hover img{transform:scale(1.04)}
+.photo-x{position:absolute;top:5px;right:5px;width:24px;height:24px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;opacity:0;transition:opacity .2s,transform .2s var(--spring)}
+.photo-x svg{width:13px;height:13px;stroke-width:2.6}
+.photo:hover .photo-x,.photo-x:focus-visible{opacity:1}
+@media (hover:none){.photo-x{opacity:1}}
+.photo-x:active{transform:scale(.88)}
+.photo.busy{display:grid;place-items:center;color:inherit!important}
+.photo.busy::before{display:none}
+.photo .spin{width:22px;height:22px;border-radius:50%;border:2.5px solid var(--line-2);border-top-color:var(--accent);animation:spin .8s linear infinite}
+.photo-add{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:1.5px dashed var(--line-2);background:transparent;color:var(--text-2);font-size:12.5px;font-weight:600;cursor:pointer;transition:border-color .2s,color .2s,background .2s}
+.photo-add svg{width:22px;height:22px}
+.photo-add:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.photo-add:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.lightbox{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:24px 16px 84px;background:rgba(8,10,16,.88);backdrop-filter:blur(6px);animation:fade .2s both}
+.lightbox.out{animation:fade .2s reverse both}
+.lightbox img{max-width:100%;max-height:100%;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.5);animation:pop .35s var(--spring) both}
+.lb-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;max-width:calc(100% - 32px);padding:8px 8px 8px 14px;border-radius:16px;background:rgba(20,22,30,.85);color:#e8eaf0;font-size:13px}
+.lb-bar span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.lb-nav{position:fixed;top:50%;width:44px;height:44px;margin-top:-22px;display:grid;place-items:center;border:0;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;cursor:pointer;transition:background .2s}
+.lb-nav:hover{background:rgba(255,255,255,.26)}
+.lb-nav.prev{left:14px}.lb-nav.prev svg{transform:rotate(180deg)}
+.lb-nav.next{right:14px}
+
+/* ── 2.9.0 machines to check */
+.stale-tools{display:grid;gap:10px;margin:4px 0 14px}
+.stale-tools .sub{margin:0;max-width:880px}
+.bulk-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 12px;border-radius:14px;background:var(--bg-2);border:1px solid var(--line);font-size:13.5px;color:var(--text-2);transition:background .25s,border-color .25s}
+.bulk-bar.on{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 35%,transparent);color:var(--text)}
+.bulk-bar .btn-row{margin:0}
+.sel-table th.sel,.sel-table td.sel{width:40px;padding-right:0}
+.sel-table input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);cursor:pointer;vertical-align:middle}
+.sel-table tr.picked td{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.stale-banner{margin-bottom:16px}
+.photos-field .field-head .count:not(:empty){font:600 11.5px var(--font);color:var(--text-3);margin-left:6px;padding:2px 8px;border-radius:99px;background:var(--muted-soft);font-variant-numeric:tabular-nums}

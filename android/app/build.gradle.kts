@@ -18,8 +18,8 @@ android {
         applicationId = "it.topcash.studio"
         minSdk = 26
         targetSdk = 36
-        versionCode = 39
-        versionName = "2.8.17"
+        versionCode = 40
+        versionName = "2.9.0"
     }
 
     signingConfigs {

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,8 +39,10 @@ import java.time.LocalTime
     val first = me?.name?.split(" ")?.firstOrNull().orEmpty()
     val deadlines = remember(a) { a.deadlines(-7, 60).take(8) }
     val open = remember(a) { a.openInterventions.sortedWith(compareBy({ it.i.priority != "Urgente" }, { it.i.priority != "Alta" }, { it.date })).take(5) }
-    Page(vm, "$greet${if (first.isNotBlank()) ", $first" else ""}", "Top Cash Service · ${Dates.short(java.time.LocalDate.now())}") {
+    Page(vm, "$greet${if (first.isNotBlank()) ", $first" else ""}", "Top Cash Service · ${Dates.short(java.time.LocalDate.now())}",
+        actions = { androidx.compose.material3.IconButton({ nav.navigate("search") { launchSingleTop = true } }) { Icon(Icons.Rounded.Search, "Cerca in tutto l'archivio") } }) {
         item(key = "update") { UpdateCard(vm) }
+        item(key = "pending") { PendingBanner(vm) }
         item(key = "kpi") {
             Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -52,6 +55,7 @@ import java.time.LocalTime
                 }
             }
         }
+        if (me?.role != "tecnico" && a.staleMachines.isNotEmpty()) item(key = "stale") { StaleMachinesCard(a, nav, Modifier.padding(top = 12.dp).appear(4)) }
         item(key = "open-title") {
             SectionTitle("Da fare") {
                 TextButton(onNewIntervention) { Icon(Icons.Rounded.Add, null, Modifier.padding(end = 4.dp)); Text("Nuovo") }

@@ -438,6 +438,50 @@ app.MapPost("/api/interventions/{id}/send-report",async(HttpContext ctx,string i
  try{var i=await Mailer.SendReport(store,id,r?.To??"",Who(ctx));hub.Changed();return Results.Ok(i);}catch(InvalidDataException ex){return Bad(ex.Message);}
 }).RequireAuthorization("read").RequireRateLimiting("mail");
 
+// ───────────────────────── 2.9.0: round of the day, machines to check, photos, notices for the phones, weekly summary
+// a stop of today's round marked as done (shared: the office sees what the technicians already did)
+app.MapPost("/api/route/done",(HttpContext ctx,RouteDoneRequest r)=>
+{
+ try{var m=store.SaveRouteDone(r?.Key??"",r?.Done??false,Who(ctx));hub.Changed();return Results.Ok(new{mark=m});}catch(InvalidDataException ex){return Bad(ex.Message);}
+}).RequireAuthorization("read");
+// machines whose verification is overdue for over a year: the office says "dismessa" or "ancora attiva"
+app.MapPost("/api/machines/flag",(HttpContext ctx,MachineFlagRequest r)=>
+{
+ try{var n=store.SaveMachineFlags(r?.Ids??[],r?.State??"",Who(ctx));hub.Changed();return Results.Ok(new{count=n});}catch(InvalidDataException ex){return Bad(ex.Message);}
+}).RequireAuthorization("export");
+app.MapPost("/api/interventions/{id}/photos",(HttpContext ctx,string id,PhotoRequest r)=>
+{
+ byte[] jpg;try{jpg=Convert.FromBase64String((r?.Data??"").Split(',').Last());}catch{return Bad("Foto non valida.");}
+ try{var p=store.AddPhoto(id,jpg,Who(ctx));hub.Changed();return Results.Ok(p);}catch(InvalidDataException ex){return Bad(ex.Message);}
+}).RequireAuthorization("read");
+app.MapGet("/api/photos/{id}",(HttpContext ctx,string id)=>
+{
+ var b=store.Photo(id.EndsWith(".jpg",StringComparison.OrdinalIgnoreCase)?id[..^4]:id);if(b==null)return Results.NotFound();
+ ctx.Response.Headers.CacheControl="private, max-age=31536000, immutable"; // a photo never changes: kept by the device, never by a proxy
+ return Results.Bytes(b,"image/jpeg");
+}).RequireAuthorization("read");
+app.MapPost("/api/photos/{id}/delete",(HttpContext ctx,string id)=>
+{
+ var p=store.PhotoInfoOf(id);if(p==null)return Bad("Foto non trovata.");
+ if(ctx.User.IsInRole(Roles.Tech)&&!string.Equals(p.By,Who(ctx),StringComparison.OrdinalIgnoreCase))return Results.Json(new{error="La foto la può togliere chi l'ha scattata, oppure l'ufficio."},statusCode:403);
+ try{store.DeletePhoto(id,Who(ctx));hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}
+}).RequireAuthorization("read");
+// the phones ask every quarter of an hour, also with the app closed: interventions assigned to you, new urgent ones
+app.MapGet("/api/notices",(HttpContext ctx,string? since)=>
+{
+ var now=DateTimeOffset.Now;
+ var from=DateTimeOffset.TryParse(since,System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.None,out var s)?s:now.AddMinutes(-20);
+ if(now-from>TimeSpan.FromDays(2))from=now.AddDays(-2);
+ return Results.Ok(new{now=now.ToString("O"),items=store.Notices(Who(ctx),from,!ctx.User.IsInRole(Roles.Tech))});
+}).RequireAuthorization("read");
+app.MapGet("/api/settings/weekly",()=>Results.Ok(store.Weekly())).RequireAuthorization("admin");
+app.MapPost("/api/settings/weekly",(HttpContext ctx,WeeklyRequest r)=>{try{return Results.Ok(store.SaveWeekly(r?.Enabled??false,r?.To??"",Who(ctx)));}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin");
+app.MapPost("/api/settings/weekly/send",async(HttpContext ctx,WeeklyRequest r)=>
+{
+ try{var to=string.IsNullOrWhiteSpace(r?.To)?store.Weekly().To:r!.To!.Trim();if(to.Length==0)return Bad("Scrivi a chi inviare il riepilogo.");await WeeklyReport.Send(store,to,Who(ctx));return Results.Ok();}
+ catch(InvalidDataException ex){return Bad(ex.Message);}
+}).RequireAuthorization("admin").RequireRateLimiting("mail");
+
 // ───────────────────────── settings: e-mail for reports, external backups (administrators)
 app.MapGet("/api/settings/mail",()=>Results.Ok(store.MailView())).RequireAuthorization("admin");
 app.MapPost("/api/settings/mail",(HttpContext ctx,MailConfigInput i)=>{try{var v=store.SaveMail(i,Who(ctx));hub.Changed();return Results.Ok(v);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin");
@@ -530,6 +574,9 @@ app.MapPost("/api/update/upload",async(HttpContext ctx,string kind,string versio
 void DailyBackup(){try{Backups.Run(store,dataDir);hub.Changed();}catch(Exception ex){store.Log("error","Backup automatico: "+ex.Message);}}
 var backupTimer=new Timer(_=>DailyBackup(),null,TimeSpan.FromMinutes(1),TimeSpan.FromHours(1));
 app.Lifetime.ApplicationStopping.Register(()=>backupTimer.Dispose());
+// Monday summary by e-mail (checked every half hour; once a week)
+var weeklyTimer=new Timer(_=>{WeeklyReport.Tick(store,DateTime.Now).ContinueWith(t=>{if(t.Exception!=null)store.Log("error","Riepilogo settimanale: "+t.Exception.GetBaseException().Message);});},null,TimeSpan.FromMinutes(2),TimeSpan.FromMinutes(30));
+app.Lifetime.ApplicationStopping.Register(()=>weeklyTimer.Dispose());
 // The Windows app (Mastro import, portals on this PC) and other tools write the same archive directly, without going through
 // this server: SQLite's data_version (on one connection kept open) changes whenever another connection commits, so every
 // device gets the new data within a few seconds instead of waiting for the next change made here.
@@ -588,3 +635,7 @@ record SignRequest(string? Signer,string? Hours,string? Signature,bool Close);
 record SendReportRequest(string? To);
 record BackupRequest(string? External);
 record InventoryRequest(string Warehouse,Dictionary<string,decimal> Counted);
+record RouteDoneRequest(string? Key,bool Done);
+record MachineFlagRequest(List<string>? Ids,string? State);
+record PhotoRequest(string? Data);
+record WeeklyRequest(bool Enabled,string? To);
