@@ -42,8 +42,50 @@ public static class MastroReader
   ulong u=>u.ToString(CultureInfo.InvariantCulture),
   _=>Convert.ToString(v,CultureInfo.InvariantCulture)?.Trim()??""
  };
+ /// "ACQUISTO DGFE (GIORNALI DI FONDO)" -> "Acquisto DGFE (giornali di fondo)": labels all in capitals read softer;
+ /// short all-letter words that are not ordinary Italian words (DGFE, PC, RT, IVA) stay in capitals.
+ static readonly HashSet<string> Plain=["PER","DEL","DI","DA","SU","IN","CON","E","ED","ETC","AL","ALLA","ALLE","DEI","DELLE","DELLA","VARI","VARIE","BENI","SPESE","ACQUA","CASSA","ALTRI","ALTRE","GAS","LE","LA","IL","NON","SUI","SUL","NEL","FONDO","CARTA","USATI","CONTO","SOCI","TFR","ONERI","UTILE","OMAGGI","VENDITE"];
+ static string Pretty(string s)
+ {
+  s=s.Trim();if(s.Length==0||s.Any(char.IsLower))return s;
+  var orig=s.Split(' ');var w=new string[orig.Length];
+  for(int i=0;i<orig.Length;i++){var o=orig[i];var core=o.Trim('(',')','.',',','/');w[i]=core.Length is >=2 and <=4&&core.All(char.IsLetter)&&!Plain.Contains(core)?o:o.ToLowerInvariant();}
+  var t=string.Join(' ',w);return char.ToUpperInvariant(t[0])+t[1..];
+ }
+ /// Product family of a sold article: Top Cash codes start with the family number ("01. PRINT!3.0", "12.RCH", "04.PC AXON I3");
+ /// the description decides for the others ("CONTRATTO ASSISTENZA", "NOLEGGIO DAL...").
+ public static string ProductFamily(string code,string name)
+ {
+  var c=code.Trim().ToUpperInvariant();var n=" "+name.ToUpperInvariant()+" ";
+  if(c.StartsWith("NOTA")||n.Contains(" NOTA DI CREDITO"))return "Note di credito";
+  if(c.Length>=3&&char.IsDigit(c[0])&&char.IsDigit(c[1])&&c[2]=='.')switch(c[..2])
+  {
+   case "01" or "11":return "Registratori di cassa";
+   case "12":return "DGFE e chip";
+   case "03":return "Cassetti automatici";
+   case "04":return "PC e palmari";
+   case "05":return "Stampanti";
+   case "09":return "Bilance";
+   case "16":return "Rotoli e consumabili";
+   case "24":return "Software e licenze";
+  }
+  bool Has(params string[] k)=>k.Any(n.Contains);
+  if(Has("NOLEGGIO"))return "Noleggi";
+  if(Has("ASSISTENZA","CANONE","ABBONAMENTO"))return "Contratti di assistenza";
+  if(Has("INSTALLAZ","VERIFICA","FIRMWARE","INTERVENT","MANODOPERA","USCITA","TRASFERTA","DIRITTO DI CHIAMATA"," ORE ","CONFIGURAZ","RIPARAZ","MANUTENZ","ATTIVAZ","SPEDIZ","TRASPORT"))return "Servizi tecnici";
+  if(Has("DGFE","GIORNALE DI FONDO","G.DI FONDO"," CHIP"))return "DGFE e chip";
+  if(Has("SOFTWARE","LICENZ","RINNOVO","RINNUOVO","FATTURAZIONE ELETTRONICA"))return "Software e licenze";
+  if(Has("CASSETTO AUTOMATICO","CASHMATIC","GLORY","CASHKEEPER"))return "Cassetti automatici";
+  if(Has("REG. TELEM","REG.TELEM","REGISTRATORE","MISURATORE"," RT ","FISCALE"))return "Registratori di cassa";
+  if(Has(" PC ","NOTEBOOK","COMPUTER","SERVER","PALMARE","TABLET","MONITOR","ORDERMAN"))return "PC e palmari";
+  if(Has("STAMPANTE","STAMP."))return "Stampanti";
+  if(Has("BILANCIA"))return "Bilance";
+  if(Has("ROTOL","CARTA","NASTR"))return "Rotoli e consumabili";
+  return "Altro";
+ }
  static bool IsSupplier(string s)=>s=="2"||s.StartsWith("F",StringComparison.OrdinalIgnoreCase);
  static bool True(string s)=>s is "1" or "S" or "s" or "SI" or "si" or "Si" or "True" or "true" or "Y" or "T";
+
 
  public static async Task<(MastroBatch Batch,Preview Preview)> Read(Config cfg,CancellationToken ct=default)
  {
@@ -356,7 +398,7 @@ public static class MastroReader
     var num=Num(F(d,"NUME","DOC_NUME","NUME_DOC","NUMERO","N_FAT"));var date=F(d,"DATAI","DATA_DOC","DOC_DATA","DATA");if(num.Length==0||date.Length==0)continue;
     var barra=F(d,"BARRA");var cli=F(d,"CODI","CLIENTE","CODICE","NUMCLIFOR","CLI");
     var total=D(F(d,"TOT_DOC","TOTALE"));var vat=D(F(d,"TOTA_IVA","IVA"));var taxable=D(F(d,"TOTA_IMP","IMPONIBILE","TOT_IMP"));if(taxable==0&&total!=0)taxable=total-vat;
-    var credit=F(d,"FATT_NOTA").StartsWith("N",StringComparison.OrdinalIgnoreCase);
+    var nota=F(d,"FATT_NOTA");var credit=True(nota)||nota.StartsWith("N",StringComparison.OrdinalIgnoreCase);// a bit (0/1) in Mastro 20, "N" in older ones
     var pay=F(d,"PAGA","COD_PAG","PAGAMENTO","PAGAM");
     var number=barra.Length>0?$"{num}/{barra}":num;
     invoices.Add(new($"{date[..Math.Min(4,date.Length)]}-{number}-{(credit?"N":"F")}",number,date,cli,cliNames.GetValueOrDefault(cli,F(d,"DESCRI","RAGSOC")),credit?"Nota di credito":"Fattura",taxable,vat,total,pays.GetValueOrDefault(pay,pay)));
@@ -432,7 +474,60 @@ public static class MastroReader
   }
   catch(MySqlException ex){riba=null;warnings.Add("Effetti (RiBa) non leggibili: "+ex.Message);}
 
-  var batch=new MastroBatch(clients,machines,interventions,DateTimeOffset.Now.ToString("O"),$"MastroSQL {cfg.Host}/{cfg.Database}",articles,stock,false,invoices,dues,balances,rtList,sites,riba);
+  // ── sales by article and month, general ledger by account and month (aggregated by MySQL: a few thousand rows)
+  List<SaleRow>? sales=null;List<LedgerRow>? ledger=null;
+  var from5=new DateTime(DateTime.Today.Year-5,1,1).ToString("yyyy-MM-dd");
+  if(Tab("rig_fat") is string trf&&Tab("lis_fat") is string tlf)try
+  {
+   sales=[];
+   await using var q=new MySqlCommand($@"SELECT DATE_FORMAT(f.DATAI,'%Y-%m'),COALESCE(r.ART_CODI,''),MAX(r.DESCRI),SUM(r.QUAN),SUM(r.QUAN*r.VEND),
+    SUM(IF(r.COSTO>0,r.QUAN*r.VEND,0)),SUM(IF(r.COSTO>0,r.QUAN*r.COSTO,0)),SUM(IF(r.COSTO>0 AND r.COSTO>r.VEND,r.QUAN*(r.COSTO-r.VEND),0)),COUNT(DISTINCT r.NUME)
+    FROM `{trf}` r JOIN `{tlf}` f ON f.NUME=r.NUME WHERE f.FATT_NOTA=0 AND f.DATAI>=@s GROUP BY 1,2",c);
+   q.Parameters.AddWithValue("@s",from5);
+   await using var r=await q.ExecuteReaderAsync(ct);
+   while(await r.ReadAsync(ct))
+   {
+    var month=S(r.GetValue(0));var code=S(r.GetValue(1));var name=S(r.GetValue(2));var revenue=D(S(r.GetValue(4)));var qty=D(S(r.GetValue(3)));
+    if(month.Length!=7||code.Length==0&&revenue==0)continue;
+    sales.Add(new(month,code,code.Length==0?"Righe senza articolo":name,ProductFamily(code,name),qty,Math.Round(revenue,2),Math.Round(D(S(r.GetValue(5))),2),Math.Round(D(S(r.GetValue(6))),2),Math.Round(D(S(r.GetValue(7))),2),Convert.ToInt32(r.GetValue(8))));
+   }
+  }
+  catch(MySqlException ex){sales=null;warnings.Add("Righe delle fatture (rig_fat) non leggibili: "+ex.Message);}
+  if(Tab("mov_con") is string tmc&&Tab("mov_nota") is string tmn&&Tab("piano_conti") is string tpc)try
+  {
+   var labels=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+   await using(var q=new MySqlCommand($"SELECT CODI,DESCRI FROM `{tpc}`",c))await using(var r=await q.ExecuteReaderAsync(ct))while(await r.ReadAsync(ct))labels[S(r.GetValue(0))]=Pretty(S(r.GetValue(1)));
+   string Group(string acc){var i=acc.LastIndexOf('.');return i>0?labels.GetValueOrDefault(acc[..i],""):"";}
+   ledger=[];
+   // costs and revenues of every registration except the year-end closing/opening ones (causale BA*: they zero the accounts)
+   await using(var q=new MySqlCommand($@"SELECT DATE_FORMAT(c.DATA,'%Y-%m'),c.CONTO,SUM(c.DARE-c.AVERE),COUNT(DISTINCT c.NREGI) FROM `{tmc}` c JOIN `{tmn}` n ON n.NREGI=c.NREGI AND n.DATA=c.DATA
+    WHERE c.DATA>=@s AND (c.CONTO LIKE '2.%' OR c.CONTO LIKE '3.%') AND n.CAUSALE NOT LIKE 'BA%' GROUP BY 1,2",c))
+   {
+    q.Parameters.AddWithValue("@s",from5);
+    await using var r=await q.ExecuteReaderAsync(ct);
+    while(await r.ReadAsync(ct))
+    {
+     var acc=S(r.GetValue(1));var v=D(S(r.GetValue(2)));if(v==0)continue;var revenue=acc.StartsWith('3');
+     ledger.Add(new(S(r.GetValue(0)),revenue?"R":"C",acc,labels.GetValueOrDefault(acc,acc),Group(acc),"",Math.Round(revenue?-v:v,2),Convert.ToInt32(r.GetValue(3))));
+    }
+   }
+   // purchase invoices ("fattura ricevuta" / "nota di accredito ricevuta") by supplier and counter-account, fixed assets
+   // included: what the company spends with each supplier and on what
+   await using(var q=new MySqlCommand($@"SELECT DATE_FORMAT(n.DATA,'%Y-%m'),c.CONTO,n.NUMCLIFOR,SUM(c.DARE-c.AVERE),COUNT(DISTINCT n.NREGI) FROM `{tmn}` n JOIN `{tmc}` c ON c.NREGI=n.NREGI AND c.DATA=n.DATA
+    WHERE n.DATA>=@s AND n.CAUSALE IN ('FR','NR') AND (c.CONTO LIKE '2.%' OR c.CONTO LIKE '1.32.%' OR c.CONTO LIKE '1.80.%') GROUP BY 1,2,3",c))
+   {
+    q.Parameters.AddWithValue("@s",from5);
+    await using var r=await q.ExecuteReaderAsync(ct);
+    while(await r.ReadAsync(ct))
+    {
+     var acc=S(r.GetValue(1));var v=D(S(r.GetValue(3)));if(v==0)continue;var sup=Num(S(r.GetValue(2)));
+     ledger.Add(new(S(r.GetValue(0)),"F",acc,labels.GetValueOrDefault(acc,acc),Group(acc),supNames.GetValueOrDefault(sup,sup.Length>0?"Fornitore "+sup:"Senza fornitore"),Math.Round(v,2),Convert.ToInt32(r.GetValue(4))));
+    }
+   }
+  }
+  catch(MySqlException ex){ledger=null;warnings.Add("Conti economici (mov_con) non leggibili: "+ex.Message);}
+
+  var batch=new MastroBatch(clients,machines,interventions,DateTimeOffset.Now.ToString("O"),$"MastroSQL {cfg.Host}/{cfg.Database}",articles,stock,false,invoices,dues,balances,rtList,sites,riba,sales,ledger);
   var preview=new Preview(clients.Count,machines.Count,interventions.Count,clients.Count(x=>x.Phones.Count>0),clients.Count(x=>x.Emails.Count>0),cols,machineCols,interTable,clients.Take(6).ToList(),warnings,
    articles.Count,stock.Count,stock.Select(s=>s.Warehouse).Distinct().Count(),invoices?.Count??0,dues?.Count??0,balances?.Count??0);
   return(batch,preview);

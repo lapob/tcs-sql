@@ -139,6 +139,7 @@ function brandsCard(i){
  return`<div class="card reveal" style="--i:${i}"><h2>Marche messe da parte</h2><p class="sub">I registratori di queste marche non compaiono, e nemmeno i clienti Mastro i cui registratori <strong>in uso</strong> sono tutti di queste marche (con il loro storico). Chi è passato a un’altra marca resta. Nessun dato viene cancellato: togli la marca e torna tutto.</p>
   <div class="btn-row" style="margin-top:12px">${b.length?b.map(x=>`<span class="badge acc">${esc(x)}</span>`).join(''):'<span class="muted">Nessuna marca esclusa</span>'}</div>
   <p class="sub" style="margin-top:10px">${none?'Si applica appena importi i dati da MastroSQL.':r.clients||r.machines?`Tolti ora: <strong>${fmt(r.clients)}</strong> clienti e <strong>${fmt(r.machines)}</strong> registratori.`:'Nessun registratore di queste marche nei dati di Mastro.'}</p>
+  ${r.ceasedClients||r.ceasedMachines?`<p class="sub" style="margin-top:6px">${icon('sparkle')} Pulizia automatica a ogni importazione: non entrano <strong>${fmt(r.ceasedMachines||0)}</strong> registratori cessati e <strong>${fmt(r.ceasedClients||0)}</strong> clienti Mastro rimasti senza registratori attivi. Tornano da soli se in Mastro un registratore torna attivo.</p>`:''}
   ${(r.names||[]).length?`<details class="brand-names"><summary>Vedi i clienti tolti</summary><div>${r.names.map(n=>`<span>${esc(n)}</span>`).join('')}</div></details>`:''}
   <div class="btn-row" style="margin-top:12px"><button class="btn sm" data-brands-edit>${icon('edit')}Modifica marche</button></div></div>`;
 }

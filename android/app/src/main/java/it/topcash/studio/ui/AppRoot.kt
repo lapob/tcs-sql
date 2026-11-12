@@ -55,6 +55,7 @@ import it.topcash.studio.data.AppViewModel
 import it.topcash.studio.data.Archive
 import it.topcash.studio.data.Screen
 import androidx.compose.material.icons.rounded.Insights
+import androidx.compose.material.icons.rounded.ShoppingBag
 import androidx.compose.material.icons.rounded.Payments
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
@@ -110,9 +111,9 @@ private data class Tab(val route: String, val label: String, val icon: androidx.
 private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("clients", "Clienti", Icons.Rounded.Groups),
     Tab("interventions", "Interventi", Icons.Rounded.Build), Tab("warehouse", "Magazzino", Icons.Rounded.Inventory2), Tab("more", "Altro", Icons.Rounded.MoreHoriz))
 // the accounting area (like Mastro's Contabilità): its own four pages in the bottom bar
-private val accTabs = listOf(Tab("acc", "Riepilogo", Icons.Rounded.Insights), Tab("accRec", "Incassi", Icons.Rounded.Payments),
-    Tab("accInv", "Fatture", Icons.AutoMirrored.Rounded.ReceiptLong), Tab("accPay", "Pagamenti", Icons.Rounded.AccountBalanceWallet), Tab("more", "Altro", Icons.Rounded.MoreHoriz))
-private val accRoutes = setOf("acc", "accRec", "accInv", "accPay")
+private val accTabs = listOf(Tab("acc", "Riepilogo", Icons.Rounded.Insights), Tab("accSal", "Vendite", Icons.Rounded.ShoppingBag), Tab("accRec", "Incassi", Icons.Rounded.Payments),
+    Tab("accInv", "Fatture", Icons.AutoMirrored.Rounded.ReceiptLong), Tab("more", "Altro", Icons.Rounded.MoreHoriz))
+private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay")
 
 @Composable fun MainScreen(vm: AppViewModel) {
     val nav = rememberNavController()
@@ -220,6 +221,7 @@ private val accRoutes = setOf("acc", "accRec", "accInv", "accPay")
                     screen("more") { MoreScreen(vm, it, nav, area) }
                     screen("deadlines") { DeadlinesScreen(it, nav) }
                     screen("accounting") { if (seesAcc) AccountingScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
+                    screen("accSal") { if (seesAcc) SalesScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     AccView.entries.forEach { v -> screen(v.route) { if (seesAcc) AccountingScreen(vm, it, nav, v, topLevel = true) else LaunchedEffect(Unit) { nav.switchTab("home") } } }
                     screen("licenses") { LicensesScreen(vm, it, nav) }
                     screen("orders") { OrdersScreen(it, nav) }
@@ -247,7 +249,7 @@ private val accRoutes = setOf("acc", "accRec", "accInv", "accPay")
     }
 }
 
-private val tabRoutes = setOf("home", "clients", "interventions", "warehouse", "more", "acc", "accRec", "accInv", "accPay")
+private val tabRoutes = setOf("home", "clients", "interventions", "warehouse", "more", "acc", "accSal", "accRec", "accInv", "accPay")
 private fun androidx.compose.animation.AnimatedContentTransitionScope<androidx.navigation.NavBackStackEntry>.isTabSwitch() =
     initialState.destination.route in tabRoutes && targetState.destination.route in tabRoutes
 

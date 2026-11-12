@@ -12,6 +12,14 @@ public sealed record Invoice(string Id,string Number,string Date,string ClientCo
 public sealed record Due(string Id,string Party,string PartyCode,string PartyName,string DocNumber,string DocDate,string DueDate,decimal Amount,decimal Paid,string Payment,string Source="mastro");
 /// Ledger balance of a customer / supplier (sum of debit and credit entries in Mastro "mov_con").
 public sealed record Balance(string Party,string Code,decimal Debit,decimal Credit);
+/// Sales of one article in one month (Mastro invoice lines "rig_fat", credit notes excluded). Revenue = quantity x net price;
+/// Cost is known only where Mastro has the purchase cost on the line (CostedRevenue is the revenue of those lines, so the
+/// margin is computed on comparable amounts). Below = what was lost selling under cost. Family groups the products
+/// (registers, DGFE, PCs...) from the code prefix of the article or, failing that, from its description.
+public sealed record SaleRow(string Month,string Code,string Name,string Family,decimal Qty,decimal Revenue,decimal CostedRevenue,decimal Cost,decimal Below,int Docs);
+/// One month of the general ledger (Mastro "mov_con", year-end closing entries excluded). Kind "C" cost and "R" revenue by
+/// counter-account; "F" purchase invoices by supplier and counter-account. Group is the parent account ("Acquisti per la vendita").
+public sealed record LedgerRow(string Month,string Kind,string Account,string Label,string Group,string Party,decimal Amount,int Docs);
 /// What the office did about a receivable (kept by the app, survives every Mastro import).
 public sealed record DueNote(string Id,string Status,string Note,string Date,string By);
 

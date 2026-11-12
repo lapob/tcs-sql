@@ -328,10 +328,12 @@ public sealed partial class Store
   // Brands set aside (EDIT): machines hidden, customers hidden only when the registers they use are all of those brands
   MastroClient Mc(string code,string name)=>new(code,name,"","","","","","","",[],[],"","",new());
   Machine Mm(string id,string cl,string model,bool active)=>new(id,cl,model,"","S"+id,"","","","","",active,false,"","","","","");
-  store.ImportMastro(new([mc,Mc("A1","Bar Edit"),Mc("B1","Bar Cambiato")],[mm,Mm("m2","A1","EDIT SEVEN TOP",true),Mm("m3","B1","MIS.FISC.EDIT ONE",false),Mm("m4","B1","RCH ONDA",true),Mm("m5","B1","CREDIT CARD READER",true)],[],"t","test"),"test");
+  store.ImportMastro(new([mc,Mc("A1","Bar Edit"),Mc("B1","Bar Cambiato"),Mc("C1","Bar Chiuso")],[mm,Mm("m6","C1","RCH PRINT",false),Mm("m2","A1","EDIT SEVEN TOP",true),Mm("m3","B1","MIS.FISC.EDIT ONE",false),Mm("m4","B1","RCH ONDA",true),Mm("m5","B1","CREDIT CARD READER",true)],[],"t","test"),"test");
   var bv=store.Mastro();
-  if(bv.Clients.Any(x=>x.Code=="A1")||!bv.Clients.Any(x=>x.Code=="B1")||bv.Machines.Any(x=>x.Id is "m2" or "m3")||!bv.Machines.Any(x=>x.Id=="m5")||bv.Excluded.Clients!=1||bv.Excluded.Machines!=2)throw new Exception("Marche escluse: regola EDIT");
-  store.SaveHiddenBrands([],"test");if(store.Mastro().Machines.Count!=5||store.Mastro().Excluded.Clients!=0)throw new Exception("Marche escluse: ripristino");
+  if(bv.Clients.Any(x=>x.Code=="A1")||!bv.Clients.Any(x=>x.Code=="B1")||bv.Machines.Any(x=>x.Id is "m2" or "m3")||!bv.Machines.Any(x=>x.Id=="m5")||bv.Excluded.Clients!=1||bv.Excluded.Machines!=1)throw new Exception("Marche escluse: regola EDIT");
+  // ceased registers never enter, and neither does a customer left with only ceased registers
+  if(bv.Clients.Any(x=>x.Code=="C1")||bv.Machines.Any(x=>x.Id=="m6")||bv.Excluded.CeasedClients!=1||bv.Excluded.CeasedMachines!=2)throw new Exception("Import pulito: macchine cessate");
+  store.SaveHiddenBrands([],"test");if(store.Mastro().Machines.Count!=4||store.Mastro().Excluded.Clients!=0)throw new Exception("Marche escluse: ripristino");
   store.SaveHiddenBrands(["edit"],"test");if(!store.HiddenBrands().SequenceEqual(["EDIT"]))throw new Exception("Marche escluse: salvataggio");
   // IT inventory, renewals with history, manual device links, merged duplicates
   var asx=store.SaveAsset(new Asset(ClientCode:"M15",Kind:"PC",Name:"PC cassa",WarrantyTo:"2027-01-31"),"test");if(store.Assets().Single().WarrantyTo!="2027-01-31")throw new Exception("Inventario: salvataggio");

@@ -16,8 +16,9 @@ public sealed record LicenseEdit(string Expiry = "", string Note = "", bool Hidd
 
 public sealed partial class Store
 {
-    /// Licences expired longer ago than this are not shown (the portal keeps them for years).
-    public const int ExpiredKeepDays = 183;
+    /// Licences not renewed within two months of their expiry are not shown (the portal keeps them for years).
+    public const int ExpiredKeepMonths = 2;
+    static DateTime ExpiredLimit => DateTime.Today.AddMonths(-ExpiredKeepMonths);
 
     void InitEdits(SqliteConnection c)
     {
@@ -107,10 +108,10 @@ public sealed partial class Store
     }
 
     /// The licences Studio shows: the administrator's changes applied, hidden ones removed, licences marked
-    /// "not valid" on the portal (red square) removed, and those expired more than six months ago removed.
+    /// "not valid" on the portal (red square) removed, and those not renewed within two months of their expiry removed.
     public List<LicenseRecord> Licenses()
     {
-        var edits = LicenseEdits(); var limit = DateTime.Today.AddDays(-ExpiredKeepDays); var list = new List<LicenseRecord>();
+        var edits = LicenseEdits(); var limit = ExpiredLimit; var list = new List<LicenseRecord>();
         foreach (var r0 in All())
         {
             var r = r0;
@@ -136,7 +137,7 @@ public sealed partial class Store
     /// Licences removed by the rules above (shown on request, so nothing disappears without explanation).
     public object LicenseCleanup()
     {
-        var edits = LicenseEdits(); var limit = DateTime.Today.AddDays(-ExpiredKeepDays); int red = 0, old = 0, hidden = 0;
+        var edits = LicenseEdits(); var limit = ExpiredLimit; int red = 0, old = 0, hidden = 0;
         foreach (var r in All())
         {
             var e = edits.GetValueOrDefault(r.Id);
@@ -145,7 +146,7 @@ public sealed partial class Store
             if (NotValidOnPortal(r)) red++;
             else if (LicenseRecord.ParseDate(r.Expiry) is DateTime d && d.Date < limit) old++;
         }
-        return new { red, old, hidden, keepDays = ExpiredKeepDays };
+        return new { red, old, hidden, keepMonths = ExpiredKeepMonths };
     }
 }
 
@@ -153,7 +154,8 @@ public sealed partial class Store
 /// whose active registers are all of those brands (or, with none active, all their registers), with their Mastro history. Nothing is deleted: the Mastro copy stays intact
 /// and removing the brand from the list brings everything back.
 public sealed record BrandRule(List<string> Brands, string UpdatedAt = "", string UpdatedBy = "");
-public sealed record BrandExcluded(List<string> Brands, int Clients, int Machines, List<string> Names);
+/// Ceased = what the import leaves out by itself: Mastro customers whose registers are all ceased (none active), and the ceased registers.
+public sealed record BrandExcluded(List<string> Brands, int Clients, int Machines, List<string> Names, int CeasedClients = 0, int CeasedMachines = 0);
 public sealed record MastroView(List<MastroClient> Clients, List<Machine> Machines, List<Intervention> Interventions, BrandExcluded Excluded);
 
 public sealed partial class Store
@@ -168,18 +170,36 @@ public sealed partial class Store
  }
  public static bool IsBrand(Machine m, IReadOnlyCollection<string> brands) =>
   brands.Count > 0 && brands.Any(b => System.Text.RegularExpressions.Regex.IsMatch(m.Model + " " + m.Type, $@"(?<![\p{{L}}\p{{N}}]){System.Text.RegularExpressions.Regex.Escape(b)}(?![\p{{L}}\p{{N}}])", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant));
- /// The Mastro snapshot as the app shows it, with the set-aside brands removed.
+ /// The Mastro snapshot as the app shows it. Every import is cleaned the same way:
+ /// - registers ceased in Mastro (not active) are left out: they never come back with the next import;
+ /// - Mastro customers with no active register left are left out with their Mastro history (customers created in Studio
+ ///   or restored by an administrator stay, also when they are the same company under another code);
+ /// - the set-aside brands are removed.
+ /// Mastro itself is never touched: a register that becomes active again brings its customer back at the next import.
  public MastroView Mastro()
  {
-  var brands = HiddenBrands(); var cl = MastroClients(); var all = Machines(); var iv = Interventions();
-  if (brands.Count == 0) return new(cl, all, iv, new(brands, 0, 0, []));
-  var hiddenMachines = all.Where(m => IsBrand(m, brands)).ToList();
-  if (hiddenMachines.Count == 0) return new(cl, all, iv, new(brands, 0, 0, []));
+  var brands = HiddenBrands(); var cl = MastroClients(); var everything = Machines(); var iv = Interventions();
+  var all = everything.Where(m => m.Active).ToList();
+  var withActive = all.Select(m => m.ClientCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
+  var keepKeys = ClientEdits().Where(e => e.Value.Keep || e.Value.Created).Select(e => e.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+  static string Id(string? s) { var t = new string((s ?? "").ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray()); return t.StartsWith("IT") && t.Length > 11 ? t[2..] : t; }
+  var keepIds = new HashSet<string>();
+  if (keepKeys.Count > 0)
+  {
+   foreach (var r in All()) if (keepKeys.Contains(r.ClientCode) && Id(r.Vat).Length >= 11) keepIds.Add(Id(r.Vat));
+   foreach (var r in Clients()) if (keepKeys.Contains(r.Code) && Id(r.TaxCode).Length >= 11) keepIds.Add(Id(r.TaxCode));
+  }
+  bool Kept(MastroClient c) => keepKeys.Contains("M" + c.Code) || keepIds.Contains(Id(c.Vat)) || keepIds.Contains(Id(c.TaxCode));
+  var ceased = cl.Where(c => !withActive.Contains(c.Code) && !Kept(c)).Select(c => c.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
+  if (ceased.Count > 0) { cl = cl.Where(c => !ceased.Contains(c.Code)).ToList(); iv = iv.Where(i => !(i.Source == "mastro" && ceased.Contains(i.ClientCode))).ToList(); }
+  int ceasedMachines = everything.Count - all.Count;
+  var hiddenMachines = brands.Count == 0 ? [] : all.Where(m => IsBrand(m, brands)).ToList();
+  if (hiddenMachines.Count == 0) return new(cl, all, iv, new(brands, 0, 0, [], ceased.Count, ceasedMachines));
   // a customer goes only when the registers it still uses are all of those brands (an old EDIT replaced by another brand keeps it)
-  var gone = all.GroupBy(m => m.ClientCode).Where(g => { var act = g.Where(m => m.Active).ToList(); return (act.Count > 0 ? act : g.ToList()).All(m => IsBrand(m, brands)); }).Select(g => g.Key).ToHashSet();
+  var gone = all.GroupBy(m => m.ClientCode).Where(g => g.All(m => IsBrand(m, brands))).Select(g => g.Key).ToHashSet();
   var names = cl.Where(c => gone.Contains(c.Code)).Select(c => c.Name).OrderBy(n => n).ToList();
   return new(cl.Where(c => !gone.Contains(c.Code)).ToList(), all.Where(m => !IsBrand(m, brands)).ToList(),
    iv.Where(i => !(i.Source == "mastro" && gone.Contains(i.ClientCode))).ToList(),
-   new(brands, gone.Count, hiddenMachines.Count, names.Take(300).ToList()));
+   new(brands, names.Count, hiddenMachines.Count, names.Take(300).ToList(), ceased.Count, ceasedMachines));
  }
 }
