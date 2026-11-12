@@ -19,7 +19,9 @@ public sealed class PortalWindow : Window
  public ISyncTarget Target {get=>target;set=>target=value;}readonly DispatcherTimer schedule=new(){Interval=TimeSpan.FromHours(6)};
  /// Lightweight progress channel: only a short text goes to the dashboard, never the full archive.
  public Action<string>? ProgressChanged {get;set;}
- bool initialized,running;CancellationTokenSource? cancel;
+ bool initialized,running,quitting;CancellationTokenSource? cancel;
+ // a light read-only visit to the home page now and then keeps the portal session alive while the window is hidden
+ readonly DispatcherTimer keepAlive=new(){Interval=TimeSpan.FromMinutes(10)};
  public bool Authenticated {get;private set;}
  public bool Running=>running;
  public string Progress {get;private set;}="";
@@ -28,9 +30,14 @@ public sealed class PortalWindow : Window
   this.target=target;this.changed=changed;Title="Top Cash Studio · Collegamento Zucchetti";try{Icon=System.Windows.Media.Imaging.BitmapFrame.Create(new Uri("pack://application:,,,/topcash.ico"));}catch{}Width=1320;Height=900;WindowStartupLocation=WindowStartupLocation.CenterOwner;
   var layout=new DockPanel();var bar=new DockPanel{Background=System.Windows.Media.Brushes.White,MinHeight=62};DockPanel.SetDock(bar,Dock.Top);layout.Children.Add(bar);
   var sync=new Button{Content="Sincronizza tutto (sola lettura)",Margin=new Thickness(10),Padding=new Thickness(14,9,14,9)};sync.Click+=async(_,_)=>await StartSync();DockPanel.SetDock(sync,Dock.Right);bar.Children.Add(sync);
-  var stop=new Button{Content="Interrompi",Margin=new Thickness(6,10,0,10),Padding=new Thickness(12,8,12,8)};stop.Click+=(_,_)=>cancel?.Cancel();DockPanel.SetDock(stop,Dock.Right);bar.Children.Add(stop);bar.Children.Add(status);layout.Children.Add(browser);Content=layout;
-  Loaded+=Initialize;schedule.Tick+=async(_,_)=>{if(Authenticated&&!running)await StartSync(false);};Closed+=(_,_)=>{cancel?.Cancel();schedule.Stop();browser.Dispose();};
+  var stop=new Button{Content="Interrompi",Margin=new Thickness(6,10,0,10),Padding=new Thickness(12,8,12,8)};stop.Click+=(_,_)=>cancel?.Cancel();DockPanel.SetDock(stop,Dock.Right);bar.Children.Add(stop);
+  var hide=new Button{Content="Nascondi (resta collegato)",Margin=new Thickness(6,10,0,10),Padding=new Thickness(12,8,12,8)};hide.Click+=(_,_)=>Hide();DockPanel.SetDock(hide,Dock.Right);bar.Children.Add(hide);bar.Children.Add(status);layout.Children.Add(browser);Content=layout;
+  Loaded+=Initialize;schedule.Tick+=async(_,_)=>{if(Authenticated&&!running)await StartSync(false);};keepAlive.Tick+=(_,_)=>{try{if(Authenticated&&!running&&(!IsVisible||WindowState==WindowState.Minimized)&&browser.CoreWebView2!=null)browser.CoreWebView2.Navigate(Home);}catch{}};keepAlive.Start();
+  // closing only hides the window: the session stays signed in until the app itself exits
+  Closing+=(_,e)=>{if(!quitting){e.Cancel=true;Hide();}};Closed+=(_,_)=>{cancel?.Cancel();schedule.Stop();keepAlive.Stop();browser.Dispose();};
  }
+ public void Quit(){quitting=true;cancel?.Cancel();keepAlive.Stop();schedule.Stop();try{Close();}catch{}}
+ public void Reveal(){Show();if(WindowState==WindowState.Minimized)WindowState=WindowState.Normal;Activate();}
  async void Initialize(object? sender,RoutedEventArgs e)
  {
   try{var env=await CoreWebView2Environment.CreateAsync(null,Paths.Runtime("webview","Portal"));

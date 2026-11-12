@@ -1,5 +1,7 @@
 package it.topcash.studio.ui
 
+import kotlinx.coroutines.flow.first
+
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -127,6 +129,9 @@ private val accRoutes = setOf("acc", "accRec", "accInv", "accPay")
     LaunchedEffect(sc, archive, admin) {
         val ar = archive ?: return@LaunchedEffect
         val s = sc ?: return@LaunchedEffect
+        // opened from a shortcut or a notification with the app closed: wait until the pages exist before moving
+        // (navigating before the NavHost is set closed the app)
+        nav.currentBackStackEntryFlow.first()
         if (s.startsWith("int:")) {
             // tap on a notification: the intervention opens as soon as the archive has it (a fresh one arrives with the update)
             val id = s.removePrefix("int:")

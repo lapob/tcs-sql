@@ -300,7 +300,8 @@ private val routeKinds = listOf("Intervento" to "Interventi", "Verificazione" to
 @Composable fun RouteScreen(vm: AppViewModel, a: Archive, nav: NavHostController, onOpenIntervention: (String) -> Unit) {
     val ctx = LocalContext.current
     val me by vm.me.collectAsStateWithLifecycle()
-    val stops = remember(a) {
+    val ticked by vm.routeLocal.collectAsStateWithLifecycle()
+    val stops = remember(a, ticked) {
         buildList {
             a.openInterventions.forEach { i ->
                 val r = when (i.i.priority) { "Urgente" -> 0; "Alta" -> 1; else -> 2 }
@@ -314,7 +315,7 @@ private val routeKinds = listOf("Intervento" to "Interventi", "Verificazione" to
             a.italLow.forEach { r -> add(Stop(r.client, "DGFE quasi pieno", Tone.Due, "${r.r.serial} · ${r.d?.dgfeFree}% libero", "", 1, "it" + r.r.serial) { r.client?.let { nav.openClient(it.code) } }) }
             a.rchLow.forEach { r -> add(Stop(r.client, "DGFE quasi pieno", Tone.Due, "${r.r.serial} · ${r.r.dgfeFree}% libero", "", 1, "rc" + r.r.serial) { r.client?.let { nav.openClient(it.code) } }) }
             a.dtrErrors.forEach { r -> add(Stop(r.client, "Errore DTR", Tone.Bad, r.r.serial, "", 3, "d" + r.r.serial) { r.client?.let { nav.openClient(it.code) } }) }
-        }.onEach { it.done = a.routeDone(it.key) }
+        }.onEach { it.done = ticked[it.key] ?: a.routeDone(it.key) }
     }
     val techs = remember(stops) { stops.map { it.tech }.filter { it.isNotBlank() }.distinct().sorted() }
     // a technician opens the page on his own stops (name match), everyone else on the whole team

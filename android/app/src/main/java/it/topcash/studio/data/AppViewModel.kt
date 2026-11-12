@@ -70,7 +70,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val outbox = Outbox.items
     private val photoDir = File(app.cacheDir, "photos")
 
-    init { Outbox.init(app); start(); watchOutbox() }
+    /** Stops ticked a moment ago: the round shows them at once, before the archive is rebuilt. */
+    private val _routeLocal = MutableStateFlow<Map<String, Boolean>>(emptyMap()); val routeLocal = _routeLocal.asStateFlow()
+
+    init {
+        Outbox.init(app); start(); watchOutbox()
+        // a tick shown at once is dropped only when the archive on screen says the same (never earlier: no flicker back)
+        viewModelScope.launch { _archive.collect { a -> if (a != null && _routeLocal.value.isNotEmpty()) _routeLocal.value = _routeLocal.value.filter { (k, v) -> a.routeDone(k) != v } } }
+    }
 
     /** Server archive + changes not sent yet: the technician sees his work at once, with or without network. */
     private fun overlay(s: ArchiveState): ArchiveState {
@@ -94,7 +101,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         ops.filter { it.kind == Outbox.NOTE }.forEach { op -> runCatching { json.decodeFromString<NoteRequest>(op.body) }.getOrNull()?.let { notes = notes + (it.code to it.note) } }
         return s.copy(interventions = ints, routeDone = route, notes = notes)
     }
-    private fun build(s: ArchiveState): Archive = Archive(overlay(s)).also { a -> a.pending = Outbox.items.value.filter { it.kind == Outbox.INTERVENTION }.map { it.ref }.toSet() }
+    private fun build(s: ArchiveState): Archive = Archive(overlay(s)).also { a ->
+        a.pending = Outbox.items.value.filter { it.kind == Outbox.INTERVENTION }.map { it.ref }.toSet()
+    }
     /** A change queued: shown at once. A change sent: the fresh archive comes from the server (no flicker back to the old copy). */
     private fun watchOutbox() = viewModelScope.launch {
         var last = Outbox.items.value.size
@@ -389,6 +398,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     /** A stop of today's round done (or back to do): shown at once, sent now or as soon as there is network. */
     fun markRoute(key: String, done: Boolean) = viewModelScope.launch {
+        _routeLocal.value = _routeLocal.value + (key to done)
         Outbox.add(PendingOp(Outbox.newId(), Outbox.ROUTE, json.encodeToString(RouteDoneRequest.serializer(), RouteDoneRequest(key, done)), key, "Tappa del giro", nowMs()))
         if (flushing?.isActive == true) return@launch
         val r = Outbox.flush(api)

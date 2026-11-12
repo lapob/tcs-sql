@@ -49,7 +49,7 @@ public partial class MainWindow : Window
   // Fit any screen: 92% of the work area, never above the design size (small laptops get a usable window).
   var area=SystemParameters.WorkArea;Width=Math.Min(1480,area.Width*0.92);Height=Math.Min(960,area.Height*0.92);MinWidth=Math.Min(MinWidth,area.Width);MinHeight=Math.Min(MinHeight,area.Height);
   pushTimer.Tick+=async(_,_)=>{pushTimer.Stop();if(pushPending){pushPending=false;await PushNow();}};
-  Loaded+=Initialize;Closed+=(_,_)=>{timer.Stop();pushTimer.Stop();updateTimer.Stop();portal?.Close();dtr?.Quit();ital?.Quit();rch?.Quit();if(!updateStarted&&Updater.ReadyVersion!=null)Updater.Apply(false,false);};
+  Loaded+=Initialize;Closed+=(_,_)=>{timer.Stop();pushTimer.Stop();updateTimer.Stop();portal?.Quit();dtr?.Quit();ital?.Quit();rch?.Quit();if(!updateStarted&&Updater.ReadyVersion!=null)Updater.Apply(false,false);};
   updateTimer.Tick+=async(_,_)=>await UpdateTick();
   StateChanged+=(_,_)=>{try{if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.MemoryUsageTargetLevel=WindowState==WindowState.Minimized?CoreWebView2MemoryUsageTargetLevel.Low:CoreWebView2MemoryUsageTargetLevel.Normal;}catch{}};
  }
@@ -228,8 +228,8 @@ public partial class MainWindow : Window
      var url=NormalizeServer(root.GetProperty("url").GetString()??"");if(url==null){await Notify("Indirizzo del server non valido.");break;}
      try{using var http=new System.Net.Http.HttpClient{Timeout=TimeSpan.FromSeconds(6)};var res=await http.GetAsync(url+"api/health");if(!res.IsSuccessStatusCode)throw new Exception("HTTP "+(int)res.StatusCode);}
      catch(Exception ex){await Notify("Server non raggiungibile: "+ex.Message);break;}
-     serverUrl=url;activeServer=url;SaveSettings();portal?.Close();Navigate();break;
-    case "disconnectServer":serverUrl="";serverExternal="";activeServer="";syncToken="";SaveSettings();portal?.Close();Navigate();break;
+     serverUrl=url;activeServer=url;SaveSettings();portal?.Quit();Navigate();break;
+    case "disconnectServer":serverUrl="";serverExternal="";activeServer="";syncToken="";SaveSettings();portal?.Quit();Navigate();break;
     case "setSyncToken":syncToken=root.GetProperty("token").GetString()??"";SaveSettings();if(portal!=null)portal.Target=SyncTarget();if(dtr!=null)dtr.Target=SyncTarget();if(ital!=null)ital.Target=SyncTarget();if(rch!=null)rch.Target=SyncTarget();
      Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,portalOpen=portal!=null});await Notify(syncToken.Length>0?"Questo PC è ora la postazione di sincronizzazione.":"Postazione di sincronizzazione disattivata.");break;
     case "ready":await Push();break;
@@ -330,7 +330,7 @@ public partial class MainWindow : Window
   }
   else if(show)dtr.Reveal();
  }
- void OpenPortal(){if(portal==null){portal=new PortalWindow(SyncTarget(),async()=>await Push());portal.ProgressChanged=Progress;portal.Owner=this;portal.Closed+=(_,_)=>portal=null;portal.Show();}else{portal.Show();portal.Activate();}}
+ void OpenPortal(){if(portal==null){portal=new PortalWindow(SyncTarget(),async()=>await Push());portal.ProgressChanged=Progress;portal.Owner=this;portal.Closed+=(_,_)=>portal=null;portal.Show();}else portal.Reveal();}
  int Scan(bool log)
  {
   if(busy)return 0;busy=true;int count=0;

@@ -336,10 +336,11 @@ private fun thumb(bytes: ByteArray, px: Int): ImageBitmap? = runCatching {
             Column(Modifier.weight(1f)) {
                 Text(m.clientName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(listOf(m.m.model, m.m.serial).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("Ultima verificazione " + Dates.short(m.verification) + (m.verDays?.let { " · scaduta " + Dates.relative(it) } ?: ""), style = MaterialTheme.typography.bodySmall,
-                    color = LocalStatus.current.bad, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("Verificata il " + Dates.short(m.verification) + (m.verDays?.let { " · scaduta " + Dates.relative(it) } ?: ""), style = MaterialTheme.typography.bodySmall,
+                    color = LocalStatus.current.bad, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
-            Pill(when (m.flag) { "dismessa" -> "Dismessa"; "attiva" -> "Attiva"; else -> "Da controllare" }, when (m.flag) { "dismessa" -> Tone.Neutral; "attiva" -> Tone.Ok; else -> Tone.Due }, Modifier.padding(start = 8.dp))
+            // in "Da controllare" the tab already says it: the room goes to the dates
+            if (m.flag.isNotEmpty()) Pill(if (m.flag == "dismessa") "Dismessa" else "Attiva", if (m.flag == "dismessa") Tone.Neutral else Tone.Ok, Modifier.padding(start = 8.dp))
         }
     }
 }
