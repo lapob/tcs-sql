@@ -23,6 +23,7 @@
 <script src="accounting.js" defer></script>
 <script src="sales.js" defer></script>
 <script src="insights.js" defer></script>
+<script src="analisi.js" defer></script>
 <script src="report.js" defer></script>
 <script src="dtr.js" defer></script>
 <script src="ital.js" defer></script>
@@ -41,6 +42,8 @@
 <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16.5" rx="3"/><path d="M8 2.5v4M16 2.5v4M3 10h18"/></symbol>
 <symbol id="i-bag" viewBox="0 0 24 24"><path d="M5 8h14l-1.2 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8Z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></symbol>
 <symbol id="i-task" viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="18" rx="3"/><path d="m8.5 12 2.2 2.2L15.5 9.5M8.5 17.5h7"/></symbol>
+<symbol id="i-trend" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></symbol>
+<symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></symbol>
 <symbol id="i-sync" viewBox="0 0 24 24"><path d="M20 4v5h-5M4 20v-5h5"/><path d="M5.5 9A7.5 7.5 0 0 1 19 8.5M18.5 15A7.5 7.5 0 0 1 5 15.5"/></symbol>
 <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.6 15H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9.7 4.4V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1.3Z"/></symbol>
 <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20.5 20.5-4.5-4.5"/></symbol>
@@ -113,6 +116,7 @@
   <div data-area="acc" class="nav-caption">Contabilità</div>
   <button data-area="acc" class="nav-item need-acc" data-page="accounting"><svg><use href="#i-chart"/></svg><span>Riepilogo</span></button>
   <button data-area="acc" class="nav-item need-acc" data-page="accOpp"><svg><use href="#i-sparkle"/></svg><span>Priorità</span></button>
+  <button data-area="acc" class="nav-item need-acc" data-page="accAna"><svg><use href="#i-trend"/></svg><span>Analisi</span></button>
   <button data-area="acc" class="nav-item need-acc" data-page="accRec"><svg><use href="#i-download"/></svg><span>Da incassare</span><em id="nav-accounting" class="hot"></em></button>
   <button data-area="acc" class="nav-item need-acc" data-page="accPay"><svg><use href="#i-upload"/></svg><span>Da pagare</span><em id="nav-accpay" class="hot"></em></button>
   <button data-area="acc" class="nav-item need-acc" data-page="accInv"><svg><use href="#i-file"/></svg><span>Fatture</span></button>

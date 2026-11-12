@@ -352,7 +352,7 @@ app.MapPost("/api/meta",(HttpContext ctx,MetaRequest r)=>
 app.MapPost("/api/clients/save",(HttpContext ctx,ClientSaveRequest r)=>
 {
  try{var code=store.SaveClient(r.Code,r.Edit??new ClientEdit(),Who(ctx));hub.Changed();return Results.Ok(new{code});}catch(InvalidDataException ex){return Bad(ex.Message);}
-}).RequireAuthorization("read"); // every role edits customers (office and technicians too); delete, restore and merge stay with administrators
+}).RequireAuthorization("export"); // owner, administrators and office edit and create customers; technicians only look. Delete, restore and merge stay with administrators
 app.MapPost("/api/clients/delete",(HttpContext ctx,ClientDeleteRequest r)=>
 {
  if(string.IsNullOrWhiteSpace(r.Code)||r.Code.Length>40)return Bad("Codice cliente mancante.");
@@ -362,7 +362,7 @@ app.MapPost("/api/clients/reset",(HttpContext ctx,ClientDeleteRequest r)=>
 {
  try{store.ResetClient(r.Code??"",Who(ctx));hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}
 }).RequireAuthorization("admin");
-app.MapPost("/api/assets/save",(HttpContext ctx,Asset a)=>{try{var r=store.SaveAsset(a,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("read");
+app.MapPost("/api/assets/save",(HttpContext ctx,Asset a)=>{try{var r=store.SaveAsset(a,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("export");
 app.MapPost("/api/assets/delete",(HttpContext ctx,IdRequest r)=>{store.DeleteAsset(r.Id,Who(ctx));hub.Changed();return Results.Ok();}).RequireAuthorization("export");
 // an app that closed unexpectedly sends the error at its next start: kept in the security log for the administrators
 app.MapPost("/api/crash",(HttpContext ctx,CrashReport r)=>
@@ -374,7 +374,7 @@ app.MapPost("/api/crash",(HttpContext ctx,CrashReport r)=>
  return Results.Ok();
 }).RequireAuthorization("read");
 app.MapPost("/api/renewals/save",(HttpContext ctx,RenewalRequest r)=>{try{var m=store.SaveRenewal(r.Key,r.Status??"",r.Note??"",r.NextContact??"",Who(ctx));hub.Changed();return Results.Ok(m);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("read");
-app.MapPost("/api/links/save",(HttpContext ctx,LinkRequest r)=>{try{store.SaveDeviceLink(r.Serial,r.ClientCode??"",Who(ctx));hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin");
+app.MapPost("/api/links/save",(HttpContext ctx,LinkRequest r)=>{try{store.SaveDeviceLink(r.Serial,r.ClientCode??"",Who(ctx));hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("export");
 app.MapPost("/api/clients/merge",(HttpContext ctx,MergeRequest r)=>{try{store.MergeClient(r.Code,r.Into??"",Who(ctx));hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin");
 app.MapPost("/api/settings/brands",(HttpContext ctx,BrandsRequest r)=>{store.SaveHiddenBrands(r?.Brands??[],Who(ctx));hub.Changed();return Results.Ok();}).RequireAuthorization("admin");
 app.MapPost("/api/licenses/save",(HttpContext ctx,LicenseSaveRequest r)=>
@@ -421,6 +421,8 @@ app.MapPost("/api/mastro/sync",async(HttpContext ctx)=>
 }).RequireAuthorization("admin");
 app.MapPost("/api/interventions",(HttpContext ctx,Intervention i)=>
 {
+ // technicians create and update their own work; what came from Mastro is corrected by the office and administrators
+ if(ctx.User.IsInRole(Roles.Tech)&&!string.IsNullOrEmpty(i?.Id)&&!i.Id.StartsWith("app-",StringComparison.Ordinal))return Results.Json(new{error="Gli interventi importati da Mastro li corregge l’amministrazione."},statusCode:403);
  try{var r=store.SaveIntervention(i,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}
 }).RequireAuthorization("read");
 app.MapPost("/api/interventions/{id}/delete",(HttpContext ctx,string id)=>

@@ -167,7 +167,14 @@ public sealed partial class Store
   store.ImportMastro(new([mc],[mm],[new("mi1","15","Cliente Mastro","2025-03-01","1","Verifica","Verifica periodica","Chiuso","","Normale","50","mastro","","","","")],"t","test"),"test");
   try{store.SaveIntervention(new("","NON-ESISTE","x","","","Titolo","","Aperto","","Normale","","","","","",""),"test");throw new Exception("Cliente inesistente accettato");}catch(InvalidDataException){}
   var app=store.SaveIntervention(new("","M15","Cliente Mastro","2026-11-10","m1","Sostituzione rotolo","","Aperto","Mario","Alta","","","","","",""),"test");
-  try{store.SaveIntervention(new("mi1","15","x","","","Modifica storico","","Chiuso","","Normale","","","","","",""),"test");throw new Exception("Storico Mastro modificabile");}catch(InvalidDataException){}
+  // an intervention imported from Mastro can be corrected: it keeps its id, and later imports neither overwrite it nor bring back a deleted one
+  var mi1=new Intervention("mi1","15","Cliente Mastro","2025-03-01","1","Verifica","Verifica periodica","Chiuso","","Normale","50","mastro","","","","");
+  var ed=store.SaveIntervention(new("mi1","M15","Cliente Mastro","2025-03-01","m1","Verifica corretta","Verifica periodica","Chiuso","","Normale","50","","","","",""),"test");
+  if(ed.Id!="mi1"||ed.Origin!="mastro")throw new Exception("Storico Mastro: modifica");
+  store.ImportMastro(new([mc],[mm],[mi1],"t","test"),"test");
+  if(store.Interventions().Single(i=>i.Id=="mi1").Title!="Verifica corretta")throw new Exception("La lettura di Mastro sovrascrive le modifiche");
+  store.DeleteIntervention("mi1");store.ImportMastro(new([mc],[mm],[mi1],"t","test"),"test");
+  if(store.Interventions().Any(i=>i.Id=="mi1"))throw new Exception("Intervento eliminato ricomparso con la lettura di Mastro");
   try{store.SaveIntervention(app with{Status="Boh"},"test");throw new Exception("Stato non validato");}catch(InvalidDataException){}
   store.ImportMastro(new([mc with{Name="Cliente Mastro 2"}],[],[],"t","test"),"test");
   if(store.MastroClients().Single().Name!="Cliente Mastro 2"||store.Machines().Count!=0||store.Interventions().Count!=1||store.Interventions()[0].Id!=app.Id)throw new Exception("Importazione Mastro non atomica");
@@ -337,6 +344,11 @@ public sealed partial class Store
   if(store.MastroClients().Any(x=>x.Code=="C1")||store.Machines().Any(x=>x.Id is "m3" or "m6")||store.MastroClientCount()!=4)throw new Exception("Import pulito: dati cessati salvati");
   store.SaveHiddenBrands([],"test");if(store.Mastro().Machines.Count!=4||store.Mastro().Excluded.Clients!=0)throw new Exception("Marche escluse: ripristino");
   store.SaveHiddenBrands(["edit"],"test");if(!store.HiddenBrands().SequenceEqual(["EDIT"]))throw new Exception("Marche escluse: salvataggio");
+  // analyses: they always compute (also with little data), 13 weeks of forecast, a credit note never makes an ABC customer
+  store.ImportMastro(new([mc],[mm],[],"t","test",[new("2026-9-F","9",DateTime.Today.AddMonths(-1).ToString("yyyy-MM-dd"),"15","Cliente Mastro","Fattura",1000,220,1220,"Bonifico")],null,null,null,null,null,null,null,null,null,
+   [new(DateTime.Today.ToString("yyyy-MM"),"15","10","ROT-80","Rotolo","Rotoli e consumabili",100,150,150,90,1)],[new("10","Agente Prova")],[new(DateTime.Today.ToString("yyyy-MM-dd"),"ROT-80","Rotolo","Fornitore",0.6m,0.75m)]),"test");
+  var an=store.Analysis();
+  if(an.Forecast.Count!=13||an.Abc.Count!=1||an.Abc[0].Class!="A"||an.Agents.Single().Name!="Agente Prova"||an.Costs.Single().Pct!=25)throw new Exception("Analisi");
   // IT inventory, renewals with history, manual device links, merged duplicates
   var asx=store.SaveAsset(new Asset(ClientCode:"M15",Kind:"PC",Name:"PC cassa",WarrantyTo:"2027-01-31"),"test");if(store.Assets().Single().WarrantyTo!="2027-01-31")throw new Exception("Inventario: salvataggio");
   try{store.SaveAsset(new Asset(ClientCode:"M15",Name:"x",WarrantyTo:"31/01/2027"),"test");throw new Exception("Inventario: data errata accettata");}catch(InvalidDataException){}

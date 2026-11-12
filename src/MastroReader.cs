@@ -288,6 +288,7 @@ public static class MastroReader
   schema[tClienti]=cols.Select(x=>x.ToUpperInvariant()).ToList();schema["__rubriche"]=phoneTables;
   if(tMacc!=null)schema[tMacc]=machineCols.Select(x=>x.ToUpperInvariant()).ToList();
   if(tTipi!=null)schema[tTipi]=await Cols(tTipi);
+  foreach(var t in new[]{"lis_fat","rig_fat","arti","art_for","arti_storico_prezzi","operai_provvi","clienti_sc_fami","sconti_tipi","lis_ordf","rig_ordf","mov_scade","pagamenti","effetti","rig_int","lis_int","lis_ddt","rig_ddt","fornito"})if(Tab(t) is string tx)schema[tx]=await Cols(tx);
   try{File.WriteAllText(Path.Combine(Paths.Runtime("mastro"),"schema.json"),System.Text.Json.JsonSerializer.Serialize(new{read=DateTimeOffset.Now,tables,columns=schema,interTable,interNum,interDate,interClient},new System.Text.Json.JsonSerializerOptions{WriteIndented=true}));}catch{}
   if(Tab("lis_int") is string tli)
   {
@@ -535,7 +536,45 @@ public static class MastroReader
    }
   }
   catch(MySqlException ex){sdi=null;warnings.Add("Esiti SDI non leggibili: "+ex.Message);}
-  var batch=new MastroBatch(clients,machines,interventions,DateTimeOffset.Now.ToString("O"),$"MastroSQL {cfg.Host}/{cfg.Database}",invoices,dues,balances,rtList,sites,riba,sales,ledger,unbilled,sdi);
+  // ── sales by customer, agent and article (last 24 months, aggregated by MySQL): agents, real discounts, ABC
+  List<ClientSale>? clientSales=null;List<Party>? agents=null;
+  if(Tab("rig_fat") is string trc&&Tab("lis_fat") is string tlc)try
+  {
+   clientSales=[];
+   await using var q=new MySqlCommand($@"SELECT DATE_FORMAT(f.DATAI,'%Y-%m'),f.CODI,COALESCE(f.AGENTE,''),COALESCE(r.ART_CODI,''),MAX(r.DESCRI),SUM(r.QUAN),SUM(r.QUAN*r.VEND),
+    SUM(IF(r.COSTO>0,r.QUAN*r.VEND,0)),SUM(IF(r.COSTO>0,r.QUAN*r.COSTO,0)),COUNT(DISTINCT r.NUME)
+    FROM `{trc}` r JOIN `{tlc}` f ON f.NUME=r.NUME WHERE f.FATT_NOTA=0 AND f.DATAI>=@s GROUP BY 1,2,3,4",c);
+   q.Parameters.AddWithValue("@s",new DateTime(DateTime.Today.Year,DateTime.Today.Month,1).AddMonths(-24));
+   await using var r=await q.ExecuteReaderAsync(ct);
+   while(await r.ReadAsync(ct))
+   {
+    string G(int i){object? v;try{v=r.GetValue(i);}catch{v=null;}return S(v);}
+    var month=G(0);var code=G(3);var revenue=D(G(6));if(month.Length!=7||code.Length==0&&revenue==0)continue;
+    var name=G(4);
+    clientSales.Add(new(month,Num(G(1)),Num(G(2)),code,code.Length==0?"Righe senza articolo":name,ProductFamily(code,name),D(G(5)),Math.Round(revenue,2),Math.Round(D(G(7)),2),Math.Round(D(G(8)),2),Convert.ToInt32(r.GetValue(9))));
+   }
+   agents=clientSales.Select(x=>x.Agent).Where(x=>x.Length>0&&x!="0").Distinct().Select(x=>new Party(x,techNames.GetValueOrDefault(x,"Agente "+x))).ToList();
+  }
+  catch(MySqlException ex){clientSales=null;agents=null;warnings.Add("Vendite per cliente non leggibili: "+ex.Message);}
+  // ── purchase cost changes of the articles (Mastro keeps a history when a cost is changed), with the supplier
+  List<CostChange>? costs=null;
+  if(Tab("arti_storico_prezzi") is string tsp&&Tab("arti") is string tar)try
+  {
+   var sup=new Dictionary<string,string>();await Pairs(Tab("fornito"),"CODI","DESCRI",sup);
+   costs=[];
+   await using var q=new MySqlCommand($@"SELECT s.DATA,a.CODI,a.DESCRI,a.FORNITO,s.COST_OLD,s.COST_NEW FROM `{tsp}` s JOIN `{tar}` a ON a.CORTO=s.CORTO
+    WHERE s.DATA>=@s AND s.COST_OLD>0 AND s.COST_NEW>0 AND s.COST_NEW<>s.COST_OLD ORDER BY s.DATA",c);
+   q.Parameters.AddWithValue("@s",DateTime.Today.AddMonths(-24));
+   await using var r=await q.ExecuteReaderAsync(ct);
+   while(await r.ReadAsync(ct))
+   {
+    string G(int i){object? v;try{v=r.GetValue(i);}catch{v=null;}return S(v);}
+    var code=G(1);if(code.Length==0)continue;var sc=Num(G(3));
+    costs.Add(new(G(0),code,Pretty(G(2)),sc.Length>0&&sc!="0"?sup.GetValueOrDefault(sc,"Fornitore "+sc):"",Math.Round(D(G(4)),4),Math.Round(D(G(5)),4)));
+   }
+  }
+  catch(MySqlException ex){costs=null;warnings.Add("Storico costi degli articoli non leggibile: "+ex.Message);}
+  var batch=new MastroBatch(clients,machines,interventions,DateTimeOffset.Now.ToString("O"),$"MastroSQL {cfg.Host}/{cfg.Database}",invoices,dues,balances,rtList,sites,riba,sales,ledger,unbilled,sdi,clientSales,agents,costs);
   var preview=new Preview(clients.Count,machines.Count,interventions.Count,clients.Count(x=>x.Phones.Count>0),clients.Count(x=>x.Emails.Count>0),cols,machineCols,interTable,clients.Take(6).ToList(),warnings,
    invoices?.Count??0,dues?.Count??0,balances?.Count??0);
   return(batch,preview);

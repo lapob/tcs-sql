@@ -166,12 +166,14 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
     }
 }
 
-/** Bottom sheet to create / edit an intervention. Mastro history opens read-only. */
+/** Bottom sheet to create / edit an intervention, always filled with what exists. One imported from Mastro is editable for owner,
+ *  administrators and office (it becomes the app's own copy, later Mastro reads never overwrite it); technicians see it read-only. */
 @Composable fun InterventionEditor(vm: AppViewModel, a: Archive, req: EditorRequest, onDismiss: () -> Unit, onOpenClient: (String) -> Unit) {
     val me by vm.me.collectAsStateWithLifecycle()
     val existing = req.interventionId?.let { id -> a.interventionById(id) }
     val signed = existing?.i?.signedAt?.isNotBlank() == true
-    val ro = existing?.i?.source == "mastro" || signed
+    val imported = existing?.i?.source == "mastro"
+    val ro = signed || (imported && me?.canEdit != true)
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var signing by remember { mutableStateOf<Intervention?>(null) }
     var afterSign by remember { mutableStateOf<Intervention?>(null) }
@@ -188,18 +190,19 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
     var priority by remember { mutableStateOf(existing?.i?.priority ?: "Normale") }
     var tech by remember { mutableStateOf(existing?.i?.technician ?: me?.name.orEmpty()) }
     var date by remember { mutableStateOf(existing?.i?.date?.takeIf { it.isNotBlank() } ?: LocalDate.now().toString()) }
-    var machine by remember { mutableStateOf(existing?.i?.machine.orEmpty()) }
+    var machine by remember { mutableStateOf(existing?.i?.machine.orEmpty().let { raw -> // Mastro stores the bare machine number: match it to the customer's machine
+        if (raw.isBlank()) raw else existing?.client?.machines?.firstOrNull { it.m.id == raw || it.m.id == "m$raw" || it.m.serial == raw }?.m?.id ?: raw }) }
     var parts by remember { mutableStateOf(existing?.i?.parts.orEmpty()) }
     var pickDate by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     val close: () -> Unit = { scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss() } }
     val current = { Intervention(id = existing?.i?.id.orEmpty(), clientCode = clientCode, clientName = clientQuery, date = date, machine = machine, title = title.trim(), work = work,
-        status = status, technician = tech.trim(), priority = priority, total = existing?.i?.total.orEmpty(), parts = parts, hours = existing?.i?.hours.orEmpty()) }
+        status = status, technician = tech.trim(), priority = priority, total = existing?.i?.total.orEmpty(), parts = parts, hours = existing?.i?.hours.orEmpty(), kind = existing?.i?.kind.orEmpty()) }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
-            Text(if (signed) "Rapportino n. ${existing.i.reportNo}" else if (ro) "Intervento dallo storico Mastro" else if (existing != null) "Modifica intervento" else "Nuovo intervento", style = MaterialTheme.typography.headlineSmall)
+            Text(if (signed) "Rapportino n. ${existing.i.reportNo}" else if (ro) "Intervento dallo storico Mastro" else if (imported) "Modifica intervento importato" else if (existing != null) "Modifica intervento" else "Nuovo intervento", style = MaterialTheme.typography.headlineSmall)
             if (signed) existing.i.let { e ->
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.Verified, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(24.dp))
@@ -276,7 +279,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
             // photos: before the signature they can be added; after it they are part of the report
             if (existing?.i?.source != "mastro") PhotosSection(vm, a, existing?.i?.id, editable = !ro)
             if (existing != null && existing.i.id in a.pending) Pill("Da inviare · salvato sul telefono", Tone.Info, Modifier.padding(top = 10.dp))
-            existing?.i?.let { e -> Text(if (ro) "Importato da MastroSQL${if (e.total.isNotBlank() && e.total != "0") " · totale " + e.total + " €" else ""}" else "Creato da ${e.createdBy.ifBlank { "—" }}${if (e.updatedBy.isNotBlank() && e.updated != e.created) " · modificato da " + e.updatedBy else ""}",
+            existing?.i?.let { e -> Text(if (imported) "Importato da MastroSQL${if (e.total.isNotBlank() && e.total != "0") " · totale " + e.total + " €" else ""}${if (ro) "" else ". Quello che cambi resta tuo: le prossime letture di Mastro non lo sovrascrivono."}" else if (e.origin == "mastro") "Importato da MastroSQL e modificato${if (e.updatedBy.isNotBlank()) " da " + e.updatedBy else ""} · le letture di Mastro non lo sovrascrivono" else "Creato da ${e.createdBy.ifBlank { "—" }}${if (e.updatedBy.isNotBlank() && e.updated != e.created) " · modificato da " + e.updatedBy else ""}",
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp)) }
             Gap(16.dp)
             Row(verticalAlignment = Alignment.CenterVertically) {

@@ -5,7 +5,8 @@ using System.Text;
 namespace TopCash.Server;
 
 /// Owner: unlimited, and only an owner can touch another owner. Admin: everything else (users, settings, data).
-/// Office ("Amministrazione"): sees and works on everything, no users or settings. Tech: everything but accounting.
+/// Office ("Amministrazione"): accounting, customers and their machines (create, edit, archive), no users or settings.
+/// Tech: looks at customers and machines and does the work (interventions, reports, photos, stock moves); no accounting, no edits to the registry.
 public static class Roles
 {
  public const string Owner="owner",Admin="admin",Office="ufficio",Tech="tecnico";

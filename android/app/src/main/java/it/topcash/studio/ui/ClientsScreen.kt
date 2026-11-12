@@ -53,7 +53,7 @@ private val filters = listOf("Attivi", "Preferiti", "In scadenza", "Con macchine
     var creating by rememberSaveable { mutableStateOf(false) }
     if (creating) ClientEditSheet(vm, null, { creating = false }) { code -> nav.openClient(code) }
     Page(vm, "Clienti", if (filter == "Archiviati") "${list.size} archiviati · senza macchine, licenze, tecnico o attività" else "${list.size} di ${a.clients.count { !it.dormant }} attivi", actions = {
-        if (me != null) androidx.compose.material3.IconButton({ creating = true }) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.PersonAdd, "Nuovo cliente") }
+        if (me?.canEdit == true) androidx.compose.material3.IconButton({ creating = true }) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.PersonAdd, "Nuovo cliente") }
     }) {
         item(key = "search") {
             val fs by vm.focusSearch.collectAsStateWithLifecycle()

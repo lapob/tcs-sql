@@ -15,6 +15,7 @@ function applyEdits(){
    c={code,name:e.name||code,vat:'',taxCode:'',city:'',address:'',phone:'',email:'',families:[],records:[],active:[],orders:[],status:'Senza licenze',next:null,meta:state.metadata?.[code]||{},note:state.notes?.[code]||'',registry:false,installer:'',machines:[],interventions:[],verifications:[],phones:[],emails:[],mastro:null,dtr:[],ital:[]};
    D.clients.push(c);D.byCode.set(code,c);}
   c.edit=e;D.edited++;
+  if(!c.orig){c.orig={};for(const [k] of CE_FIELDS)c.orig[k]=e.created?'':(c[k]||'');} // what the sources say, to tell edits from untouched fields
   for(const [k] of CE_FIELDS)if(e[k])c[k]=e[k];
   if(e.phone)c.phones=[e.phone,...c.phones.filter(p=>p!==e.phone)];
   if(e.email)c.emails=[e.email,...c.emails.filter(p=>p!==e.email)];
@@ -63,14 +64,15 @@ const fieldHtml=(name,label,type,value,span,attrs='')=>`<label class="field${spa
 async function openClientEditor(code){
  const c=code?D.byCode.get(code)||D.deleted?.find(x=>x.code===code):null;const e=c?.edit||{};
  const src=c?[c.registry?'Zucchetti':'',c.mastro?'MastroSQL':'',c.records.length?'licenze':''].filter(Boolean).join(', '):'';
- const body=`${c&&!e.created?`<div class="note">${icon('sparkle')}<span>I dati arrivano da ${esc(src||'i portali')}. Quello che cambi qui ha la precedenza e <strong>resta anche dopo le sincronizzazioni</strong>; un campo lasciato vuoto torna al valore di origine.</span></div>`:''}
-  <div class="form-grid">${CE_FIELDS.map(([k,l,t,span])=>fieldHtml(k,l,t,e[k]||(c?.edit?'':'')||'',span,`${k==='name'&&(!c||e.created)?'required':''} placeholder="${esc(c&&!e.created?(c[k]||''):'')}" autocomplete="off"`)).join('')}</div>`;
+ const body=`${c&&!e.created?`<div class="note">${icon('sparkle')}<span>I dati arrivano da ${esc(src||'i portali')}: li trovi già qui, correggi solo quello che serve. Quello che cambi ha la precedenza e <strong>resta anche dopo ogni sincronizzazione e lettura di Mastro</strong>; un campo svuotato torna al valore di origine.</span></div>`:''}
+  <div class="form-grid">${CE_FIELDS.map(([k,l,t,span])=>fieldHtml(k,l,t,c?(c[k]||''):'',span,`${k==='name'&&(!c||e.created)?'required':''} placeholder="${esc(c&&!e.created?((c.orig||c)[k]||''):'')}" autocomplete="off"`)).join('')}</div>`;
  const extra=c&&isAdmin()?`${e&&Object.keys(e).length&&!e.created?`<button type="button" class="btn ghost" data-panel-act="reset">${icon('sync')}Annulla modifiche</button>`:''}<button type="button" class="btn ghost danger-text" data-panel-act="delete">${icon('close')}Elimina</button>`:'';
  const v=await formPanel({title:c?c.name:'Nuovo cliente',tag:c?'Modifica cliente':'Anagrafica',sub:c?`Codice ${esc(c.code)}`:'Il cliente compare subito in Studio, anche senza licenze o macchine. Potrai collegarlo a Mastro e ai portali con la partita IVA.',body,ok:c?'Salva modifiche':'Crea cliente',extra});
  if(!v)return;
  if(v.__act==='delete')return deleteClient(c.code);
  if(v.__act==='reset'){if(await ask({title:'Annullare le modifiche?',text:`${esc(c.name)} torna ai dati dei portali e di Mastro.`,ok:'Annulla modifiche'})){await adminSend('clientReset',{code:c.code});if(WEB)toast('Modifiche annullate');}return;}
- const edit={};for(const [k] of CE_FIELDS)edit[k]=(v[k]||'').trim();
+ // only what differs from the sources is stored as an edit: untouched fields keep following Zucchetti and Mastro
+ const edit={};for(const [k] of CE_FIELDS){const val=(v[k]||'').trim(),srcV=c&&!e.created?String((c.orig||c)[k]||'').trim():null;edit[k]=srcV!==null&&val===srcV?'':val;}
  const r=await adminSend('clientSave',{code:c?.code||'',edit});
  if(r&&WEB){toast(c?'Cliente aggiornato':'Cliente creato');if(!c&&r.code)pendingOpen=r.code;}
 }
@@ -121,7 +123,7 @@ document.addEventListener('click',e=>{
  const t=e.target.closest?.('[data-edit-client],[data-new-client],[data-del-client],[data-restore-client],[data-edit-lic],[data-user-name],[data-user-del]');if(!t)return;
  e.stopPropagation();e.preventDefault();
  const ds=t.dataset;
- if(!(('editClient' in ds||'newClient' in ds)?canEditClients():isAdmin()))return toast('Solo un amministratore può farlo.','alert');
+ if(!(('editClient' in ds||'newClient' in ds)?canEditClients():isAdmin()))return toast(('editClient' in ds||'newClient' in ds)?'Lo può fare l’amministrazione: tu puoi consultare.':'Solo un amministratore può farlo.','alert');
  if('newClient' in ds)return openClientEditor(null);
  if(ds.editClient)return openClientEditor(ds.editClient);
  if(ds.delClient)return deleteClient(ds.delClient);

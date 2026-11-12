@@ -111,7 +111,7 @@ public sealed partial class Store
   using var c = Open();
   using (var g = c.CreateCommand())
   {
-   g.CommandText = "SELECT data FROM interventions WHERE id=$i"; g.Parameters.AddWithValue("$i", interventionId);
+   g.CommandText = "SELECT data FROM interventions WHERE id=$i AND source<>'deleted'"; g.Parameters.AddWithValue("$i", interventionId);
    var i = g.ExecuteScalar() is string js ? JsonSerializer.Deserialize<Intervention>(js) : null;
    if (i == null) throw new InvalidDataException("Intervento non trovato: salvalo prima di aggiungere foto.");
    if (i.Source != "app") throw new InvalidDataException("Agli interventi storici di Mastro non si aggiungono foto.");

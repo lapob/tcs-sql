@@ -80,13 +80,16 @@ private fun current(c: UClient, k: String) = when (k) { "name" -> c.name; "vat" 
     val isAdmin = vm.me.collectAsState().value?.isAdmin == true
     val sheet = rememberSheet(); val scope = rememberCoroutineScope()
     val e = c?.edit ?: ClientEdit(); val manual = c == null || e.created
-    val values = remember { clientFields.associate { (k, _) -> k to mutableStateOf(e.get(k)) } }
+    // always starts from what the customer has now (sources + earlier edits): you correct, you do not retype
+    val values = remember { clientFields.associate { (k, _) -> k to mutableStateOf(if (manual || c == null) e.get(k) else current(c, k)) } }
+    // an untouched field keeps following Zucchetti and Mastro (or keeps the earlier edit): only real changes become edits
+    fun pick(k: String): String { val v = values.getValue(k).value.trim(); return if (!manual && c != null && v == current(c, k).trim()) e.get(k) else v }
     var confirmDelete by remember { mutableStateOf(false) }
     fun close(after: () -> Unit = {}) = scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss(); after() }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
             Text(if (c == null) "Nuovo cliente" else c.name, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(if (manual) "Il cliente compare subito per tutto il team." else "Quello che scrivi ha la precedenza sui dati di portali e Mastro e resta anche dopo le sincronizzazioni. Un campo vuoto torna al valore di origine.",
+            Text(if (manual) "Il cliente compare subito per tutto il team." else "I dati di portali e Mastro sono già qui: correggi solo quello che serve. Quello che cambi ha la precedenza e resta anche dopo ogni sincronizzazione e lettura di Mastro; un campo svuotato torna al valore di origine.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
             clientFields.forEach { (k, label) ->
                 val v = values.getValue(k)
@@ -101,9 +104,7 @@ private fun current(c: UClient, k: String) = when (k) { "name" -> c.name; "vat" 
                 }
                 Spacer(Modifier.weight(1f))
                 Button({
-                    val edit = ClientEdit(values.getValue("name").value.trim(), values.getValue("vat").value.trim(), values.getValue("taxCode").value.trim(), values.getValue("city").value.trim(),
-                        values.getValue("address").value.trim(), values.getValue("phone").value.trim(), values.getValue("email").value.trim(), values.getValue("pec").value.trim(),
-                        values.getValue("contact").value.trim(), values.getValue("category").value.trim())
+                    val edit = ClientEdit(pick("name"), pick("vat"), pick("taxCode"), pick("city"), pick("address"), pick("phone"), pick("email"), pick("pec"), pick("contact"), pick("category"))
                     if (manual && edit.name.isBlank()) { vm.notify("Scrivi la ragione sociale"); return@Button }
                     vm.saveClient(c?.code.orEmpty(), edit) { code -> if (c == null) onCreated(code) }; close()
                 }) { Text(if (c == null) "Crea cliente" else "Salva") }
@@ -184,6 +185,15 @@ private fun current(c: UClient, k: String) = when (k) { "name" -> c.name; "vat" 
     }
 }
 
+/** What each role may do, shown under the role choice (the server enforces the same rules). */
+private fun roleHelp(r: String) = when (r) {
+    "owner" -> "Tutto, compresa la gestione degli amministratori e degli altri proprietari."
+    "admin" -> "Tutto: aggiunge, modifica ed elimina clienti, archivia le casse, contabilità, utenti e impostazioni."
+    "ufficio" -> "Contabilità e clienti: aggiunge e corregge clienti e casse, archivia le casse dismesse. Non elimina clienti e non gestisce utenti."
+    "tecnico" -> "Fa gli interventi; clienti e casse in sola lettura. Niente contabilità sul telefono."
+    else -> ""
+}
+
 /** Only the owner can create other owners or touch them. */
 private fun roles(owner: Boolean) = (if (owner) listOf("owner" to "Proprietario") else emptyList()) +
     listOf("admin" to "Amministratore", "ufficio" to "Amministrazione", "tecnico" to "Tecnico")
@@ -236,6 +246,7 @@ private fun genPassword(): String { val a = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLM
             if (!self && !locked) {
                 Text("Ruolo", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { roles(meOwner).forEach { (k, l) -> FilterChip(role == k, { role = k }, label = { Text(l) }, shape = MaterialTheme.shapes.small) } }
+                Text(roleHelp(role), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton({ newPwd = genPassword() }) { Text("Nuova password") }
                     OutlinedButton({ vm.updateUser(u.username, UserPatch(disabled = !u.disabled), if (u.disabled) "Utente riattivato" else "Utente disattivato"); close() }) { Text(if (u.disabled) "Riattiva" else "Disattiva") }
@@ -289,6 +300,7 @@ private fun genPassword(): String { val a = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLM
             OutlinedTextField(user, { user = it.lowercase().filter { ch -> ch.isLetterOrDigit() || ch in "._-" } }, Modifier.fillMaxWidth().padding(top = 6.dp), label = { Text("Nome utente") }, placeholder = { Text("es. mario.rossi") }, singleLine = true)
             Text("Ruolo", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { roles(meOwner).forEach { (k, l) -> FilterChip(role == k, { role = k }, label = { Text(l) }, shape = MaterialTheme.shapes.small) } }
+                Text(roleHelp(role), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedTextField(pwd, { pwd = it }, Modifier.fillMaxWidth().padding(top = 10.dp), label = { Text("Password iniziale") }, singleLine = true,
                 trailingIcon = { TextButton({ pwd = genPassword() }) { Text("Genera") } })
             Row(Modifier.fillMaxWidth().padding(vertical = 16.dp)) {

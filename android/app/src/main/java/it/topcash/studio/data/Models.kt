@@ -38,6 +38,8 @@ import kotlinx.serialization.Serializable
     val sentTo: String = "", val sentAt: String = "",
     /** "Verifica" = periodic verification (every 2 years), kept apart from the real interventions. */
     val kind: String = "",
+    /** "mastro" = imported from Mastro and then edited here: the next Mastro reads never overwrite it. */
+    val origin: String = "",
 )
 // ── warehouse
 @Serializable data class PartUse(val article: String = "", val qty: Double = 1.0, val warehouse: String = "", val serial: String = "")
@@ -58,6 +60,21 @@ import kotlinx.serialization.Serializable
 @Serializable data class Due(val id: String = "", val party: String = "C", val partyCode: String = "", val partyName: String = "", val docNumber: String = "", val docDate: String = "",
     val dueDate: String = "", val amount: Double = 0.0, val paid: Double = 0.0, val payment: String = "", val source: String = "")
 /** Last read of Mastro (the server does it by itself every hour). */
+/** Analisi: computed by the server from Mastro at every read, the same figures the site shows. */
+@Serializable data class Analysis(val at: String = "", val forecast: List<AnaWeek> = emptyList(), val forecastIn: Double = 0.0, val forecastOut: Double = 0.0, val overdueExpected: Double = 0.0,
+    val abc: List<AnaAbc> = emptyList(), val abcClasses: List<AnaAbcClass> = emptyList(), val agents: List<AnaAgent> = emptyList(), val techs: List<AnaTech> = emptyList(),
+    val machines: List<AnaMachine> = emptyList(), val models: List<AnaModel> = emptyList(), val discountClients: List<AnaDiscount> = emptyList(), val discountArticles: List<AnaDiscount> = emptyList(),
+    val discountTotal: Double = 0.0, val costs: List<AnaCost> = emptyList(), val costImpact: Double = 0.0)
+@Serializable data class AnaWeek(val start: String = "", val `in`: Double = 0.0, val inSure: Double = 0.0, val out: Double = 0.0, val net: Double = 0.0, val cumulative: Double = 0.0)
+@Serializable data class AnaAbc(val clientCode: String = "", val name: String = "", val `class`: String = "", val revenue: Double = 0.0, val prev: Double = 0.0, val share: Double = 0.0, val rank: Int = 0)
+@Serializable data class AnaAbcClass(val `class`: String = "", val clients: Int = 0, val revenue: Double = 0.0, val share: Double = 0.0)
+@Serializable data class AnaAgent(val code: String = "", val name: String = "", val revenue: Double = 0.0, val prev: Double = 0.0, val margin: Double = 0.0, val marginPct: Double = 0.0, val clients: Int = 0, val topFamily: String = "", val discounts: Double = 0.0)
+@Serializable data class AnaTech(val name: String = "", val jobs: Int = 0, val verifications: Int = 0, val amount: Double = 0.0, val hours: Double = 0.0, val clients: Int = 0, val open: Int = 0)
+@Serializable data class AnaMachine(val id: String = "", val clientCode: String = "", val name: String = "", val model: String = "", val serial: String = "", val contract: Double = 0.0, val interventions: Double = 0.0, val verification: Double = 0.0, val total: Double = 0.0)
+@Serializable data class AnaModel(val model: String = "", val machines: Int = 0, val total: Double = 0.0, val average: Double = 0.0)
+@Serializable data class AnaDiscount(val key: String = "", val name: String = "", val sub: String = "", val given: Double = 0.0, val revenue: Double = 0.0, val lines: Int = 0)
+@Serializable data class AnaCost(val code: String = "", val name: String = "", val supplier: String = "", val date: String = "", val old: Double = 0.0, val new: Double = 0.0, val pct: Double = 0.0,
+    val qty12: Double = 0.0, val price: Double = 0.0, val impact: Double = 0.0, val marginBefore: Double = 0.0, val marginNow: Double = 0.0)
 /** Priorità: computed by the server from Mastro, the same lists the site shows. */
 @Serializable data class Insights(val at: String = "", val unbilled: List<InsUnbilled> = emptyList(), val sdi: List<InsSdi> = emptyList(), val payers: List<InsPayer> = emptyList(),
     val churn: List<InsChurn> = emptyList(), val opps: List<InsOpp> = emptyList(), val registerPrice: Double = 0.0)
@@ -85,7 +102,7 @@ import kotlinx.serialization.Serializable
     val stock: List<StockRow> = emptyList(), val movements: List<Movement> = emptyList(),
     val invoices: List<Invoice> = emptyList(), val dues: List<Due> = emptyList(), val balances: List<Balance> = emptyList(), val dueNotes: Map<String, DueNote> = emptyMap(),
     val sales: List<SaleRow> = emptyList(), val ledger: List<LedgerRow> = emptyList(), val mastroSync: MastroSync? = null,
-    val insights: Insights? = null,
+    val insights: Insights? = null, val analysis: Analysis? = null,
     val features: Features = Features(),
     val dtr: List<DtrRegister> = emptyList(), val dtrStatus: DtrStatus = DtrStatus(),
     val ital: List<ItalDevice> = emptyList(), val italOrders: List<ItalOrder> = emptyList(), val italStatus: DtrStatus = DtrStatus(),
@@ -116,6 +133,8 @@ import kotlinx.serialization.Serializable
     val isOwner get() = owner || role == "owner"
     /** Technicians see everything except the accounting. */
     val seesAccounting get() = accounting && role != "tecnico"
+    /** Owner, administrators and office create and edit customers and their machines; technicians only look. */
+    val canEdit get() = role != "tecnico"
 }
 @Serializable data class Session(val setupNeeded: Boolean = false, val user: Me? = null, val version: Long = 0, val publicUrl: String = "")
 @Serializable data class ServerError(val error: String = "", val device: String = "", val code: String = "")

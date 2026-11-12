@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Route
@@ -77,7 +78,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
     }
 }
 
-@Composable fun MachineCard(m: UMachine, modifier: Modifier = Modifier, showClient: Boolean = false, onClick: (() -> Unit)? = null) {
+@Composable fun MachineCard(m: UMachine, modifier: Modifier = Modifier, showClient: Boolean = false, onClick: (() -> Unit)? = null, actions: (@Composable () -> Unit)? = null) {
     CardBox(modifier, onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -97,6 +98,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
             if (m.m.amount.isNotBlank() && m.m.amount != "0") MiniFact("Importo", m.m.amount + " €")
         }
         if (m.m.notes.isNotBlank()) Text(m.m.notes, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+        actions?.invoke()
     }
 }
 
@@ -118,6 +120,9 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
                     else {
                         a.state.insights?.let { ins ->
                             MoreRow(Icons.Rounded.AutoAwesome, "Priorità", "${ins.unbilled.size} da fatturare · ${ins.payers.size} pagano tardi · ${ins.opps.size} da vendere", Modifier.appear(0)) { nav.navigate("accOpp") { launchSingleTop = true } }
+                        }
+                        a.state.analysis?.let { an ->
+                            MoreRow(Icons.Rounded.Insights, "Analisi", "Incassi previsti ${AccountingView.money0(an.forecastIn)} · clienti ABC · agenti · sconti · costi", Modifier.appear(0)) { nav.navigate("accAna") { launchSingleTop = true } }
                         }
                         MoreRow(Icons.Rounded.Euro, "Rate scadute da incassare", "${ac.overdue.size} rate · ${AccountingView.money0(ac.overdueSum)}", Modifier.appear(0)) { nav.openAccounting(AccView.Receivables, "Scadute") }
                         MoreRow(Icons.Rounded.CalendarMonth, "In scadenza nei prossimi 7 giorni", "Incassi da seguire questa settimana", Modifier.appear(0)) { nav.openAccounting(AccView.Receivables, "7 giorni") }

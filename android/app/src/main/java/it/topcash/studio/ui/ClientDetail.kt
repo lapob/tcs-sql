@@ -65,6 +65,12 @@ import java.time.ZoneOffset
     dueOpen?.let { id -> a.acc.due(id)?.let { d -> DueSheet(vm, d, null) { dueOpen = null } } }
     val me by vm.me.collectAsState(); val admin = me?.isAdmin == true
     var editClient by remember { mutableStateOf(false) }
+    var archiveAsk by remember { mutableStateOf<it.topcash.studio.data.UMachine?>(null) }
+    archiveAsk?.let { m -> androidx.compose.material3.AlertDialog(onDismissRequest = { archiveAsk = null },
+        title = { Text("Archiviare la cassa?") },
+        text = { Text("${m.m.model.ifBlank { "Macchina" }} · ${m.m.serial} esce da giro, scadenze ed elenchi. Mastro non viene modificato e puoi riattivarla quando vuoi.") },
+        confirmButton = { TextButton({ archiveAsk = null; vm.flagMachines(listOf(m.m.id), "dismessa") }) { Text("Archivia", color = LocalStatus.current.bad) } },
+        dismissButton = { TextButton({ archiveAsk = null }) { Text("Annulla") } }) }
     var editLicense by remember { mutableStateOf<it.topcash.studio.data.ULicense?>(null) }
     if (editClient) ClientEditSheet(vm, c, { editClient = false })
     // the card is split in tabs: what you need is one tap away instead of at the end of a long scroll
@@ -75,7 +81,7 @@ import java.time.ZoneOffset
     editLicense?.let { l -> LicenseEditSheet(vm, a, l) { editLicense = null } }
     Page(vm, c.name, null, onBack = { nav.popBackStack() }, compactTitle = true,
         actions = {
-            if (me != null) androidx.compose.material3.IconButton({ editClient = true }) { Icon(androidx.compose.material.icons.Icons.Rounded.Edit, "Modifica cliente") }
+            if (me?.canEdit == true) androidx.compose.material3.IconButton({ editClient = true }) { Icon(androidx.compose.material.icons.Icons.Rounded.Edit, "Modifica cliente") }
             val fav = c.meta.favorite
             androidx.compose.material3.IconButton({ vm.saveMeta(c.code, c.meta.copy(favorite = !fav), if (fav) "Rimosso dai preferiti" else "Aggiunto ai preferiti") }) {
                 val s by animateFloatAsState(if (fav) 1.15f else 1f, Bouncy, label = "fav")
@@ -176,7 +182,13 @@ import java.time.ZoneOffset
             val ms = shown.filter { devCat(it.m.model) == gi }
             if (ms.isNotEmpty()) {
                 item(key = "mg$gi") { SectionTitle("$label (${ms.count { it.m.active }}${if (ms.any { !it.m.active }) " + ${ms.count { !it.m.active }} dismesse" else ""})") }
-                ms.forEach { m -> item(key = "m" + m.m.id) { MachineCard(m, Modifier.padding(bottom = 8.dp)) } }
+                ms.forEach { m -> item(key = "m" + m.m.id) { MachineCard(m, Modifier.padding(bottom = 8.dp), actions = if (me?.canEdit != true) null else ({
+                    // owner, administrators and office archive a register that is no longer used (Mastro is not touched) or bring it back
+                    Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.End) {
+                        if (m.flag == "dismessa") TextButton({ vm.flagMachines(listOf(m.m.id), "") }) { Text("Torna attiva") }
+                        else if (m.m.active) TextButton({ archiveAsk = m }) { Text("Archivia come dismessa", color = LocalStatus.current.bad) }
+                    }
+                })) } }
             }
         }
         if (shown.isEmpty()) item(key = "m-empty") { CardBox(Modifier.padding(top = 12.dp)) { Text(if (off > 0) "Solo dispositivi dismessi: attiva l'interruttore qui sopra per vederli." else "Nessun dispositivo: importa il parco macchine da MastroSQL.", color = MaterialTheme.colorScheme.onSurfaceVariant) } }

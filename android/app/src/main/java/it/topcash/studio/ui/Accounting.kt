@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import androidx.navigation.NavHostController
 import it.topcash.studio.data.AccountingView
@@ -390,7 +391,7 @@ fun LazyListScope.clientAccounting(a: Archive, c: UClient, onDue: (String) -> Un
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(money(d.left), style = MaterialTheme.typography.headlineMedium.tabular)
+                    androidx.compose.foundation.text.BasicText(money(d.left), style = MaterialTheme.typography.headlineMedium.tabular.copy(color = MaterialTheme.colorScheme.onSurface), maxLines = 1, softWrap = false, autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 14.sp, maxFontSize = MaterialTheme.typography.headlineMedium.fontSize))
                     Text("scadenza ${Dates.short(d.due)} · ${AccountingView.whenText(d)}${if (d.d.paid > 0) " · su " + money(d.d.amount) else ""}", style = MaterialTheme.typography.bodySmall, color = LocalStatus.current.of(dueTone(d)))
                 }
                 if (d.d.payment.isNotBlank()) Chip(d.d.payment)

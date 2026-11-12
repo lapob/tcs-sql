@@ -80,7 +80,7 @@ public sealed partial class Store
  {
   using var c = Open(); using var tx = c.BeginTransaction();
   Intervention i;
-  using (var g = c.CreateCommand()) { g.Transaction = tx; g.CommandText = "SELECT data FROM interventions WHERE id=$i"; g.Parameters.AddWithValue("$i", id);
+  using (var g = c.CreateCommand()) { g.Transaction = tx; g.CommandText = "SELECT data FROM interventions WHERE id=$i AND source<>'deleted'"; g.Parameters.AddWithValue("$i", id);
    i = g.ExecuteScalar() is string s ? JsonSerializer.Deserialize<Intervention>(s)! : throw new InvalidDataException("Intervento non trovato."); }
   var now = DateTimeOffset.Now.ToString("O");
   var rec = i with { SentTo = to, SentAt = now };

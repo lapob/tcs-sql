@@ -189,11 +189,11 @@ document.addEventListener('change',e=>{const c=e.target;
  if(c.matches?.('[data-msel-all]')){const l=staleList();l.forEach(m=>c.checked?MSEL.add(m.id):MSEL.delete(m.id));document.querySelectorAll('[data-msel]').forEach(x=>x.checked=c.checked);return mselRefresh();}});
 document.addEventListener('click',async e=>{const t=e.target.closest?.('[data-mstale],[data-mflag]');if(!t)return;e.preventDefault();e.stopPropagation();
  if('mstale' in t.dataset){ui.mstale=t.dataset.mstale;MSEL.clear();ui.p=1;return render(false);}
- const st=t.dataset.mflag,ids=[...MSEL];if(!ids.length)return;
+ const st=t.dataset.mflag,one=t.dataset.mflagIds,ids=one?one.split(','):[...MSEL];if(!ids.length)return;if(!canFlag())return toast('Lo può fare l’amministrazione.','alert');
  if(st==='dismessa'){const lost=new Set(ids.map(id=>D.machines.find(m=>m.id===id)?.c).filter(c=>c&&c.machines.every(m=>!m.active||ids.includes(m.id))));
   if(!await ask({title:`Segnare ${ids.length===1?'la macchina':ids.length+' macchine'} come dismess${ids.length===1?'a':'e'}?`,text:`${ids.length===1?'Esce':'Escono'} da Giro, Scadenze ed elenchi. Mastro non viene modificato e puoi tornare indietro da “Segnate dismesse”.${lost.size?` ${lost.size===1?'Un cliente resta':lost.size+' clienti restano'} senza macchine attive ed esc${lost.size===1?'e':'ono'} dall’elenco clienti.`:''}`,ok:ids.length===1?'Segna dismessa':'Segna dismesse',danger:true}))return;}
  t.disabled=true;
  const apply=()=>{state.machineFlags={...(state.machineFlags||{})};for(const id of ids){if(st)state.machineFlags[id]={state:st,at:new Date().toISOString(),by:me?.name||''};else delete state.machineFlags[id];}};
- try{if(WEB)await post('/api/machines/flag',{ids,state:st});else send('machineFlag',{ids,state:st});apply();MSEL.clear();derive();if(typeof applyEdits==='function')applyEdits();if(typeof deriveRegisters==='function')deriveRegisters();
+ try{if(WEB)await post('/api/machines/flag',{ids,state:st});else send('machineFlag',{ids,state:st});apply();MSEL.clear();if(one)t.closest('.modal')?.querySelector('[data-x]')?.click();derive();if(typeof applyEdits==='function')applyEdits();if(typeof deriveRegisters==='function')deriveRegisters();
   toast(st==='dismessa'?`${plur(ids.length,'macchina segnata','macchine segnate')} come dismess${ids.length===1?'a':'e'}`:st==='attiva'?`${plur(ids.length,'macchina confermata','macchine confermate')} attiv${ids.length===1?'a':'e'}`:`${plur(ids.length,'macchina','macchine')} di nuovo da controllare`,'check');render(false);}
  catch(x){toast(x.message,'alert');t.disabled=false;}},true);

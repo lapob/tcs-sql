@@ -154,7 +154,18 @@ fun hueColor(key: String, dark: Boolean = false): Color { var h = 0; key.forEach
         val a = shown.filter { it.isDigit() }.toBigIntegerOrNull(); val b = text.filter { it.isDigit() }.toBigIntegerOrNull()
         grew = a == null || b == null || b >= a; shown = text
     }
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+    // the figure fits the space it has: measured once per text/width, it steps down (never below 12sp) instead of spilling or being cut
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val maxW = constraints.maxWidth; val bounded = constraints.hasBoundedWidth
+    val fit = remember(shown, style, maxW) {
+        if (!bounded) style else {
+            var s = style; var guard = 0
+            while (guard++ < 24 && s.fontSize.isSp && s.fontSize.value > 12f && measurer.measure(shown, s, maxLines = 1, softWrap = false).size.width * 1.04f > maxW) s = s.copy(fontSize = (s.fontSize.value * 0.93f).sp)
+            s
+        }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
         val n = shown.length
         shown.forEachIndexed { i, ch ->
             androidx.compose.runtime.key(n - i) { // slots counted from the right: units stay units when the number gets longer
@@ -164,9 +175,10 @@ fun hueColor(key: String, dark: Boolean = false): Color { var h = 0; key.forEach
                     ((androidx.compose.animation.slideInVertically(spec) { h -> h * dir } + androidx.compose.animation.fadeIn(tween(180, delayMillis = delay)))
                         togetherWith (androidx.compose.animation.slideOutVertically(spec) { h -> -h * dir } + androidx.compose.animation.fadeOut(tween(140))))
                         .using(androidx.compose.animation.SizeTransform(clip = true))
-                }, label = "digit") { c -> Text(c.toString(), style = style, color = color, maxLines = 1) }
+                }, label = "digit") { c -> Text(c.toString(), style = fit, color = color, maxLines = 1, softWrap = false) }
             }
         }
+    }
     }
 }
 

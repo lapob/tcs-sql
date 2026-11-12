@@ -37,7 +37,7 @@ function inventoryPage(){
  list.sort((a,b)=>a.client.localeCompare(b.client,'it')||a.name.localeCompare(b.name,'it'));
  const kinds=AS_KINDS.filter(k=>all.some(a=>a.kind===k&&a.active));const n=limit('inv');
  const wl=all.filter(a=>a.active&&a.warDays!==null&&a.warDays>=0&&a.warDays<=60).length,ex=all.filter(a=>a.active&&((a.warDays!==null&&a.warDays<0)||(a.expDays!==null&&a.expDays<0))).length;
- return`${hero('<span class="grad">PC e sistemi</span>.','L’inventario informatico dei clienti: PC, server, stampanti, rete e licenze software, con garanzie e scadenze nell’agenda.',`<button class="btn accent" data-asset-new>${icon('plus')}Aggiungi</button>`)}
+ return`${hero('<span class="grad">PC e sistemi</span>.','L’inventario informatico dei clienti: PC, server, stampanti, rete e licenze software, con garanzie e scadenze nell’agenda.',`<button class="btn accent need-edit" data-asset-new>${icon('plus')}Aggiungi</button>`)}
  ${explain('inventory','Le garanzie e le scadenze delle licenze software compaiono in <strong>Scadenze</strong> e in <strong>Da fare oggi</strong>. Le password non si salvano qui: tienile nel gestore delle password.')}
  <div class="kpis">${kpi('Elementi',all.filter(a=>a.active).length,'in uso presso i clienti','grid','info','inventory',2)}${kpi('Clienti',new Set(all.filter(a=>a.active).map(a=>a.clientCode)).size,'con almeno un elemento','users','acc','inventory',3)}${kpi('Garanzie',wl,'in scadenza entro 60 giorni','shield','due','inventory',4)}${kpi('Scadute',ex,'garanzie o licenze già scadute','alert','bad','inventory',5)}</div>
  <div class="card reveal" style="--i:6"><div class="card-head"><div><h2>Inventario<span class="count">${fmt(list.length)}</span></h2></div>
@@ -52,11 +52,11 @@ function assetBadges(a){
  return b.join(' ');
 }
 function assetRow(a){
- return`<div class="list-row" data-asset="${esc(a.id)}" tabindex="0"><span class="orb sm as-orb">${icon(AS_ICON[a.kind]||'tool')}</span><div class="grow"><strong>${esc(a.name)} <small class="muted">${esc([a.brand,a.kind].filter(Boolean).join(' · '))}</small></strong><small>${esc(a.client)}${a.serial?' · <span class="mono">'+esc(a.serial)+'</span>':''}${a.ip?' · '+esc(a.ip):''}${a.location?' · '+esc(a.location):''}</small></div><span class="row-badges">${assetBadges(a)}</span></div>`;
+ return`<div class="list-row"${canEditClients()?` data-asset="${esc(a.id)}" tabindex="0" role="button"`:''}><span class="orb sm as-orb">${icon(AS_ICON[a.kind]||'tool')}</span><div class="grow"><strong>${esc(a.name)} <small class="muted">${esc([a.brand,a.kind].filter(Boolean).join(' · '))}</small></strong><small>${esc(a.client)}${a.serial?' · <span class="mono">'+esc(a.serial)+'</span>':''}${a.ip?' · '+esc(a.ip):''}${a.location?' · '+esc(a.location):''}</small></div><span class="row-badges">${assetBadges(a)}</span></div>`;
 }
 function workClientSection(c){
  const as=c.assets||[];
- return`<div class="d-section"><h3>PC e sistemi <span>${as.length?as.length+' ':''}<button class="btn sm ghost" data-asset-new="${esc(c.code)}">${icon('plus')}Aggiungi</button></span></h3>${as.map(assetRow).join('')||'<p class="muted">Nessun PC, stampante o apparato registrato.</p>'}</div>`;
+ return`<div class="d-section"><h3>PC e sistemi <span>${as.length?as.length+' ':''}<button class="btn sm ghost need-edit" data-asset-new="${esc(c.code)}">${icon('plus')}Aggiungi</button></span></h3>${as.map(assetRow).join('')||'<p class="muted">Nessun PC, stampante o apparato registrato.</p>'}</div>`;
 }
 function clientOptions(){return D.clients.map(c=>`<option value="${esc(c.name)}${c.city?' — '+esc(c.city):''}" data-code="${esc(c.code)}"></option>`).join('');}
 function clientFromLabel(v){v=String(v||'').trim();const c=D.clients.find(c=>(c.name+(c.city?' — '+c.city:''))===v)||D.clients.find(c=>c.name===v);return c||null;}
@@ -79,7 +79,7 @@ async function openAssetEditor(id,clientCode){
  const asset={id:a?.id||'',clientCode:cl.code,kind:v.kind,name:v.name,brand:v.brand,serial:v.serial,location:v.location,ip:v.ip,os:v.os,purchased:v.purchased,warrantyTo:v.warrantyTo,expiry:v.expiry,notes:v.notes,active:v.active!=='0'};
  if(await sendWork('assetSave',{asset},'/api/assets/save')&&WEB)toast('Inventario aggiornato.');
 }
-const canDelete=()=>!WEB||['admin','office'].includes(me?.role);
+const canDelete=()=>canEditClients(); // owner, administrators and office (the server allows the same)
 
 // ───────────────────────── 2. guided renewals
 const REN_KINDS=new Set(['lic','con','rtu','isub','aexp','war','ver','cert','icert']);
@@ -243,7 +243,7 @@ function openDevice(serial){
   ${dt?fact('DTR-Service',`${esc(dt.d?.state||dt.status||'collegata')}${dt.geDue?' · GE '+dShort(parseDate(dt.geDue)):''}`):''}${it?fact('Ital Retail',`${it.noSub?'senza abbonamento':'abbonamento attivo'}${it.d?.firmware?' · fw '+esc(it.d.firmware):''}`):''}${lic.length?fact('Licenze Zucchetti',lic.map(r=>esc(famLabel(famOfScope(r.scope)))+' '+(parseDate(r.expiry)?dShort(parseDate(r.expiry)):'')).join(', ')):''}${m?.notes?fact('Note Mastro',`<span style="white-space:pre-line">${esc(m.notes)}</span>`):''}</div>
   ${m&&typeof rtSection==='function'?rtSection(m):''}
   <div class="d-section"><h3>Storia <span>${ev.length}</span></h3>${ev.slice(0,80).map(e=>`<div class="dtr-ev"><time>${dShort(e.d)}</time><span${e.cls?` style="color:var(--${e.cls})"`:''}><b>${esc(e.t)}</b>${e.s?' · '+esc(e.s):''}</span></div>`).join('')||'<p class="muted">Nessun evento.</p>'}</div>
-  <div class="btn-row">${c?`<button class="btn" data-open-client="${esc(c.code)}">${icon('users')}Apri cliente</button><button class="btn accent" data-newint="${esc(c.code)}">${icon('plus')}Nuovo intervento</button>`:''}${dt?`<button class="btn ghost" data-dtr="${esc(dt.serial)}">DTR</button>`:''}${it?`<button class="btn ghost" data-ital="${esc(it.serial)}">Ital Retail</button>`:''}</div></div>`;
+  <div class="btn-row">${c?`<button class="btn" data-open-client="${esc(c.code)}">${icon('users')}Apri cliente</button><button class="btn accent" data-newint="${esc(c.code)}">${icon('plus')}Nuovo intervento</button>`:''}${m&&typeof canFlag==='function'&&canFlag()?(state.machineFlags?.[m.id]?.state==='dismessa'?`<button class="btn ghost" data-mflag="" data-mflag-ids="${esc(m.id)}">${icon('sync')}Torna attiva</button>`:m.active?`<button class="btn ghost danger-text" data-mflag="dismessa" data-mflag-ids="${esc(m.id)}">${icon('archive')}Archivia come dismessa</button>`:''):''}${dt?`<button class="btn ghost" data-dtr="${esc(dt.serial)}">DTR</button>`:''}${it?`<button class="btn ghost" data-ital="${esc(it.serial)}">Ital Retail</button>`:''}</div></div>`;
  document.body.append(box);
  const close=()=>{box.classList.add('out');setTimeout(()=>box.remove(),220);document.removeEventListener('keydown',key,true);};
  const key=e=>{if(e.key==='Escape'){e.stopPropagation();e.preventDefault();close();}};document.addEventListener('keydown',key,true);
@@ -266,6 +266,7 @@ document.addEventListener('click',e=>{
   const card=[...document.querySelectorAll('[data-w-city]')].find(b=>b.dataset.wCity===c)?.closest('.route-card');if(card&&y!==undefined)$('#main').scrollBy({top:card.getBoundingClientRect().top-y,behavior:'instant'});return;}
  if('wCheck' in ds){WK.check=ds.wCheck;WK.more.chk=0;return render(false);}
  if('wMore' in ds){WK.more[ds.wMore]=(WK.more[ds.wMore]||0)+(ds.wMore==='route'?12:60);return render(false);}
+ if(('assetNew' in ds||'asset' in ds||'linkDev' in ds||'merge' in ds)&&!canEditClients())return toast('Lo può fare l’amministrazione: tu puoi consultare.','alert');
  if('assetNew' in ds)return openAssetEditor(null,ds.assetNew||'');
  if('asset' in ds)return openAssetEditor(ds.asset);
  if('ren' in ds)return openRenewal(ds.ren);

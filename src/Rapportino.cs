@@ -33,7 +33,7 @@ public sealed partial class Store
   if (hours.Length > 0 && (!decimal.TryParse(hours, NumberStyles.Number, CultureInfo.InvariantCulture, out var h) || h < 0 || h > 200)) throw new InvalidDataException("Ore lavorate non valide.");
   using var c = Open(); using var tx = c.BeginTransaction();
   Intervention i;
-  using (var g = c.CreateCommand()) { g.Transaction = tx; g.CommandText = "SELECT data FROM interventions WHERE id=$i"; g.Parameters.AddWithValue("$i", id);
+  using (var g = c.CreateCommand()) { g.Transaction = tx; g.CommandText = "SELECT data FROM interventions WHERE id=$i AND source<>'deleted'"; g.Parameters.AddWithValue("$i", id);
    i = g.ExecuteScalar() is string s ? JsonSerializer.Deserialize<Intervention>(s)! : throw new InvalidDataException("Intervento non trovato: salvalo prima di farlo firmare."); }
   if (i.Source != "app") throw new InvalidDataException("Gli interventi storici di Mastro non si firmano.");
   if (!string.IsNullOrEmpty(i.SignedAt)) throw new InvalidDataException("Rapportino già firmato.");
@@ -61,7 +61,7 @@ public sealed partial class Store
  {
   using var c = Open(); using var tx = c.BeginTransaction();
   Intervention i;
-  using (var g = c.CreateCommand()) { g.Transaction = tx; g.CommandText = "SELECT data FROM interventions WHERE id=$i"; g.Parameters.AddWithValue("$i", id);
+  using (var g = c.CreateCommand()) { g.Transaction = tx; g.CommandText = "SELECT data FROM interventions WHERE id=$i AND source<>'deleted'"; g.Parameters.AddWithValue("$i", id);
    i = g.ExecuteScalar() is string s ? JsonSerializer.Deserialize<Intervention>(s)! : throw new InvalidDataException("Intervento non trovato."); }
   if (string.IsNullOrEmpty(i.SignedAt)) throw new InvalidDataException("Il rapportino non è firmato.");
   var rec = i with { Signer = "", SignedAt = "", Updated = DateTimeOffset.Now.ToString("O"), UpdatedBy = who };

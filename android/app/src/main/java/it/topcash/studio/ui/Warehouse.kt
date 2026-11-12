@@ -60,6 +60,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import it.topcash.studio.data.AppViewModel
@@ -154,7 +155,7 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
             CardBox(Modifier.appear(0)) {
                 Row(verticalAlignment = Alignment.Bottom) {
                     val shown by androidx.compose.animation.core.animateFloatAsState(x.total.toFloat(), label = "tot")
-                    Text(qty(Math.round(shown * 1000) / 1000.0), style = MaterialTheme.typography.displaySmall.tabular)
+                    androidx.compose.foundation.text.BasicText(qty(Math.round(shown * 1000) / 1000.0), Modifier.weight(1f, fill = false), style = MaterialTheme.typography.displaySmall.tabular.copy(color = MaterialTheme.colorScheme.onSurface), maxLines = 1, softWrap = false, autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 16.sp, maxFontSize = MaterialTheme.typography.displaySmall.fontSize))
                     Text(" ${x.a.unit} in magazzino", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
                 }
                 Text("Valore ${eur(x.value)} · costo medio ${eur(x.cost)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -10,16 +10,17 @@ public sealed record MastroClient(string Code,string Name,string Vat,string TaxC
 public sealed record Machine(string Id,string ClientCode,string Model,string Type,string Serial,string FiscalSerial,string Logo,string Installed,string FirstInstall,
  string Verification,bool Active,bool Subscribed,string ContractStart,string ContractEnd,string Amount,string Branch,string Notes,
  string Service="",string Technician="",string WarrantyEnd="",string Months="",string ContractUntil="");
-/// Technical intervention / ticket. Source "mastro" = history imported from Mastro, "app" = created in Top Cash Studio.
+/// Technical intervention / ticket. Source "mastro" = history imported from Mastro, "app" = created or edited in Top Cash Studio.
+/// Origin "mastro" = imported from Mastro and then edited here: it keeps Mastro's id, and later imports never overwrite it.
 public sealed record Intervention(string Id,string ClientCode,string ClientName,string Date,string Machine,string Title,string Work,string Status,
  string Technician,string Priority,string Total,string Source,string Created,string CreatedBy,string Updated,string UpdatedBy,List<PartUse>? Parts=null,
- string Hours="",string Signer="",string SignedAt="",string ReportNo="",string SentTo="",string SentAt="",string Kind="");
+ string Hours="",string Signer="",string SignedAt="",string ReportNo="",string SentTo="",string SentAt="",string Kind="",string Origin="");
 /// What an import left out because it is of no use (ceased registers, customers with none left and their history).
 public sealed record MastroPruned(int Read, int Clients, int Machines, int Interventions, int Rt);
 public sealed record MastroBatch(List<MastroClient> Clients,List<Machine> Machines,List<Intervention> Interventions,string CapturedAt,string Source,
  List<Invoice>? Invoices=null,List<Due>? Dues=null,List<Balance>? Balances=null,
  List<RtInfo>? Rt=null,List<Site>? Sites=null,List<Riba>? Riba=null,List<SaleRow>? Sales=null,List<LedgerRow>? Ledger=null,
- List<InsUnbilled>? Unbilled=null,List<InsSdi>? Sdi=null);
+ List<InsUnbilled>? Unbilled=null,List<InsSdi>? Sdi=null,List<ClientSale>? ClientSales=null,List<Party>? Agents=null,List<CostChange>? Costs=null);
 /// Last automatic or manual read of Mastro: when, what it brought and the fingerprint of the data (an unchanged read is not re-imported).
 public sealed record MastroSync(string At,string Hash,string Message,bool Ok,string Who="");
 /// Fiscal and technical details of a register from Mastro (firmware, electronic journal, RT activation, lottery, census,
@@ -62,6 +63,8 @@ public sealed partial class Store
  }
  /// Fingerprint of what a Mastro read contains (not when or by whom it was read).
  public static string MastroHash(MastroBatch b)=>Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(b with{CapturedAt="",Source=""})));
+ /// True once an import has left out the ceased data (archives imported by older versions are imported again even if Mastro did not change).
+ public bool MastroClean()=>MastroExtra<MastroPruned>("pruned").Count>0;
  /// Customers the last import read from Mastro (before leaving out the ceased ones): the yardstick for a suspiciously short read.
  public int MastroClientCount(){var p=MastroExtra<MastroPruned>("pruned").FirstOrDefault();if(p!=null)return p.Read;using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT COUNT(*) FROM mastro_clients";return Convert.ToInt32(q.ExecuteScalar());}
  public List<Site> Sites()=>MastroExtra<Site>("sites");
@@ -72,7 +75,7 @@ public sealed partial class Store
  public List<InsSdi> MastroSdi()=>MastroExtra<InsSdi>("sdi");
  public List<MastroClient> MastroClients()=>ReadAll<MastroClient>("SELECT data FROM mastro_clients");
  public List<Machine> Machines()=>ReadAll<Machine>("SELECT data FROM machines");
- public List<Intervention> Interventions()=>ReadAll<Intervention>("SELECT data FROM interventions");
+ public List<Intervention> Interventions()=>ReadAll<Intervention>("SELECT data FROM interventions WHERE source<>'deleted'");
 
  /// Replaces the Mastro snapshot atomically. Interventions created in the app are never touched by an import.
  public string ImportMastro(MastroBatch b,string who)
@@ -106,20 +109,21 @@ public sealed partial class Store
   Exec("DELETE FROM mastro_clients");Exec("DELETE FROM machines");Exec("DELETE FROM interventions WHERE source='mastro'");
   foreach(var m in b.Clients){using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="INSERT INTO mastro_clients VALUES($c,$d)";q.Parameters.AddWithValue("$c",m.Code);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(m));q.ExecuteNonQuery();}
   foreach(var m in (b.Machines??[]).DistinctBy(x=>x.Id)){using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="INSERT INTO machines VALUES($i,$c,$d)";q.Parameters.AddWithValue("$i",m.Id);q.Parameters.AddWithValue("$c",m.ClientCode);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(m));q.ExecuteNonQuery();}
-  foreach(var i in (b.Interventions??[]).DistinctBy(x=>x.Id)){using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="INSERT OR REPLACE INTO interventions VALUES($i,$c,'mastro',$d)";q.Parameters.AddWithValue("$i",i.Id);q.Parameters.AddWithValue("$c",i.ClientCode);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(i with{Source="mastro"}));q.ExecuteNonQuery();}
+  foreach(var i in (b.Interventions??[]).DistinctBy(x=>x.Id)){using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="INSERT INTO interventions VALUES($i,$c,'mastro',$d) ON CONFLICT(id) DO NOTHING";q.Parameters.AddWithValue("$i",i.Id);q.Parameters.AddWithValue("$c",i.ClientCode);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(i with{Source="mastro"}));q.ExecuteNonQuery();}
   var acc=ImportMastroAccounting(c,tx,b.Invoices,b.Dues,b.Balances);
   // optional datasets (older apps do not send them: what is already stored is kept)
   using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="CREATE TABLE IF NOT EXISTS mastro_extra(kind TEXT PRIMARY KEY,data TEXT NOT NULL)";q.ExecuteNonQuery();}
   void Extra(string kind,object? data){if(data==null)return;using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="INSERT INTO mastro_extra VALUES($k,$d) ON CONFLICT(kind) DO UPDATE SET data=$d";q.Parameters.AddWithValue("$k",kind);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(data));q.ExecuteNonQuery();}
   Extra("pruned",new[]{pruned??new(read,0,0,0,0)});
-  Extra("rt",b.Rt);Extra("sites",b.Sites);Extra("riba",b.Riba);Extra("sales",b.Sales);Extra("ledger",b.Ledger);Extra("unbilled",b.Unbilled);Extra("sdi",b.Sdi);
+  Extra("rt",b.Rt);Extra("sites",b.Sites);Extra("riba",b.Riba);Extra("sales",b.Sales);Extra("ledger",b.Ledger);Extra("unbilled",b.Unbilled);Extra("sdi",b.Sdi);Extra("clientsales",b.ClientSales);Extra("agents",b.Agents);Extra("costs",b.Costs);
   var msg=$"Importazione MastroSQL ({who}): {b.Clients.Count} clienti · {b.Machines?.Count??0} macchine · {b.Interventions?.Count??0} interventi storici"+(b.Rt!=null?$" · {b.Rt.Sum(r=>r.VerificationCount)} verifiche periodiche":"")+(b.Sites!=null?$" · {b.Sites.Count} sedi":"")+(b.Invoices!=null?$" · {acc[0]} fatture":"")+(b.Dues!=null?$" · {acc[1]} scadenze":"")+"."
    +(pruned is {Clients:>0}or{Machines:>0}?$" Lasciati fuori perché cessati: {pruned.Clients} clienti, {pruned.Machines} macchine, {pruned.Interventions} interventi.":"");
   using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="INSERT INTO events(time,kind,message) VALUES($t,'import',$m)";q.Parameters.AddWithValue("$t",DateTimeOffset.Now.ToString("O"));q.Parameters.AddWithValue("$m",msg);q.ExecuteNonQuery();}
   Extra("auto",new[]{new MastroSync(DateTimeOffset.Now.ToString("O"),MastroHash(b),msg,true,who)});
   tx.Commit();return msg;
  }
- /// Creates or updates an intervention made in the app (validated; history imported from Mastro is read-only).
+ /// Creates or updates an intervention (validated). One imported from Mastro becomes the app's own copy (same id, Origin "mastro"):
+ /// what is changed here is never overwritten by the next Mastro read (the import skips ids that already exist).
  public Intervention SaveIntervention(Intervention i,string who)
  {
   if(i==null)throw new InvalidDataException("Intervento mancante.");
@@ -141,11 +145,10 @@ public sealed partial class Store
    ex.Parameters.AddWithValue("$c",i.ClientCode);if(Convert.ToInt64(ex.ExecuteScalar())==0)throw new InvalidDataException("Cliente non trovato nell'archivio.");
   }
   Intervention? old=null;
-  if(!string.IsNullOrEmpty(i.Id)){using var g=c.CreateCommand();g.CommandText="SELECT data FROM interventions WHERE id=$i";g.Parameters.AddWithValue("$i",i.Id);if(g.ExecuteScalar() is string s)old=JsonSerializer.Deserialize<Intervention>(s);}
-  if(old?.Source=="mastro")throw new InvalidDataException("Gli interventi storici importati da Mastro non si modificano qui.");
+  if(!string.IsNullOrEmpty(i.Id)){using var g=c.CreateCommand();g.CommandText="SELECT data FROM interventions WHERE id=$i AND source<>'deleted'";g.Parameters.AddWithValue("$i",i.Id);if(g.ExecuteScalar() is string s)old=JsonSerializer.Deserialize<Intervention>(s);}
   if(!string.IsNullOrEmpty(old?.SignedAt))throw new InvalidDataException("Rapportino già firmato dal cliente: per modificarlo l'ufficio deve prima annullare la firma.");
   if(i.Hours is {Length:>0} h&&(!decimal.TryParse(h.Replace(',','.'),System.Globalization.NumberStyles.Number,System.Globalization.CultureInfo.InvariantCulture,out var hv)||hv<0||hv>200))throw new InvalidDataException("Ore lavorate non valide.");
-  var rec=i with{Id=old?.Id??("app-"+Guid.NewGuid().ToString("N")[..12]),Source="app",Created=old?.Created??now,CreatedBy=old?.CreatedBy??who,Updated=now,UpdatedBy=who,
+  var rec=i with{Id=old?.Id??("app-"+Guid.NewGuid().ToString("N")[..12]),Source="app",Origin=old?.Source=="mastro"?"mastro":old?.Origin??"",Kind=i.Kind??old?.Kind??"",Created=old?.Created??now,CreatedBy=old?.CreatedBy??who,Updated=now,UpdatedBy=who,
    Work=i.Work??"",Technician=(i.Technician??"").Trim(),Machine=i.Machine??"",Total=i.Total??"",ClientName=i.ClientName??"",
    Hours=(i.Hours??"").Replace(',','.'),Signer=old?.Signer??"",SignedAt=old?.SignedAt??"",ReportNo=old?.ReportNo??"",SentTo=old?.SentTo??"",SentAt=old?.SentAt??""}; // signature fields only change via SignIntervention
   rec=rec with{Parts=(i.Parts??[]).Where(p=>p!=null&&!string.IsNullOrWhiteSpace(p.Article)&&p.Qty>0).Select(p=>p with{Article=p.Article.Trim(),Warehouse=p.Warehouse??"",Serial=p.Serial??""}).ToList()};
@@ -153,7 +156,7 @@ public sealed partial class Store
   rec=rec with{Parts=rec.Parts.Select(p=>p.Warehouse.Length==0?p with{Warehouse="sede"}:p).ToList()};   // one warehouse
   // intervention + its spare-part unloads in one transaction
   using var tx=c.BeginTransaction();
-  using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="INSERT INTO interventions VALUES($i,$c,'app',$d) ON CONFLICT(id) DO UPDATE SET client=$c,data=$d";
+  using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="INSERT INTO interventions VALUES($i,$c,'app',$d) ON CONFLICT(id) DO UPDATE SET client=$c,source='app',data=$d";
    q.Parameters.AddWithValue("$i",rec.Id);q.Parameters.AddWithValue("$c",rec.ClientCode);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(rec));q.ExecuteNonQuery();}
   SyncInterventionParts(c,tx,rec,who);
   tx.Commit();
@@ -162,8 +165,10 @@ public sealed partial class Store
  public void DeleteIntervention(string id)
  {
   using var c=Open();using var tx=c.BeginTransaction();
-  using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="DELETE FROM interventions WHERE id=$i AND source='app'";q.Parameters.AddWithValue("$i",id);
-   if(q.ExecuteNonQuery()==0)throw new InvalidDataException("Intervento non trovato o non eliminabile.");}
+  // one created here goes away; one that came from Mastro stays as a "deleted" marker, so the next import does not bring it back
+  using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="DELETE FROM interventions WHERE id=$i AND source='app' AND id LIKE 'app-%'";q.Parameters.AddWithValue("$i",id);
+   if(q.ExecuteNonQuery()==0){using var h=c.CreateCommand();h.Transaction=tx;h.CommandText="UPDATE interventions SET source='deleted' WHERE id=$i AND source IN('app','mastro')";h.Parameters.AddWithValue("$i",id);
+    if(h.ExecuteNonQuery()==0)throw new InvalidDataException("Intervento non trovato o non eliminabile.");}}
   // spare parts go back to their location
   using(var m=c.CreateCommand()){m.Transaction=tx;m.CommandText="DELETE FROM movements WHERE intervention=$i AND type='intervento'";m.Parameters.AddWithValue("$i",id);m.ExecuteNonQuery();}
   // its photos go with it

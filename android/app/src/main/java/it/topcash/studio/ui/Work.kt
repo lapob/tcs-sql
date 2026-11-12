@@ -86,6 +86,7 @@ private fun renTone(s: String) = when (s) { "Rinnovato" -> Tone.Ok; "Perso" -> T
 
 // ───────────────────────── PC e sistemi
 @Composable fun InventoryScreen(vm: AppViewModel, a: Archive, nav: NavHostController) {
+    val canEdit = vm.me.collectAsStateWithLifecycle().value?.canEdit == true
     var tab by rememberSaveable { mutableStateOf("Tutto") }
     var q by rememberSaveable { mutableStateOf("") }
     var editing by remember { mutableStateOf<UAsset?>(null) }; var creating by rememberSaveable { mutableStateOf(false) }
@@ -98,15 +99,15 @@ private fun renTone(s: String) = when (s) { "Rinnovato" -> Tone.Ok; "Perso" -> T
             .filter { n.isEmpty() || it.search.contains(n) }.sortedWith(compareBy({ it.clientName.lowercase() }, { it.a.name.lowercase() }))
     }
     Page(vm, "PC e sistemi", "${a.assets.count { it.a.active }} in uso · ${a.assetsDue.size} garanzie o scadenze vicine", onBack = { nav.popBackStack() },
-        fab = { FloatingActionButton({ creating = true }) { Icon(Icons.Rounded.Add, "Aggiungi") } }) {
+        fab = { if (canEdit) FloatingActionButton({ creating = true }) { Icon(Icons.Rounded.Add, "Aggiungi") } }) {
         item(key = "search") { SearchField(q, { q = it }, "Cerca cliente, modello, matricola, IP") }
         item(key = "tabs") { ChoiceChips(tabs, tab, { tab = it }, Modifier.padding(vertical = 10.dp)) }
         if (list.isEmpty()) item(key = "empty") { Empty(Icons.Rounded.Computer, if (a.assets.isEmpty()) "Inventario vuoto" else "Nessun elemento", if (a.assets.isEmpty()) "Tocca + per aggiungere PC, stampanti e apparati dei clienti. Le password non si salvano qui." else "Cambia filtro o ricerca.") }
-        items(list.size, key = { list[it].a.id }) { i -> AssetCard(list[i], Modifier.padding(bottom = 8.dp).animateItem(), showClient = true) { editing = list[i] } }
+        items(list.size, key = { list[it].a.id }) { i -> AssetCard(list[i], Modifier.padding(bottom = 8.dp).animateItem(), showClient = true, onClick = if (canEdit) ({ editing = list[i] }) else null) }
     }
 }
 
-@Composable fun AssetCard(x: UAsset, modifier: Modifier = Modifier, showClient: Boolean = true, onClick: () -> Unit) {
+@Composable fun AssetCard(x: UAsset, modifier: Modifier = Modifier, showClient: Boolean = true, onClick: (() -> Unit)?) {
     CardBox(modifier, onClick = onClick, padding = androidx.compose.foundation.layout.PaddingValues(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -201,12 +202,13 @@ private fun renTone(s: String) = when (s) { "Rinnovato" -> Tone.Ok; "Perso" -> T
 
 /** Section in the customer's sheet. */
 @Composable fun ClientAssets(vm: AppViewModel, a: Archive, c: UClient) {
+    val canEdit = vm.me.collectAsStateWithLifecycle().value?.canEdit == true
     var editing by remember { mutableStateOf<UAsset?>(null) }; var creating by remember { mutableStateOf(false) }
     editing?.let { x -> AssetSheet(vm, a, x.a, c, fixedClient = true) { editing = null } }
     if (creating) AssetSheet(vm, a, null, c, fixedClient = true) { creating = false }
-    SectionTitle("PC e sistemi${if (c.assets.isNotEmpty()) " (${c.assets.size})" else ""}") { TextButton({ creating = true }) { Icon(Icons.Rounded.Add, null, Modifier.size(18.dp)); Text("Aggiungi", Modifier.padding(start = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) } }
+    SectionTitle("PC e sistemi${if (c.assets.isNotEmpty()) " (${c.assets.size})" else ""}") { if (canEdit) TextButton({ creating = true }) { Icon(Icons.Rounded.Add, null, Modifier.size(18.dp)); Text("Aggiungi", Modifier.padding(start = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) } }
     if (c.assets.isEmpty()) Text("Nessun PC, stampante o apparato registrato.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
-    c.assets.forEach { x -> AssetCard(x, Modifier.padding(bottom = 8.dp), showClient = false) { editing = x } }
+    c.assets.forEach { x -> AssetCard(x, Modifier.padding(bottom = 8.dp), showClient = false, onClick = if (canEdit) ({ editing = x }) else null) }
 }
 
 // ───────────────────────── Rinnovi

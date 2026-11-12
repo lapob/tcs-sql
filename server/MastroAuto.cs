@@ -21,7 +21,7 @@ public static class MastroAuto
   {
    var (batch,_)=await MastroReader.Read(cfg);
    var hash=Store.MastroHash(batch);
-   if(last!=null&&last.Hash==hash){store.SaveMastroSync(last with{At=DateTimeOffset.Now.ToString("O"),Ok=true,Who=who});hub.Changed();lastError="";return;}
+   if(last!=null&&last.Hash==hash&&store.MastroClean()){store.SaveMastroSync(last with{At=DateTimeOffset.Now.ToString("O"),Ok=true,Who=who});hub.Changed();lastError="";return;}
    var have=store.MastroClientCount();
    if(have>100&&batch.Clients.Count<have*0.8)
    {

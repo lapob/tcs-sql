@@ -192,15 +192,15 @@ main{flex:1;overflow:auto;padding:76px 36px 72px 16px;scroll-behavior:smooth;out
 .card-head p,.card .sub{color:var(--text-3);font-size:13px;margin-top:3px}
 .grid{display:grid;gap:16px}
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px}
-.kpi{position:relative;overflow:hidden;cursor:pointer;transition:transform .5s var(--spring),box-shadow .3s;isolation:isolate}
+.kpi{position:relative;overflow:hidden;transition:transform .5s var(--spring),box-shadow .3s;isolation:isolate}
 .kpi>*{position:relative;z-index:1}
-.kpi:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg)}
+@media (hover:hover){.kpi:is([data-go],[data-acc-tab],[data-w-check]):hover{transform:translateY(-3px);box-shadow:var(--shadow-lg)}}
 .kpi-top{display:flex;align-items:center;justify-content:space-between;color:var(--text-2);font-size:13px;font-weight:500}
 .kpi-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:11px;background:var(--tone-soft,var(--accent-soft));color:var(--tone,var(--accent))}
 .kpi-value{font:650 34px/1 var(--font-display);letter-spacing:-.04em;margin:18px 0 8px;font-variant-numeric:tabular-nums}
 .kpi-note{font-size:12.5px;color:var(--text-3)}
 .kpi::after{content:"";position:absolute;right:-40px;bottom:-60px;width:150px;height:150px;border-radius:50%;background:radial-gradient(var(--tone-soft,var(--accent-soft)),transparent 70%);transition:transform .8s var(--spring)}
-.kpi:hover::after{transform:scale(1.4)}
+@media (hover:hover){.kpi:is([data-go],[data-acc-tab],[data-w-check]):hover::after{transform:scale(1.4)}}
 .t-ok{--tone:var(--ok);--tone-soft:var(--ok-soft)}.t-due{--tone:var(--due);--tone-soft:var(--due-soft)}.t-bad{--tone:var(--bad);--tone-soft:var(--bad-soft)}.t-info{--tone:var(--info);--tone-soft:var(--info-soft)}
 .layout-2{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;align-items:start}
 .layout-half{display:grid;grid-template-columns:1fr 1fr;gap:16px}
@@ -231,8 +231,7 @@ th.sortable{cursor:pointer;user-select:none}th.sortable:hover{color:var(--text)}
 th .arrow{display:inline-block;margin-left:4px;opacity:.8}
 td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
 tbody tr{transition:background .18s}
-tbody tr[data-client]{cursor:pointer}
-tbody tr:hover{background:var(--surface-2)}
+tbody tr:is([data-client],[data-int],[data-dtr],[data-ital],[data-rch],[data-due],[data-device],[data-acc-client],[data-asset]):hover{background:var(--surface-2)}
 tbody tr:hover .row-go{opacity:1;transform:none}
 tbody tr:last-child td{border-bottom:0}
 .row-go{opacity:0;transform:translateX(-6px);transition:.35s var(--spring);color:var(--text-3)}
@@ -287,8 +286,8 @@ tbody tr:last-child td{border-bottom:0}
 @keyframes growx{from{transform:scaleX(0)}}
 
 /* Lists */
-.list-row{display:flex;align-items:center;gap:12px;padding:10px 8px;margin:0 -8px;border-radius:12px;cursor:pointer;transition:background .2s}
-.list-row:hover{background:var(--surface-2)}
+.list-row{display:flex;align-items:center;gap:12px;padding:10px 8px;margin:0 -8px;border-radius:12px;transition:background .2s}
+.list-row:is(.pressable,[role=button],[data-client],[data-int],[data-dtr],[data-ital],[data-rch],[data-due],[data-device],[data-asset],[data-go],[data-edit-client],[data-acc-client],[data-open-client],[data-ren],[data-art]):hover{background:var(--surface-2)}
 .list-row .grow{flex:1;min-width:0}
 .list-row strong{display:block;font-weight:570;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .list-row small{color:var(--text-3);font-size:12px}
@@ -455,6 +454,7 @@ main{view-transition-name:main-content}
 :root:not([data-mode="web"]) .web-only{display:none!important}
 :root:not([data-role="admin"]) .need-admin{display:none!important}
 :root[data-role="tecnico"] .need-acc{display:none!important}
+:root[data-role="tecnico"] .need-edit{display:none!important}
 /* roles */
 .roles-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:12px}
 .role-card{display:flex;gap:12px;align-items:flex-start;padding:14px;border-radius:var(--r);background:var(--surface);border:1px solid var(--line);box-shadow:0 1px 2px rgba(16,24,40,.04),0 6px 18px -10px rgba(16,24,40,.12);transition:transform .35s var(--spring),box-shadow .3s var(--ease)}
@@ -1415,10 +1415,60 @@ html.sal-vt::view-transition-new(root){animation:sal-new .32s cubic-bezier(.2,.8
 .ins-body .toolbar .seg{flex:1 1 auto}
 @media (max-width:1100px){.ins-tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:760px){
- .ins-tiles{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -16px 14px;padding:2px 16px 6px;scrollbar-width:none}
+ .ins-tiles{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -14px 14px;padding:2px 14px 6px;scrollbar-width:none;scroll-padding-inline:14px;overscroll-behavior-x:contain}
  .ins-tiles::-webkit-scrollbar{display:none}
  .ins-tile{flex:0 0 62%;scroll-snap-align:start}
  .ins-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.ins-strip .ins-mini:last-child{grid-column:span 2}
  .ins-amt{min-width:0}.ins-row .badge{display:none}.ins-amt .m-only{display:block;color:var(--due)}
 }
 @media (prefers-reduced-motion:reduce){.ins-tile{animation:none}}
+/* Analisi: seven tiles, the cash forecast as paired weekly bars */
+.ana-tiles{grid-template-columns:repeat(auto-fit,minmax(186px,1fr))}.ana-tiles .ins-tile strong{font-size:24px}
+.ana-tr{font-weight:640}.ana-tr.up{color:var(--ok)}.ana-tr.down{color:var(--bad)}
+.ana-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:4px 0 16px}
+.ana-kpi{padding:12px 14px;border-radius:16px;background:color-mix(in srgb,var(--text) 4%,transparent);display:grid;gap:2px}
+.ana-kpi small{font-size:12px;color:var(--text-3)}.ana-kpi strong{font:650 22px/1.1 var(--font-display);font-variant-numeric:tabular-nums}
+.ana-kpi.t-ok strong{color:var(--ok)}.ana-kpi.t-bad strong{color:var(--bad)}
+.ana-weeks{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:6px;align-items:end}
+.ana-week{display:grid;gap:4px;justify-items:center;min-width:0;cursor:default}
+.ana-bars{height:150px;width:100%;display:flex;gap:3px;align-items:flex-end;justify-content:center}
+.ana-bars i{display:block;width:42%;max-width:18px;height:max(2px,var(--h));border-radius:6px 6px 3px 3px;transform-origin:bottom;animation:ana-grow .6s var(--spring) both;animation-delay:calc(var(--i)*35ms)}
+.ana-bars .in,.ana-legend .in{background:var(--ok)}.ana-bars .out,.ana-legend .out{background:color-mix(in srgb,var(--bad) 75%,transparent)}
+.ana-week small{font-size:11px;color:var(--text-3);white-space:nowrap}.ana-week b{font-size:11px;font-weight:620;font-variant-numeric:tabular-nums;color:var(--ok);white-space:nowrap}.ana-week b.neg{color:var(--bad)}
+.ana-legend{display:flex;gap:8px;align-items:center;margin-top:12px}.ana-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-left:8px}
+@keyframes ana-grow{from{transform:scaleY(0)}}
+[data-perf="lite"] .ana-bars i{animation:none}
+@media (max-width:760px){
+ .ana-kpis{grid-template-columns:1fr 1fr 1fr;gap:6px}.ana-kpi strong{font-size:16px}
+ .ana-weeks{overflow-x:auto;grid-template-columns:repeat(13,46px);scrollbar-width:none;padding-bottom:4px}
+ .ana-bars{height:110px}
+}
+@media (prefers-reduced-motion:reduce){.ana-bars i{animation:none}}
+
+/* ── Pressable: one rule for the whole app. Whatever reacts to a click shows the hand, nothing else does.
+   Zero specificity (:where) so a component can still opt out (e.g. .off), disabled shows "not allowed". */
+:where(button,a[href],summary,select,label[for],label:has(>input[type=checkbox],>input[type=radio]),input:is([type=checkbox],[type=radio],[type=file],[type=range],[type=color],[type=submit],[type=button]),
+ [role=button],[role=tab],[role=option],[role=menuitem],[role=menuitemradio],[role=switch],[role=link],.pressable,
+ [data-go],[data-page],[data-client],[data-int],[data-device],[data-asset],[data-asset-new],[data-dtr],[data-ital],[data-rch],[data-due],[data-acc-tab],[data-acc-client],[data-acc-m],[data-w-check],[data-open-client],[data-edit-client],[data-sort],[data-photo-open],[data-mbrand],[data-mbrand-go],[data-mmodel],[data-art],[data-ren],[data-link-dev],[data-newint],[data-cmd],[data-qm],[data-more],[data-lb],[data-d],[data-m],[data-x],[data-close],[data-ctab],[data-dtab],[data-rtab],[data-wtab],[data-itab],[data-intab],[data-ins-tab],[data-ins-opp],[data-ana-tab],[data-ana-abc],[data-ana-disc],[data-ana-mach],[data-sal-p],[data-sal-fam],[data-sal-prod],[data-sal-buy],[data-msel],[data-msel-all],[data-mstale],[data-mflag],[data-role-pick],[data-role-set],[data-area-go]):not(:disabled,[aria-disabled="true"],.off,[data-stop]){cursor:pointer;touch-action:manipulation}
+/* labels of buttons and tabs are not text to select (a double click would highlight them); rows stay copyable */
+:where(button,[role=tab],summary,.seg>*){-webkit-user-select:none;user-select:none}
+:where(button,input,select,textarea,[role=button],[role=tab],[role=option]):is(:disabled,[aria-disabled="true"]){cursor:not-allowed}
+:where(button,[role=button],[role=tab]):is(:disabled,[aria-disabled="true"]) *{pointer-events:none}
+
+/* ── Fluid figures: every big number sizes itself on the box it lives in (container queries), so 1.234.567,89 € never
+   spills out or gets cut, on a 4K screen as on a small phone. Long words wrap instead of pushing the layout wider. */
+.kpi,.ins-tile,.ana-kpi,.sal-fam{container-type:inline-size}
+.kpi-value{font-size:clamp(20px,14cqi,34px)}
+.ins-tile strong{font-size:clamp(18px,12cqi,30px)}
+.ana-tiles .ins-tile strong{font-size:clamp(18px,11.5cqi,26px)}
+.ana-kpi strong{font-size:clamp(13px,12cqi,22px)}
+.sal-qty{font-size:clamp(17px,13cqi,28px)}
+.sal-fam.svc .sal-qty{font-size:clamp(15px,10.5cqi,22px)}
+.kpi-value,.ins-tile strong,.ana-kpi strong,.sal-qty{min-width:0;overflow-wrap:anywhere}
+.ins-tile small,.kpi-top>span:first-child{white-space:normal;text-overflow:clip;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
+#main,.modal-box{overflow-wrap:break-word}
+.hero h1{font-size:clamp(25px,2.2vw + 14px,34px);text-wrap:balance}
+.hero p,.card .sub,.explain p{text-wrap:pretty}
+.card h2,.d-section h3{text-wrap:balance}
+@media (max-width:760px){.list-row .grow>strong{white-space:normal;text-overflow:clip;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}}
+.lan-row code{overflow-wrap:anywhere}

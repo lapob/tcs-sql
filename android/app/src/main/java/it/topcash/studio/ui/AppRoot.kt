@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material.icons.rounded.Route
+import androidx.compose.material.icons.rounded.PointOfSale
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.MoreHoriz
@@ -112,7 +114,7 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
 // the accounting area (like Mastro's Contabilità): its own four pages in the bottom bar
 private val accTabs = listOf(Tab("acc", "Riepilogo", Icons.Rounded.Insights), Tab("accSal", "Vendite", Icons.Rounded.ShoppingBag), Tab("accRec", "Incassi", Icons.Rounded.Payments),
     Tab("accInv", "Fatture", Icons.AutoMirrored.Rounded.ReceiptLong), Tab("more", "Altro", Icons.Rounded.MoreHoriz))
-private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay", "accOpp")
+private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay", "accOpp", "accAna")
 
 @Composable fun MainScreen(vm: AppViewModel) {
     val nav = rememberNavController()
@@ -151,7 +153,13 @@ private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay", "ac
         if (route in accRoutes) area = "acc" else if (route in tabRoutes && route != "more") area = "ops"
         if (route in tabRoutes && route != "more") lastOf[area] = route
     }
-    val tabs = remember(admin, area) { if (area == "acc") accTabs else if (admin) allTabs else allTabs.filter { it.route != "warehouse" } }
+    // the bottom bar follows how each role works (same choice as the website): technicians their round, office the registers
+    val role = me?.role.orEmpty()
+    val tabs = remember(admin, area, role) { if (area == "acc") accTabs else when {
+        admin -> allTabs
+        role == "tecnico" -> listOf(allTabs[0], allTabs[2], Tab("route", "Giro", androidx.compose.material.icons.Icons.Rounded.Route), allTabs[1], allTabs[4])
+        else -> listOf(allTabs[0], allTabs[1], allTabs[2], Tab("machines", "Casse", androidx.compose.material.icons.Icons.Rounded.PointOfSale), allTabs[4])
+    } }
     val topLevel = tabs.any { it.route == route }
     val areaSwitch: (@Composable () -> Unit)? = if (!seesAcc) null else ({ AreaSwitch(area) { a -> if (a != area) { area = a; nav.switchTab(lastOf[a] ?: if (a == "acc") "acc" else "home") } } })
 
@@ -223,6 +231,7 @@ private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay", "ac
                     screen("accounting") { if (seesAcc) AccountingScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("accSal") { if (seesAcc) SalesScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("accOpp") { if (seesAcc) InsightsScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
+                    screen("accAna") { if (seesAcc) AnalysisScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     AccView.entries.forEach { v -> screen(v.route) { if (seesAcc) AccountingScreen(vm, it, nav, v, topLevel = v.route in accTabRoutes) else LaunchedEffect(Unit) { nav.switchTab("home") } } }
                     screen("licenses") { LicensesScreen(vm, it, nav) }
                     screen("orders") { OrdersScreen(it, nav) }
