@@ -1248,3 +1248,34 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}
 /* every kind label as wide as the longest ("DGFE quasi pieno"): names start on the same line in every stop */
 .list-row.route-stop>.badge{flex:none;min-width:126px;box-sizing:border-box}
 @media (max-width:600px){.list-row.route-stop>.badge{min-width:0}}
+/* ───────── update: soft card bottom right + quiet entry at the foot of the sidebar */
+.upd-banner{overflow:hidden;padding:14px 14px 16px;gap:14px;border:1px solid color-mix(in srgb,var(--accent) 18%,var(--line));
+ background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 7%,var(--surface)),var(--surface) 60%);backdrop-filter:blur(18px) saturate(1.4)}
+.upd-banner strong{font-size:14px;letter-spacing:-.01em;transition:color .3s var(--soft)}
+.upd-banner small{font-variant-numeric:tabular-nums}
+.upd-banner .upd-err{font-size:12px}
+.upd-banner .upd-orb{background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 55%,#8b5cf6));color:#fff;box-shadow:0 6px 18px color-mix(in srgb,var(--accent) 35%,transparent);animation:updglow 2.8s ease-in-out infinite}
+.upd-banner.busy .upd-orb{animation:updglow 1.2s ease-in-out infinite}
+@keyframes updglow{50%{box-shadow:0 6px 26px color-mix(in srgb,var(--accent) 60%,transparent);transform:translateY(-1px) scale(1.04)}}
+.upd-banner .upd-go{min-width:104px;justify-content:center;gap:8px;font-variant-numeric:tabular-nums;transition:min-width .35s var(--soft),background .3s var(--soft),transform .2s var(--soft)}
+.upd-banner .upd-go:not(:disabled):hover{transform:translateY(-1px)}
+.upd-banner .upd-go:disabled{opacity:1;cursor:default}
+.upd-banner .upd-line{position:absolute;left:0;right:0;bottom:0;height:3px;background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.upd-banner .upd-line i{display:block;height:100%;transform-origin:left;transform:scaleX(0);background:linear-gradient(90deg,var(--accent),color-mix(in srgb,var(--accent) 50%,#8b5cf6));border-radius:0 3px 3px 0;transition:transform .5s var(--soft)}
+.upd-banner.done .upd-line i{background:var(--ok)}
+.side-update{position:relative;display:flex;align-items:center;gap:10px;width:100%;margin:0 0 8px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:14px;
+ background:color-mix(in srgb,var(--accent) 9%,transparent);color:var(--text);text-align:left;cursor:pointer;overflow:hidden;font:inherit;
+ transition:background .25s var(--soft),transform .25s var(--soft),border-color .25s var(--soft)}
+.side-update:hover{background:color-mix(in srgb,var(--accent) 15%,transparent);transform:translateY(-1px)}
+.side-update:active{transform:scale(.98)}
+.side-update.in{animation:panelin .45s var(--soft) both}
+.side-update.out{animation:panelout .24s var(--soft-in) both}
+.side-update .su-dot{width:9px;height:9px;border-radius:50%;background:var(--accent);flex:none;box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 55%,transparent);animation:supulse 2.2s ease-out infinite}
+@keyframes supulse{70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.side-update .su-txt{display:flex;flex-direction:column;min-width:0;line-height:1.25}
+.side-update strong{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.side-update small{font-size:11.5px;color:var(--text-3)}
+.side-update .su-bar{position:absolute;left:0;right:0;bottom:0;height:2px}
+.side-update .su-bar i{display:block;height:100%;transform-origin:left;background:var(--accent);transition:transform .5s var(--soft)}
+@media (max-width:900px) and (min-width:761px){.side-update .su-txt{display:none}.side-update{justify-content:center;padding:12px}}
+@media (prefers-reduced-motion:reduce){.upd-banner .upd-orb,.side-update .su-dot{animation:none}}

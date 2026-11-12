@@ -286,6 +286,7 @@ Come MastroSQL è diviso in Mastro e Contabilità, Top Cash Studio ha due aree. 
 - Ogni area ricorda l'ultima pagina aperta. Passando da un'area all'altra cambiano il menu e la barra in basso, con un solo movimento morbido.
 - I tecnici vedono solo Interventi: per loro il selettore non compare.
 - Su telefono il pannello **Altro** del sito è diviso nelle stesse sezioni del menu: Lavoro, Registratori di cassa, Zucchetti, Ufficio e Sistema (in Contabilità: Contabilità e Sistema). Nell'app Android il selettore delle aree è compatto: l'area attiva mostra icona e nome, l'altra solo l'icona.
+- **Aggiornare Studio per Windows**: quando esce una nuova versione compare una scheda in basso a destra («Nuova versione …») e una voce in fondo alla barra laterale. Premi **Aggiorna**: Studio la scarica (vedi la percentuale), si chiude, si installa e si riapre da solo. «Più tardi» nasconde la scheda; la voce nella barra resta finché non aggiorni. Il PC con i dati (senza server in mezzo) la prende dalla cartella `dataggiornamenti`, gli altri dal server; il controllo è ogni 30 minuti. La postazione di sincronizzazione si aggiorna da sola di notte.
 - Dopo un aggiornamento del server il sito si aggiorna da solo su tutti i dispositivi, anche dietro tcsql.it: non serve svuotare la cache. Se hai un modulo aperto, la pagina si ricarica solo quando torni a guardarla.
 
 ## Cosa arriva da MastroSQL (sola lettura)

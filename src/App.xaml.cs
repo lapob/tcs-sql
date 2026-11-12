@@ -14,7 +14,7 @@ public partial class App : Application
   if(e.Args.FirstOrDefault(a=>a.StartsWith("--aggiorna="))is string up)
   {
    var log=Path.Combine(Paths.Runtime("update"),"aggiorna.txt");
-   try{var v=Task.Run(()=>Updater.Check(up[11..])).GetAwaiter().GetResult();var ok=v!=null&&Updater.Apply(false,false);File.WriteAllText(log,ok?$"INSTALLO {v}":$"AGGIORNATO {Updater.CurrentText}");Shutdown(0);}
+   try{var v=Task.Run(async()=>{var o=await Updater.Find(up[11..],"");return o==null?null:await Updater.Download(o);}).GetAwaiter().GetResult();var ok=v!=null&&Updater.Apply(false,false);File.WriteAllText(log,ok?$"INSTALLO {v}":$"AGGIORNATO {Updater.CurrentText}");Shutdown(0);}
    catch(Exception ex){File.WriteAllText(log,"ERRORE "+ex.Message);Shutdown(1);}
    return;
   }

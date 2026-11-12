@@ -1,7 +1,6 @@
 'use strict';
 // ───────────────────────── app updates over the network
-// The administrator uploads the Windows zip and the APK once (Impostazioni → Aggiornamenti dell'app);
-// every PC working with the server downloads it and installs it on close, every phone is offered the new APK.
+// A release (or the administrator's upload) reaches every PC and phone: each one shows the new version and updates with one tap.
 let UPD={info:null,host:null,busy:'',loaded:false,serverVersion:''};
 function updLoad(force){
  if(!WEB||(UPD.loaded&&!force))return;UPD.loaded=true;
@@ -17,11 +16,11 @@ function relDate(iso){const d=new Date(iso);if(isNaN(d))return'';const days=Math
 function updateCard(i){
  updLoad();const h=UPD.host,inf=UPD.info||{};
  const mine=h?.current||'';
- const hostPart=host?`<div class="upd-me ${h?.ready?'ready':''}">
-   <div class="grow"><strong>Questo PC</strong><small class="muted">${mine?'Versione '+esc(mine):''}${h?.ready?` · pronta la <b>${esc(h.ready)}</b>`:h?.serverMode===false?' · aggiornamenti in rete solo collegati al server':''}${h?.error?` · <span class="danger-text">${esc(h.error)}</span>`:''}</small></div>
-   ${h?.ready?`<button class="btn accent sm" data-host-update="apply">${icon('sync')}Riavvia e aggiorna</button>`:`<button class="btn sm ghost" data-host-update="check">${icon('sync')}Controlla ora</button>`}</div>`:'';
+ const hostPart=host?`<div class="upd-me ${h?.available||h?.ready?'ready':''}">
+   <div class="grow"><strong>Questo PC</strong><small class="muted">${mine?'Versione '+esc(mine):''}${h?.available?` · disponibile la <b>${esc(h.available)}</b>`:h?.ready?` · pronta la <b>${esc(h.ready)}</b>`:' · è l’ultima versione'}${h?.error?` · <span class="danger-text">${esc(h.error)}</span>`:''}</small></div>
+   ${h?.available||h?.ready?`<button class="btn accent sm" data-host-update="apply" ${h?.progress!=null?'disabled':''}>${icon('sync')}${h?.progress!=null?`Scarico ${Math.round(h.progress*100)}%`:'Aggiorna e riavvia'}</button>`:`<button class="btn sm ghost" data-host-update="check">${icon('sync')}Controlla ora</button>`}</div>`:'';
  if(!WEB&&!host)return'';
- return`<div class="card reveal" style="--i:${i}"><h2>Aggiornamenti dell'app</h2><p class="sub">${isAdmin()&&WEB?'Carica qui il file della nuova versione: i PC collegati al server la scaricano da soli e la installano alla chiusura (la postazione di sincronizzazione di notte), i telefoni la propongono all’apertura.':'Le nuove versioni pubblicate dall’amministratore arrivano da sole.'}</p>
+ return`<div class="card reveal" style="--i:${i}"><h2>Aggiornamenti dell'app</h2><p class="sub">${isAdmin()&&WEB?'Carica qui il file della nuova versione: ogni PC e ogni telefono la mostra e si aggiorna con un tocco (la postazione di sincronizzazione da sola, di notte).':'Quando esce una nuova versione compare qui e in basso a sinistra: un tocco la scarica e riavvia Studio.'}</p>
   ${hostPart}${WEB?`<div class="upd-list">${updBuildLine('Studio per Windows',inf.windows,'windows')}${updBuildLine('App Android',inf.android,'android')}</div>`:''}
   ${UPD.serverVersion?`<small class="muted">Server versione ${esc(UPD.serverVersion)}</small>`:''}</div>`;
 }
@@ -41,16 +40,43 @@ async function updUpload(kind,file){
 }
 document.addEventListener('change',e=>{const f=e.target.closest?.('[data-upd-file]');if(f&&f.files?.[0]){updUpload(f.dataset.updFile,f.files[0]);f.value='';}});
 document.addEventListener('click',e=>{const b=e.target.closest?.('[data-host-update]');if(!b)return;e.preventDefault();
- if(b.dataset.hostUpdate==='apply')toast('Studio si chiude, si aggiorna e torna subito.');
+ if(b.disabled||b.getAttribute('aria-disabled')==='true')return;
+ if(b.dataset.hostUpdate==='apply'){const h=UPD.host||{};UPD.host={...h,progress:0,error:''};updPaint();}
  host?.postMessage({action:b.dataset.hostUpdate==='apply'?'applyUpdate':'checkUpdate'});});
-host?.addEventListener('message',e=>{const v=e.data;if(v?.type!=='update')return;const was=UPD.host?.ready;UPD.host=v;
- if(v.ready&&!was)updBanner();if(page==='settings')render(false);});
-function updBanner(){
- const h=UPD.host;if(!h?.ready||document.getElementById('upd-banner'))return;
- const el=document.createElement('div');el.id='upd-banner';el.className='upd-banner';
- el.innerHTML=`<span class="orb sm">${icon('sparkle')}</span><div class="grow"><strong>Versione ${esc(h.ready)} pronta</strong><small>${h.notes?esc(h.notes):'Si installa da sola quando chiudi Studio.'}</small></div><button class="btn accent sm" data-host-update="apply">Riavvia e aggiorna</button><button class="icon-btn sm" aria-label="Più tardi" data-upd-later>${icon('close')}</button>`;
- el.querySelector('[data-upd-later]').onclick=()=>{el.classList.add('out');setTimeout(()=>el.remove(),260);};
- document.body.appendChild(el);
+document.addEventListener('click',e=>{if(!e.target.closest?.('#side-update'))return;e.preventDefault();try{sessionStorage.removeItem('upd-later');}catch{}updPaint(true);});
+host?.addEventListener('message',e=>{const v=e.data;if(v?.type!=='update')return;const was=UPD.host?.progress;UPD.host=v;updPaint();
+ if(page==='settings'&&!(was!=null&&v.progress!=null))render(false);});
+// ───────────────────────── the update, always in sight while it matters
+// A soft card bottom right (once per version, "Più tardi" puts it away) and a quiet entry at the foot of the sidebar that
+// stays until the update is done. The button turns into the progress: Aggiorna → Scarico 42% → Riavvio.
+const updWant=h=>h&&(h.available||h.ready)?(h.available||h.ready):'';
+function updPaint(force){
+ const h=UPD.host||{},v=updWant(h),p=h.progress;
+ // sidebar entry
+ let side=document.getElementById('side-update');
+ if(!side){const foot=document.querySelector('.sidebar-foot');if(foot){side=document.createElement('button');side.type='button';side.id='side-update';side.className='side-update';side.hidden=true;foot.before(side);}}
+ if(side){
+  const html=v?`<span class="su-dot" aria-hidden="true"></span><span class="su-txt"><strong>${p!=null?(p>=1?'Riavvio…':`Aggiornamento ${Math.round(p*100)}%`):'Nuova versione '+esc(v)}</strong><small>${p!=null?'Studio torna tra un attimo':'Tocca per aggiornare'}</small></span>${p!=null?`<span class="su-bar"><i style="transform:scaleX(${Math.max(.02,p)})"></i></span>`:''}`:'';
+  if(side.dataset.html!==html){side.dataset.html=html;side.innerHTML=html;}
+  if(!!v===side.hidden){if(v){side.hidden=false;side.classList.remove('out');void side.offsetWidth;side.classList.add('in');}else{side.classList.add('out');setTimeout(()=>{if(!updWant(UPD.host))side.hidden=true;},260);}}
+ }
+ // floating card
+ let el=document.getElementById('upd-banner');
+ let later='';try{later=sessionStorage.getItem('upd-later')||'';}catch{}
+ const show=v&&(force||p!=null||later!==v);
+ if(!show){if(el&&!el.classList.contains('out')){el.classList.add('out');setTimeout(()=>el.remove(),260);}return;}
+ if(!el||el.classList.contains('out')){el?.remove();el=document.createElement('div');el.id='upd-banner';el.className='upd-banner';el.setAttribute('role','status');
+  el.innerHTML=`<span class="orb sm upd-orb">${icon('sparkle')}</span><div class="grow"><strong></strong><small></small><span class="upd-err danger-text" hidden></span></div><button class="btn accent sm upd-go" data-host-update="apply"></button><button class="icon-btn sm" aria-label="Più tardi" data-tip="Più tardi" data-upd-later>${icon('close')}</button><span class="upd-line" aria-hidden="true"><i></i></span>`;
+  el.querySelector('[data-upd-later]').onclick=()=>{try{sessionStorage.setItem('upd-later',v);}catch{}el.classList.add('out');setTimeout(()=>el.remove(),260);};
+  document.body.appendChild(el);}
+ const busy=p!=null,done=busy&&p>=1;
+ el.classList.toggle('busy',busy);el.classList.toggle('done',done);
+ el.querySelector('strong').textContent=done?'Riavvio di Studio…':busy?`Scarico la versione ${v}`:`Nuova versione ${v}`;
+ el.querySelector('small').textContent=busy?(done?'Si installa e torna subito, con tutto come prima':`${Math.round(p*100)}%${h.size?' di '+updSize(h.size):''} · non serve fare altro`):(h.notes||`Ora hai la ${h.current||''}${h.size?' · '+updSize(h.size):''}`);
+ const err=el.querySelector('.upd-err');err.hidden=!h.error;err.textContent=h.error||'';
+ const go=el.querySelector('.upd-go');go.disabled=busy;go.innerHTML=done?`<span class="spinner" aria-hidden="true"></span>Riavvio`:busy?`<span class="spinner" aria-hidden="true"></span>${Math.round(p*100)}%`:`${icon('download')}${h.error?'Riprova':'Aggiorna'}`;
+ el.querySelector('[data-upd-later]').hidden=busy;
+ el.querySelector('.upd-line i').style.transform=`scaleX(${busy?Math.max(.02,p):0})`;
 }
 // ───────────────────────── "Scarica le app"
 // Website: Android + Windows + install as app (iPhone/browser), the device in use first.

@@ -53,23 +53,48 @@ public partial class MainWindow : Window
   updateTimer.Tick+=async(_,_)=>await UpdateTick();
   StateChanged+=(_,_)=>{try{if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.MemoryUsageTargetLevel=WindowState==WindowState.Minimized?CoreWebView2MemoryUsageTargetLevel.Low:CoreWebView2MemoryUsageTargetLevel.Normal;}catch{}};
  }
- // ───────── network updates: the build published by the administrator on the server reaches this PC by itself
- readonly DispatcherTimer updateTimer=new(){Interval=TimeSpan.FromMinutes(1)};DateTime nextUpdateCheck=DateTime.Now.AddSeconds(30);bool updateStarted,updateBusy;string updateError="";
- object UpdatePayload()=>new{type="update",current=Updater.CurrentText,ready=Updater.ReadyVersion??"",notes=Updater.ReadyNotes,error=updateError,serverMode=ServerMode};
+ // ───────── updates: a newer build is shown in the interface; one tap downloads it, verifies it and restarts Studio
+ readonly DispatcherTimer updateTimer=new(){Interval=TimeSpan.FromMinutes(1)};DateTime nextUpdateCheck=DateTime.Now.AddSeconds(20);bool updateStarted,updateBusy;string updateError="";
+ Updater.Offer? updateOffer;double? updateProgress;
+ object UpdatePayload()=>new{type="update",current=Updater.CurrentText,available=updateOffer?.Version??"",size=updateOffer?.Size??0,ready=Updater.ReadyVersion??"",
+  notes=updateOffer?.Notes is {Length:>0} n?n:Updater.ReadyNotes,progress=updateProgress,error=updateError,serverMode=ServerMode};
  async Task UpdateTick()
  {
   if(updateBusy||updateStarted)return;
   // on the sync station the update installs itself at night, then the app comes back minimised
   if(Updater.ReadyVersion!=null&&syncToken.Length>0&&DateTime.Now.Hour is 3&&!busy){InstallUpdate(true);return;}
-  if(!ServerMode||DateTime.Now<nextUpdateCheck)return;
-  nextUpdateCheck=DateTime.Now.AddHours(6);await CheckUpdate(false);
+  if(DateTime.Now<nextUpdateCheck)return;
+  // a release shows up on every PC within half an hour: a tiny question to the server, or a file read on the PC with the data
+  nextUpdateCheck=DateTime.Now.AddMinutes(30);await CheckUpdate(false);
  }
  async Task CheckUpdate(bool manual)
  {
-  if(!ServerMode){if(manual)await Notify("Gli aggiornamenti in rete arrivano quando Studio lavora con il server dell'ufficio.");return;}
-  updateBusy=true;var before=Updater.ReadyVersion;
-  try{var v=await Updater.Check(Active);updateError="";if(manual&&v==null)await Notify($"Studio è aggiornato (versione {Updater.CurrentText}).");else if(v!=null&&v!=before)await Notify($"Versione {v} scaricata: si installa alla chiusura, oppure subito con «Riavvia e aggiorna».");}
+  if(updateBusy)return;updateBusy=true;
+  try
+  {
+   updateOffer=await Updater.Find(ServerMode?Active:"",store.Folder);updateError="";
+   if(manual&&updateOffer==null)await Notify($"Studio è aggiornato (versione {Updater.CurrentText}).");
+   // the unattended sync station gets the build ready in advance, for its night install
+   if(updateOffer!=null&&syncToken.Length>0&&Updater.ReadyVersion!=updateOffer.Version)await Updater.Download(updateOffer);
+  }
   catch(Exception ex){updateError=ex is System.Net.Http.HttpRequestException?"Server non raggiungibile per gli aggiornamenti.":ex.Message;if(manual)await Notify(updateError);}
+  finally{updateBusy=false;Post(UpdatePayload());}
+ }
+ /// The button in the interface: download with live progress, then close, install and reopen right away.
+ async Task UpdateNow()
+ {
+  if(updateBusy||updateStarted)return;
+  if(Updater.ReadyVersion!=null&&(updateOffer==null||Updater.ReadyVersion==updateOffer.Version)){updateProgress=1;Post(UpdatePayload());await Task.Delay(500);InstallUpdate(false);return;}
+  if(updateOffer==null){await CheckUpdate(true);if(updateOffer==null)return;}
+  updateBusy=true;updateError="";updateProgress=0;Post(UpdatePayload());
+  try
+  {
+   var last=0.0;
+   await Updater.Download(updateOffer,new Progress<double>(p=>{updateProgress=p;if(p-last>=0.02||p>=1){last=p;Post(UpdatePayload());}}));
+   updateProgress=1;Post(UpdatePayload());await Task.Delay(700);// the bar reaches the end before the window goes
+   updateBusy=false;InstallUpdate(false);
+  }
+  catch(Exception ex){updateProgress=null;updateError=ex is System.Net.Http.HttpRequestException?"Server non raggiungibile: riprova tra poco.":ex.Message;}
   finally{updateBusy=false;Post(UpdatePayload());}
  }
  void InstallUpdate(bool minimized){if(Updater.Apply(true,minimized||WindowState==WindowState.Minimized)){updateStarted=true;Close();}}
@@ -210,7 +235,7 @@ public partial class MainWindow : Window
      try{store.DeleteIntervention(root.GetProperty("id").GetString()??"");await Push();await Notify("Intervento eliminato.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
     case "hostInfo":Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,serverExternal,activeServer=Active,portalOpen=portal!=null,autostart=Autostart});Post(UpdatePayload());break;
     case "checkUpdate":await CheckUpdate(true);break;
-    case "applyUpdate":if(Updater.ReadyVersion!=null)InstallUpdate(false);else await CheckUpdate(true);break;
+    case "applyUpdate":await UpdateNow();break;
     case "autostart":
      Autostart=root.GetProperty("on").GetBoolean();Post(new{type="host",autostart=Autostart});
      await Notify(Autostart?"Studio partirà da solo all'accesso a Windows, ridotto a icona.":"Avvio automatico disattivato.");break;
