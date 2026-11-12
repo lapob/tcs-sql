@@ -135,7 +135,7 @@ function clientExtraSections(c,part){if(c&&c.sites===undefined)deriveRegisters()
   if(open.length)h+=`<div class="d-section"><h3>RiBa ed effetti <span>${open.length}</span></h3>${uns.length?`<p class="danger-text" style="font-size:13px;margin:0 0 8px">${uns.length} insolut${uns.length===1?'o':'i'} · € ${fmtMoney(uns.reduce((s,r)=>s+r.amount,0))}</p>`:''}${open.slice(0,12).map(r=>`<div class="ver-row"><time>${r.due?dShort(parseDate(r.due)):'—'}</time><div class="grow"><strong>€ ${fmtMoney(r.amount)}${r.unpaid?' · <span class="danger-text">insoluto</span>':''}</strong><small>${esc([r.doc&&'Doc. '+r.doc,r.bank].filter(Boolean).join(' · '))}</small></div></div>`).join('')}</div>`;}
  return h;
 }
-const fmtMoney=n=>Number(n||0).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtMoney=n=>Number(n||0).toLocaleString('it-IT',{useGrouping:'always',minimumFractionDigits:2,maximumFractionDigits:2});
 // the DTR and Ital Retail sections gain the coverage card at the bottom
 if(typeof dtrPage==='function'){const base=dtrPage;dtrPage=function(){return base()+portalGapCard('dtr');};}
 if(typeof italPage==='function'){const base=italPage;italPage=function(){return base()+portalGapCard('ital');};}

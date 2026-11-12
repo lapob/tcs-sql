@@ -113,7 +113,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
             val ac = a.acc
             item(key = "acc") {
                 MoreGroup("Contabilità") {
-                    if (!ac.hasData) MoreRow(Icons.Rounded.Euro, "Nessun dato contabile", "Fatture, incassi e pagamenti arrivano da MastroSQL con l'importazione dall'app Windows", Modifier.appear(0)) { nav.switchTab("acc") }
+                    if (!ac.hasData) MoreRow(Icons.Rounded.Euro, "Nessun dato contabile", "Fatture, incassi e pagamenti arrivano da MastroSQL da soli, ogni ora", Modifier.appear(0)) { nav.switchTab("acc") }
                     else {
                         MoreRow(Icons.Rounded.Euro, "Rate scadute da incassare", "${ac.overdue.size} rate · ${AccountingView.money0(ac.overdueSum)}", Modifier.appear(0)) { nav.openAccounting(AccView.Receivables, "Scadute") }
                         MoreRow(Icons.Rounded.CalendarMonth, "In scadenza nei prossimi 7 giorni", "Incassi da seguire questa settimana", Modifier.appear(0)) { nav.openAccounting(AccView.Receivables, "7 giorni") }

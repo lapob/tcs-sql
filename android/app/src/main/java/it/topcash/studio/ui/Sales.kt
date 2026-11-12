@@ -92,9 +92,12 @@ private fun qty(v: Double) = java.text.NumberFormat.getIntegerInstance(java.util
     val v = remember(a, period) { SalesView(a.state, a.acc, SalesPeriod(period)) }
     val c = v.cur; val p = v.prev
     val prods = remember(v, fam, q) { val n = norm(q.trim()); c.prod.values.filter { (fam.isEmpty() || it.f.label == fam) && (n.isEmpty() || it.search.contains(n)) }.sortedByDescending { it.rev } }
-    Page(vm, "Vendite", "${v.period.label} · confronto con ${v.period.cmpLabel}") {
-        item(key = "period") { ChoiceChips(v.periods, period, { period = it; fam = "" }, Modifier.padding(top = 4.dp, bottom = 8.dp)) }
-        if (!c.has && !p.has) { item(key = "none") { Empty(Icons.Rounded.Insights, "Nessun dato di vendita", "Importa da MastroSQL dall'app Windows: righe delle fatture e conti vengono letti in sola lettura.") }; return@Page }
+    Page(vm, "Vendite", v.period.label + syncedText(a.state.mastroSync)) {
+        item(key = "period") { Column {
+            ChoiceChips(v.periods, period, { period = it; fam = "" }, Modifier.padding(top = 4.dp))
+            Text("Variazioni rispetto a ${v.period.cmpLabel}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp, bottom = 10.dp))
+        } }
+        if (!c.has && !p.has) { item(key = "none") { Empty(Icons.Rounded.Insights, "Le vendite stanno arrivando", "Il server legge MastroSQL da solo ogni ora (sola lettura): vendite e conti compaiono qui alla prossima lettura.") }; return@Page }
         item(key = "kpi") {
             AnimatedContent(period, transitionSpec = { fadeIn(tween(260)) togetherWith fadeOut(tween(140)) }, label = "kpi") { _ ->
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -305,4 +308,11 @@ private fun Color.luminance() = 0.2126f * red + 0.7152f * green + 0.0722f * blue
             }
         }
     }
+}
+
+/** " · aggiornato alle 16:46": when the server last read Mastro (it does it by itself every hour). */
+private fun syncedText(s: it.topcash.studio.data.MastroSync?): String {
+    val at = s?.at?.takeIf { it.isNotBlank() }?.let { runCatching { java.time.OffsetDateTime.parse(it).atZoneSameInstant(java.time.ZoneId.systemDefault()) }.getOrNull() } ?: return ""
+    val today = at.toLocalDate() == java.time.LocalDate.now()
+    return " · aggiornato " + if (today) "alle %02d:%02d".format(at.hour, at.minute) else "il ${at.dayOfMonth} ${it.topcash.studio.data.Dates.month(at.toLocalDate())}"
 }

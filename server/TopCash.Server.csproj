@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TopCash.Server</RootNamespace>
     <AssemblyName>TopCash.Server</AssemblyName>
-    <Version>2.9.6</Version>
+    <Version>2.9.7</Version>
     <Product>Top Cash Studio Server</Product>
     <Company>Top Cash Service S.r.l.</Company>
     <ApplicationIcon>..\src\topcash.ico</ApplicationIcon>
@@ -33,10 +33,12 @@
     <Compile Include="..\src\Work.cs" Link="Shared\Work.cs" />
     <Compile Include="..\src\Backup.cs" Link="Shared\Backup.cs" />
     <Compile Include="..\src\Novita.cs" Link="Shared\Novita.cs" />
+    <Compile Include="..\src\MastroReader.cs" Link="Shared\MastroReader.cs" />
     <Content Include="..\src\ui\**\*" LinkBase="ui" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="MailKit" Version="4.18.2" />
+    <PackageReference Include="MySqlConnector" Version="2.6.2" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
     <!-- 6.2.x is MIT-licensed; 6.5+ moved to AGPL: keep the version pinned -->
     <PackageReference Include="PDFsharp" Version="[6.2.4]" />

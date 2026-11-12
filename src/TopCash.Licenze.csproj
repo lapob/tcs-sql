@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>TopCash.Licenze</AssemblyName>
-    <Version>2.9.6</Version>
+    <Version>2.9.7</Version>
     <ApplicationIcon>topcash.ico</ApplicationIcon>
     <!-- Startup & runtime performance -->
     <TieredPGO>true</TieredPGO>

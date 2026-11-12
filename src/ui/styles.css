@@ -1362,3 +1362,31 @@ html.sal-vt::view-transition-new(root){animation:sal-new .32s cubic-bezier(.2,.8
 @media (max-width:760px){.sal-rev .sep{display:none}.sal-rev em{display:block}.sal-fams{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.sal-fam{padding:12px}.sal-qty{font-size:23px}.sal-fam.svc .sal-qty{font-size:19px}.sal-name{font-size:12px}
  .sal-flow{overflow-x:auto}.sal-big{font-size:19px}.sal-row{grid-template-columns:minmax(0,1fr) 70px auto}}
 @media (prefers-reduced-motion:reduce){.sal-fam,.sal-buy,.sal-share i,.sal-bar i,.sal-row .track i,.sal-buy .track i{animation:none}.sal-fam{transition:none}}
+/* monthly revenue: tap a month to read it */
+.acc-mon{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin:2px 0 14px;padding:14px 16px;border-radius:16px;background:var(--bg-2);view-transition-name:acc-mon}
+.acc-mon>div{display:grid;gap:3px;min-width:0}
+.acc-mon-l{font-size:12.5px;color:var(--text-3);text-transform:capitalize;letter-spacing:.01em}
+.acc-mon-v{font:650 28px/1.1 var(--font-display);letter-spacing:-.035em;font-variant-numeric:tabular-nums}
+.acc-mon small{font-size:12.5px;color:var(--text-2)}
+.acc-mon small b{font-weight:600}
+.acc-mon.swap .acc-mon-v{animation:accMonIn .42s var(--spring) both}
+@keyframes accMonIn{from{opacity:0;transform:translateY(6px);filter:blur(3px)}}
+.acc-bars .bar{border:0;background:none;padding:0;font:inherit;cursor:pointer;color:inherit;-webkit-tap-highlight-color:transparent;border-radius:10px;outline-offset:3px}
+.acc-bars .bar i{transition:opacity .25s var(--ease),filter .25s var(--ease)}
+.acc-bars:has(.bar.on) .bar:not(.on) i{opacity:.42}
+.acc-bars .bar:hover i{opacity:1;filter:brightness(1.12)}
+.acc-bars .bar.on i{box-shadow:0 6px 18px -6px color-mix(in srgb,var(--accent) 70%,transparent)}
+.acc-bars .bar.on span{color:var(--text);font-weight:600}
+.acc-bars .bar i:hover::after{content:none}
+::view-transition-old(acc-mon),::view-transition-new(acc-mon){animation-duration:.28s}
+@media (max-width:640px){.acc-mon{flex-direction:column;align-items:stretch}.acc-mon .btn{align-self:flex-start}.acc-mon-v{font-size:24px}}
+/* amounts: right-aligned with tabular figures in the text font (monospace read heavy) */
+.t-acc .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.t-acc td.num{font-size:.95em}
+.t-acc .num strong{font-weight:620}
+@media (min-width:761px){.t-acc th.num+th:not(.num),.t-acc td.num+td:not(.num){padding-left:32px}}
+.aging strong.tab{font-variant-numeric:tabular-nums;letter-spacing:-.02em;font-weight:650}
+.sal-sync{display:inline-flex;align-items:center;gap:7px;margin-left:4px;font-size:.9em;color:var(--text-3);white-space:nowrap}
+.sal-sync i{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 50%,transparent);animation:salPulse 2.4s var(--ease) infinite}
+@keyframes salPulse{70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.idle .sal-sync i{animation-play-state:paused}
+@media (prefers-reduced-motion:reduce){.sal-sync i{animation:none}}

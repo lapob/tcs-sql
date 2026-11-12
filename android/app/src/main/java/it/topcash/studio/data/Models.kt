@@ -55,6 +55,8 @@ import kotlinx.serialization.Serializable
     val taxable: Double = 0.0, val vat: Double = 0.0, val total: Double = 0.0, val payment: String = "", val source: String = "")
 @Serializable data class Due(val id: String = "", val party: String = "C", val partyCode: String = "", val partyName: String = "", val docNumber: String = "", val docDate: String = "",
     val dueDate: String = "", val amount: Double = 0.0, val paid: Double = 0.0, val payment: String = "", val source: String = "")
+/** Last read of Mastro (the server does it by itself every hour). */
+@Serializable data class MastroSync(val at: String = "", val ok: Boolean = true, val who: String = "")
 @Serializable data class SaleRow(val month: String = "", val code: String = "", val name: String = "", val family: String = "", val qty: Double = 0.0, val revenue: Double = 0.0,
     val costedRevenue: Double = 0.0, val cost: Double = 0.0, val below: Double = 0.0, val docs: Int = 0)
 @Serializable data class LedgerRow(val month: String = "", val kind: String = "", val account: String = "", val label: String = "", val group: String = "", val party: String = "",
@@ -72,7 +74,7 @@ import kotlinx.serialization.Serializable
     val warehouses: List<Warehouse> = emptyList(), val articles: List<Article> = emptyList(), val stockLevels: List<StockLevel> = emptyList(),
     val stock: List<StockRow> = emptyList(), val movements: List<Movement> = emptyList(),
     val invoices: List<Invoice> = emptyList(), val dues: List<Due> = emptyList(), val balances: List<Balance> = emptyList(), val dueNotes: Map<String, DueNote> = emptyMap(),
-    val sales: List<SaleRow> = emptyList(), val ledger: List<LedgerRow> = emptyList(),
+    val sales: List<SaleRow> = emptyList(), val ledger: List<LedgerRow> = emptyList(), val mastroSync: MastroSync? = null,
     val features: Features = Features(),
     val dtr: List<DtrRegister> = emptyList(), val dtrStatus: DtrStatus = DtrStatus(),
     val ital: List<ItalDevice> = emptyList(), val italOrders: List<ItalOrder> = emptyList(), val italStatus: DtrStatus = DtrStatus(),

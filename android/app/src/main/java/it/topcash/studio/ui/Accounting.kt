@@ -5,6 +5,14 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import java.time.YearMonth
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,8 +80,9 @@ private fun statusTone(s: String) = when (s) { "Sollecitato" -> Tone.Info; "Prom
 
 /** The accounting area has four pages, like the four registers of Mastro's accounting: summary, receivables, invoices, payables. */
 private var accFilterHint: String? = null
+private var accMonthHint: String? = null
 /** Opens an accounting page already filtered (from "Altro" in the Contabilità area). */
-fun NavHostController.openAccounting(view: AccView, filter: String) { accFilterHint = filter; switchTab(view.route) }
+fun NavHostController.openAccounting(view: AccView, filter: String) { accFilterHint = filter; if (view.route in accTabRoutes) switchTab(view.route) else navigate(view.route) { launchSingleTop = true } }
 enum class AccView(val route: String, val title: String) { Home("acc", "Contabilità"), Receivables("accRec", "Da incassare"), Invoices("accInv", "Fatture"), Payables("accPay", "Da pagare") }
 
 @Composable fun AccountingScreen(vm: AppViewModel, a: Archive, nav: NavHostController, view: AccView = AccView.Home, topLevel: Boolean = false) {
@@ -82,6 +91,8 @@ enum class AccView(val route: String, val title: String) { Home("acc", "Contabil
     var filter by rememberSaveable { mutableStateOf(dueFilters[0]) }
     LaunchedEffect(Unit) { accFilterHint?.let { filter = it; accFilterHint = null } } // filter chosen from the summary tiles
     var q by rememberSaveable { mutableStateOf("") }
+    var month by rememberSaveable { mutableStateOf<String?>(null) } // "yyyy-MM" picked on the monthly chart
+    LaunchedEffect(Unit) { accMonthHint?.let { month = it; q = ""; accMonthHint = null } }
     var open by remember { mutableStateOf<String?>(null) }
     val dues = remember(acc, tab, filter, q) {
         val n = norm(q.trim())
@@ -89,17 +100,18 @@ enum class AccView(val route: String, val title: String) { Home("acc", "Contabil
             (n.isEmpty() || d.search.contains(n)) && when (filter) { "Aperte" -> d.open; "Scadute" -> d.late; "7 giorni" -> d.open && (d.days ?: -1) in 0..7; else -> true }
         }
     }
-    val invoices = remember(acc, q) { val n = norm(q.trim()); acc.invoices.filter { n.isEmpty() || it.search.contains(n) }.take(300) }
+    val invoices = remember(acc, q, month) { val n = norm(q.trim()); acc.invoices.filter { (n.isEmpty() || it.search.contains(n)) && (month == null || (if (month == "nc") it.sign < 0 else it.date != null && ym(it.date) == month)) } }
+    val invMonths = remember(acc) { acc.invoices.mapNotNull { it.date }.map { ym(it) }.distinct().sortedDescending().take(24) }
     val subtitle = when (view) {
         AccView.Home -> "${money0(acc.toCollect)} da incassare · ${acc.overdue.size} scadute"
         AccView.Receivables -> "${money0(acc.toCollect)} · ${acc.receivables.count { it.open }} rate aperte"
         AccView.Payables -> "${money0(acc.toPay)} · ${money0(acc.toPay30)} entro 30 giorni"
         AccView.Invoices -> "${acc.invoices.size} documenti · ${money0(acc.revenueYear)} nel ${java.time.LocalDate.now().year}"
     }
-    val go: (AccView, String) -> Unit = { v, f -> accFilterHint = f; if (topLevel) nav.switchTab(v.route) else nav.navigate(v.route) }
+    val go: (AccView, String) -> Unit = { v, f -> nav.openAccounting(v, f) }
     Page(vm, view.title, subtitle, onBack = if (topLevel) null else ({ nav.popBackStack() })) {
-        if (!acc.hasData) { item(key = "none") { Empty(Icons.Rounded.Euro, "Nessun dato contabile", "Importa fatture e scadenze da MastroSQL dall'app Windows (Impostazioni).") }; return@Page }
-        if (view == AccView.Home) accSummary(acc, nav, go) { open = it } else accRegister(view, tab, filter, { filter = it }, q, { q = it }, dues, invoices, nav) { open = it }
+        if (!acc.hasData) { item(key = "none") { Empty(Icons.Rounded.Euro, "Nessun dato contabile", "Il server legge fatture e scadenze da MastroSQL da solo ogni ora: compaiono qui alla prossima lettura.") }; return@Page }
+        if (view == AccView.Home) accSummary(acc, nav, go) { open = it } else accRegister(view, tab, filter, { filter = it }, q, { q = it }, dues, invoices, invMonths, month, { month = it }, nav) { open = it }
     }
     open?.let { id -> acc.due(id)?.let { d -> DueSheet(vm, d, nav, onDismiss = { open = null }) } ?: LaunchedEffect(id) { open = null } }
 }
@@ -118,7 +130,7 @@ private fun LazyListScope.accSummary(acc: AccountingView, nav: NavHostController
                 }
             }
         }
-        if (acc.invoices.isNotEmpty()) item(key = "chart") { MonthBars(acc, Modifier.padding(top = 10.dp).appear(4)) }
+        if (acc.invoices.isNotEmpty()) item(key = "chart") { MonthBars(acc, Modifier.padding(top = 10.dp).appear(4)) { m -> accMonthHint = m; go(AccView.Invoices, "") } }
         item(key = "flow") { CashFlow(acc, Modifier.padding(top = 10.dp).appear(5)) }
         item(key = "aging") { Aging(acc, Modifier.padding(top = 10.dp).appear(6)) { go(AccView.Receivables, "Scadute") } }
         val chase = acc.overdue.filter { it.note?.status.isNullOrBlank() || it.note.status == "Sollecitato" }.sortedByDescending { it.left }.take(6)
@@ -150,15 +162,30 @@ private fun LazyListScope.accSummary(acc: AccountingView, nav: NavHostController
 
 /** One register per page: receivables / payables with filters, or invoices. */
 private fun LazyListScope.accRegister(view: AccView, tab: String, filter: String, setFilter: (String) -> Unit, q: String, setQ: (String) -> Unit,
-    dues: List<UDue>, invoices: List<it.topcash.studio.data.UInvoice>, nav: NavHostController, onDue: (String) -> Unit) {
+    dues: List<UDue>, invoices: List<it.topcash.studio.data.UInvoice>, invMonths: List<String>, month: String?, setMonth: (String?) -> Unit, nav: NavHostController, onDue: (String) -> Unit) {
         item(key = "search") { SearchField(q, setQ, if (tab == "Fatture") "Cerca numero o cliente" else "Cerca nominativo, documento, nota", Modifier.padding(top = 8.dp)) }
         if (tab != "Fatture") {
             item(key = "filters") { ChoiceChips(dueFilters, filter, setFilter, Modifier.padding(vertical = 8.dp)) }
             if (dues.isEmpty()) item(key = "e") { Empty(Icons.Rounded.TaskAlt, "Nessuna rata", "Nessuna scadenza corrisponde ai filtri.") }
             items(dues.size.coerceAtMost(400), key = { "d" + dues[it].d.id }) { i -> DueRow(dues[i], Modifier.padding(bottom = 8.dp).animateItem()) { onDue(dues[i].d.id) } }
         } else {
+            item(key = "inv-months") {
+                // month (or credit notes) in one tap: "Tutti", "Note di credito", then the months with invoices, newest first
+                fun lab(k: String) = "${Dates.month(YearMonth.parse(k).atDay(1))} ${k.take(4)}"
+                val opts = remember(invMonths) { listOf("Tutti", "Note di credito") + invMonths.map(::lab) }
+                val sel = when (month) { null -> "Tutti"; "nc" -> "Note di credito"; else -> lab(month) }
+                ChoiceChips(opts, sel, { o -> setMonth(when (o) { "Tutti" -> null; "Note di credito" -> "nc"; else -> invMonths.firstOrNull { lab(it) == o } }) }, Modifier.padding(top = 10.dp))
+            }
+            item(key = "inv-sum") {
+                Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("${invoices.size} ${if (invoices.size == 1) "documento" else "documenti"}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        RollingText("imponibile " + money0(invoices.sumOf { it.net }), MaterialTheme.typography.titleMedium.tabular, Modifier.padding(top = 2.dp))
+                    }
+                }
+            }
             if (invoices.isEmpty()) item(key = "e") { Empty(Icons.Rounded.Euro, "Nessuna fattura", "Modifica la ricerca.") }
-            items(invoices.size, key = { "i" + invoices[it].i.id }) { k -> val v = invoices[k]
+            items(invoices.size.coerceAtMost(400), key = { "i" + invoices[it].i.id }) { k -> val v = invoices[k]
                 CardBox(Modifier.padding(bottom = 8.dp).animateItem(), onClick = v.client?.let { c -> { nav.openClient(c.code) } }, padding = PaddingValues(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
@@ -190,25 +217,55 @@ private fun deltaText(now: Double, prev: Double): String =
     }
 }
 
-/** Last 12 months of net revenue: bars grow in with a spring, staggered. */
-@Composable private fun MonthBars(acc: AccountingView, modifier: Modifier) {
-    val max = (acc.months.maxOfOrNull { kotlin.math.abs(it.second) } ?: 0.0).coerceAtLeast(1.0)
+private fun ym(d: java.time.LocalDate) = "%04d-%02d".format(d.year, d.monthValue)
+private class MonthInfo(val d: java.time.LocalDate, val v: Double, val n: Int, val credit: Int, val prev: Double)
+
+/** Last 12 months of net revenue: bars grow in with a spring; tap a month to read it (amount, documents, same month a year
+ *  before) and open its invoices. */
+@Composable private fun MonthBars(acc: AccountingView, modifier: Modifier, onOpen: (String) -> Unit) {
+    val data = remember(acc) {
+        val by = acc.invoices.filter { it.date != null }.groupBy { ym(it.date!!) }
+        val today = java.time.LocalDate.now()
+        acc.months.map { (m, v) -> val l = by[ym(m)].orEmpty(); val cur = ym(m) == ym(today)
+            // the month in progress is compared with the same days a year before, not with the whole month
+            MonthInfo(m, v, l.size, l.count { it.sign < 0 }, by[ym(m.minusYears(1))].orEmpty().filter { !cur || it.date!!.dayOfMonth <= today.dayOfMonth }.sumOf { it.net }) }
+    }
+    val max = (data.maxOfOrNull { kotlin.math.abs(it.v) } ?: 0.0).coerceAtLeast(1.0)
     var shown by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { shown = true }
+    var sel by rememberSaveable { mutableIntStateOf(data.lastIndex) }
+    val haptic = LocalHapticFeedback.current
+    val st = LocalStatus.current
     CardBox(modifier, padding = PaddingValues(16.dp)) {
         Text("Fatturato mensile", style = MaterialTheme.typography.titleSmall)
-        Text("Ultimi 12 mesi, imponibile", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(Modifier.fillMaxWidth().height(120.dp).padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.Bottom) {
-            acc.months.forEachIndexed { i, (m, v) ->
-                val f by animateFloatAsState(if (shown) (kotlin.math.abs(v) / max).toFloat().coerceIn(0.03f, 1f) else 0f,
+        Text("Ultimi 12 mesi, imponibile · tocca un mese", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        data.getOrNull(sel)?.let { m ->
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f)).padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 6.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(Dates.monthYear(m.d) + if (sel == data.lastIndex) " · in corso" else "", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    RollingText(money0(m.v), MaterialTheme.typography.headlineSmall.tabular)
+                    val p = if (m.prev > 0.5) (m.v - m.prev) / m.prev * 100 else null
+                    Text("${m.n} doc." + (if (m.credit > 0) " · ${m.credit} note cr." else "") + (p?.let { " · ${if (it >= 0) "▲" else "▼"} ${"%.1f".format(kotlin.math.abs(it)).replace('.', ',')}% su ${if (sel == data.lastIndex) "1–${java.time.LocalDate.now().dayOfMonth} ${Dates.month(m.d)} " else ""}${m.d.year - 1}" } ?: ""),
+                        style = MaterialTheme.typography.bodySmall, color = when { p == null -> MaterialTheme.colorScheme.onSurfaceVariant; p >= 0 -> st.ok; else -> st.bad }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                if (m.n > 0) TextButton({ onOpen(ym(m.d)) }) { Text("Fatture") }
+            }
+        }
+        Row(Modifier.fillMaxWidth().height(124.dp).padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.Bottom) {
+            data.forEachIndexed { i, m ->
+                val f by animateFloatAsState(if (shown) (kotlin.math.abs(m.v) / max).toFloat().coerceIn(0.03f, 1f) else 0f,
                     spring(dampingRatio = 1f, stiffness = (Spring.StiffnessLow - i * 8f).coerceAtLeast(80f)), label = "bar$i")
-                Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
+                val on = i == sel
+                val alpha by animateFloatAsState(if (on) 1f else .42f, spring(stiffness = Spring.StiffnessMediumLow), label = "barA$i")
+                Column(Modifier.weight(1f).fillMaxHeight().clickable(remember { MutableInteractionSource() }, null) { if (sel != i) { sel = i; haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) } },
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
                     Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.BottomCenter) {
-                        Box(Modifier.fillMaxWidth().fillMaxHeight().graphicsLayer { scaleY = f; transformOrigin = TransformOrigin(0.5f, 1f) }
+                        Box(Modifier.fillMaxWidth().fillMaxHeight().graphicsLayer { scaleY = f; transformOrigin = TransformOrigin(0.5f, 1f); this.alpha = alpha }
                             .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
-                            .background(if (v < 0) LocalStatus.current.bad.copy(alpha = .5f) else MaterialTheme.colorScheme.primary.copy(alpha = if (i == acc.months.lastIndex) 1f else .55f)))
+                            .background(if (m.v < 0) st.bad.copy(alpha = .5f) else MaterialTheme.colorScheme.primary))
                     }
-                    Text(Dates.month(m).take(3), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp), maxLines = 1)
+                    Text(Dates.month(m.d).take(3), style = MaterialTheme.typography.labelSmall, color = if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp), maxLines = 1)
                 }
             }
         }

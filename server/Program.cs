@@ -578,6 +578,9 @@ app.Lifetime.ApplicationStopping.Register(()=>backupTimer.Dispose());
 // Monday summary by e-mail (checked every half hour; once a week)
 var weeklyTimer=new Timer(_=>{WeeklyReport.Tick(store,DateTime.Now).ContinueWith(t=>{if(t.Exception!=null)store.Log("error","Riepilogo settimanale: "+t.Exception.GetBaseException().Message);});},null,TimeSpan.FromMinutes(2),TimeSpan.FromMinutes(30));
 app.Lifetime.ApplicationStopping.Register(()=>weeklyTimer.Dispose());
+// Mastro read by itself (strictly read-only, same RETE.ini as the Windows app): every hour from 6 to 22, a few minutes after start.
+var mastroTimer=new Timer(_=>{MastroAuto.Tick(store,hub).ContinueWith(t=>{if(t.Exception!=null)store.Log("error","Lettura automatica Mastro: "+t.Exception.GetBaseException().Message);});},null,TimeSpan.FromMinutes(3),TimeSpan.FromMinutes(15));
+app.Lifetime.ApplicationStopping.Register(()=>mastroTimer.Dispose());
 // The Windows app (Mastro import, portals on this PC) and other tools write the same archive directly, without going through
 // this server: SQLite's data_version (on one connection kept open) changes whenever another connection commits, so every
 // device gets the new data within a few seconds instead of waiting for the next change made here.

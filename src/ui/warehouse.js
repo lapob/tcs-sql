@@ -4,8 +4,8 @@
 
 const MV_LABEL={carico:'Carico',scarico:'Scarico',trasferimento:'Trasferimento',rettifica:'Rettifica',inventario:'Inventario',intervento:'Intervento'};
 const MV_CLS={carico:'ok',scarico:'due',trasferimento:'info',rettifica:'acc',inventario:'acc',intervento:'info'};
-const eur=n=>new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:n>=1000?0:2}).format(n||0);
-const qf=n=>new Intl.NumberFormat('it-IT',{maximumFractionDigits:3}).format(n||0);
+const eur=n=>new Intl.NumberFormat('it-IT',{useGrouping:'always',style:'currency',currency:'EUR',maximumFractionDigits:n>=1000?0:2}).format(n||0);
+const qf=n=>new Intl.NumberFormat('it-IT',{useGrouping:'always',maximumFractionDigits:3}).format(n||0);
 let W=null; // derived warehouse data
 let wui={tab:'stock',wh:'',cat:'',only:'',invWh:'sede',invCounts:{}};
 

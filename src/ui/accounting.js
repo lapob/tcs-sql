@@ -4,12 +4,15 @@
    the app adds what the office does about each receivable (status + note, shared with the team). */
 
 const eurA=n=>DFE.format(n||0);
-const DFE=new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2});
-const DFE0=new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:0});
+const DFE=new Intl.NumberFormat('it-IT',{useGrouping:'always',style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2});
+const DFE0=new Intl.NumberFormat('it-IT',{useGrouping:'always',style:'currency',currency:'EUR',maximumFractionDigits:0});
 const DUE_ST=['','Sollecitato','Promesso','Incassato','Contestato'];
 const DUE_CLS={Sollecitato:'info',Promesso:'acc',Incassato:'ok',Contestato:'bad'};
 let A=null;
-let aui={only:'open',year:''};
+let aui={only:'open',year:'',mm:'',kind:'',sel:null};
+const MESI=['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+const DFMY=new Intl.DateTimeFormat('it-IT',{month:'long',year:'numeric'});
+const monKey=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
 const ACC_PAGE={receivables:'accRec',invoices:'accInv',payables:'accPay',clients:'accCli'};
 
 const _accD=new Map(); // dates repeat a lot (same due days): parsed once
@@ -33,9 +36,10 @@ function deriveAccounting(){
  const overdue=recOpen.filter(x=>x.days!==null&&x.days<0);
  const y=today.getFullYear();const invY=inv.filter(i=>i.d&&i.d.getFullYear()===y),invPY=inv.filter(i=>i.d&&i.d.getFullYear()===y-1&&(i.d.getMonth()<today.getMonth()||i.d.getMonth()===today.getMonth()&&i.d.getDate()<=today.getDate()));
  // last 12 months of net revenue
- const months=[];for(let k=11;k>=0;k--){const d=new Date(y,today.getMonth()-k,1);months.push({d,v:0,n:0});}
+ const months=[];for(let k=11;k>=0;k--){const d=new Date(y,today.getMonth()-k,1);months.push({d,v:0,n:0,pv:0,pn:0,cn:0});}
  const mIdx=new Map(months.map((m,i)=>[m.d.getFullYear()*12+m.d.getMonth(),i]));
- for(const i of inv){if(!i.d)continue;const k=mIdx.get(i.d.getFullYear()*12+i.d.getMonth());if(k!==undefined){months[k].v+=i.net;months[k].n++;}}
+ for(const i of inv){if(!i.d)continue;const k=mIdx.get(i.d.getFullYear()*12+i.d.getMonth());if(k!==undefined){months[k].v+=i.net;months[k].n++;if(i.sign<0)months[k].cn++;}
+  const kp=mIdx.get((i.d.getFullYear()+1)*12+i.d.getMonth());if(kp!==undefined&&(kp<11||i.d.getDate()<=today.getDate())){months[kp].pv+=i.net;months[kp].pn++;}}
  // per-client figures (used by the client drawer and the ranking)
  const perClient=new Map();const pc=c=>{if(!perClient.has(c.code))perClient.set(c.code,{inv:[],dues:[],revY:0,open:0,overdue:0});return perClient.get(c.code);};
  for(const i of inv)if(i.client){const p=pc(i.client);p.inv.push(i);if(i.d&&i.d.getFullYear()===y)p.revY+=i.net;}
@@ -63,17 +67,27 @@ function accountingPage(){
  const maxM=Math.max(1,...A.months.map(m=>Math.abs(m.v)));
  return`${hero('La <span class="grad">contabilità</span>.','Fatture, incassi e pagamenti letti da MastroSQL. Segna solleciti e promesse di pagamento: le note restano anche dopo ogni importazione.',
   `<button class="btn need-export" data-acc-exp="dues">${icon('download')}Scadenze CSV</button><button class="btn need-export" data-acc-exp="invoices">${icon('download')}Fatture CSV</button>`)}
- ${explain('accounting','I dati arrivano da <strong>MastroSQL</strong> con <em>Impostazioni → Importa da MastroSQL</em> (sola lettura: Mastro resta il programma di contabilità). Apri una scadenza per segnare <strong>Sollecitato</strong>, <strong>Promesso</strong> o <strong>Incassato</strong> e preparare un’email di sollecito.')}
- ${A.has?'':`<div class="card reveal" style="--i:2">${empty('euro','Nessun dato contabile','Importa fatture e scadenze da MastroSQL in Impostazioni: basta un clic, i dati di Mastro non vengono modificati.')}</div>`}
+ ${explain('accounting','I dati arrivano da <strong>MastroSQL</strong> da soli: il server lo legge ogni ora, in sola lettura (Mastro resta il programma di contabilità). Tocca un mese nel grafico per leggerlo e aprirne le fatture. Apri una scadenza per segnare <strong>Sollecitato</strong>, <strong>Promesso</strong> o <strong>Incassato</strong> e preparare un’email di sollecito.')}
+ ${A.has?'':`<div class="card reveal" style="--i:2">${empty('euro','Nessun dato contabile','Il server legge fatture e scadenze da MastroSQL da solo ogni ora (sola lettura). Per averle subito: Impostazioni → Importa da MastroSQL.')}</div>`}
  <div class="kpis">
   <div class="card kpi t-info reveal" style="--i:2"><div class="kpi-top"><span>Fatturato ${new Date().getFullYear()}</span><span class="kpi-icon">${icon('euro')}</span></div><div class="kpi-value acc-v">${DFE0.format(A.revY)}</div><div class="kpi-note">${delta===null?'imponibile, note di credito dedotte':`<span style="color:var(--${delta>=0?'ok':'bad'})">${delta>=0?'▲':'▼'} ${Math.abs(delta).toFixed(1).replace('.',',')}%</span> rispetto allo stesso periodo ${new Date().getFullYear()-1}`}</div></div>
   <div class="card kpi reveal" style="--i:3" data-acc-tab="receivables" tabindex="0"><div class="kpi-top"><span>Da incassare</span><span class="kpi-icon">${icon('download')}</span></div><div class="kpi-value acc-v">${DFE0.format(A.toCollect)}</div><div class="kpi-note">${plur(A.recOpen.length,'rata aperta','rate aperte')}</div></div>
   <div class="card kpi ${A.overdue.length?'t-due':'t-ok'} reveal" style="--i:4" data-acc-tab="receivables" tabindex="0"><div class="kpi-top"><span>Scaduto</span><span class="kpi-icon">${icon('alert')}</span></div><div class="kpi-value acc-v">${DFE0.format(A.overdueSum)}</div><div class="kpi-note">${A.overdue.length?`${plur(new Set(A.overdue.map(x=>x.partyCode)).size,'cliente da sollecitare','clienti da sollecitare')}`:'nessun ritardo'}</div></div>
   <div class="card kpi reveal" style="--i:5" data-acc-tab="payables" tabindex="0"><div class="kpi-top"><span>Da pagare · 30 gg</span><span class="kpi-icon">${icon('upload')}</span></div><div class="kpi-value acc-v">${DFE0.format(A.toPay30)}</div><div class="kpi-note">${DFE0.format(A.toPay)} in totale ai fornitori</div></div></div>
  ${A.inv.length?`<div class="card reveal" style="--i:6"><div class="card-head"><div><h2>Fatturato mensile</h2><p>Ultimi 12 mesi, imponibile al netto delle note di credito.</p></div></div>
-  <div class="bars acc-bars">${A.months.map((m,i)=>`<div class="bar"><i class="${m.v<0?'neg':''}" style="height:${Math.max(3,Math.abs(m.v)/maxM*100)}%;--i:${i}" data-v="${esc(DFE0.format(m.v))} · ${m.n} doc."></i><span>${DF3.format(m.d)}</span></div>`).join('')}</div></div>`:''}
+  ${accMonthReadout()}
+  <div class="bars acc-bars" role="group" aria-label="Fatturato per mese">${A.months.map((m,i)=>`<button type="button" class="bar${i===accSel()?' on':''}" data-acc-m="${i}" aria-pressed="${i===accSel()}" aria-label="${esc(DFMY.format(m.d))}: ${esc(DFE0.format(m.v))}"><i class="${m.v<0?'neg':''}" style="height:${Math.max(3,Math.abs(m.v)/maxM*100)}%;--i:${i}"></i><span>${DF3.format(m.d)}</span></button>`).join('')}</div></div>`:''}
  ${A.has?accCash():''}
  ${A.has?accFocus():''}`;
+}
+/** month picked on the monthly chart (the current one at first) */
+function accSel(){return aui.sel??A.months.length-1;}
+function accMonthReadout(){
+ const i=accSel(),m=A.months[i];if(!m)return'';const d=m.pv>0.5?(m.v-m.pv)/m.pv*100:null;const cur=i===A.months.length-1;
+ return`<div class="acc-mon" aria-live="polite"><div><span class="acc-mon-l">${esc(DFMY.format(m.d))}${cur?' · in corso':''}</span>
+  <strong class="acc-mon-v">${DFE0.format(m.v)}</strong>
+  <small>${plur(m.n,'documento','documenti')}${m.cn?` · ${plur(m.cn,'nota di credito','note di credito')}`:''}${d===null?'':` · <b style="color:var(--${d>=0?'ok':'bad'})">${d>=0?'▲':'▼'} ${Math.abs(d).toFixed(1).replace('.',',')}%</b> su ${cur?`1–${new Date().getDate()} `:''}${esc(DF3.format(m.d))} ${m.d.getFullYear()-1} (${DFE0.format(m.pv)})`}</small></div>
+  ${m.n?`<button class="btn sm ghost" data-acc-mon="${monKey(m.d)}">Vedi le fatture${icon('chevron')}</button>`:''}</div>`;
 }
 /** cash flow of the next 8 weeks + how old the overdue is */
 function accCash(){
@@ -89,7 +103,7 @@ function accCash(){
    <p class="flow-note">Saldo previsto a 8 settimane: <strong class="mono" style="color:var(--${run<0?'bad':'ok'})">${DFE0.format(run)}</strong></p></div>
   <div class="card reveal" style="--i:8"><div class="card-head"><div><h2>Anzianità dello scaduto</h2><p>${A.overdue.length?`${DFE0.format(A.overdueSum)} in ${plur(A.overdue.length,'rata','rate')}: più è vecchio, più è urgente.`:'Nessuna rata scaduta.'}</p></div><button class="btn sm ghost" data-acc-tab="receivables">Sollecita${icon('chevron')}</button></div>
    <div class="aging-bar" role="img" aria-label="Scaduto per anzianità">${ag.map((g,i)=>g.v>0?`<i style="flex:${g.v/agT};background:${tones[i]};--i:${i}"></i>`:'').join('')||'<i style="flex:1;background:var(--ok)"></i>'}</div>
-   <div class="aging">${ag.map((g,i)=>`<div><span><i style="background:${tones[i]}"></i>${g.l}</span><strong class="mono">${DFE0.format(g.v)}</strong><small>${plur(g.n,'rata','rate')}</small></div>`).join('')}</div></div>
+   <div class="aging">${ag.map((g,i)=>`<div><span><i style="background:${tones[i]}"></i>${g.l}</span><strong class="tab">${DFE0.format(g.v)}</strong><small>${plur(g.n,'rata','rate')}</small></div>`).join('')}</div></div>
  </div>`;
 }
 /** what the office should look at today: overdue receivables to chase, payments due soon, best customers of the year */
@@ -115,7 +129,7 @@ function accRegister(kind){
   payables:['Da <span class="grad">pagare</span>.','Le scadenze verso i fornitori, in ordine di data.',payablesTab,'dues'],
   clients:['Situazione <span class="grad">clienti</span>.','Fatturato, residui e scaduto di ogni cliente: prima chi è in ritardo.',clientsAccTab,'']}[kind];
  return`${hero(T[0],T[1],T[3]?`<button class="btn need-export" data-acc-exp="${T[3]}">${icon('download')}${T[3]==='dues'?'Scadenze':'Fatture'} CSV</button>`:'')}
- ${A.has?T[2]():`<div class="card reveal" style="--i:2">${empty('euro','Nessun dato contabile','Importa fatture e scadenze da MastroSQL in Impostazioni: basta un clic, i dati di Mastro non vengono modificati.')}</div>`}`;
+ ${A.has?T[2]():`<div class="card reveal" style="--i:2">${empty('euro','Nessun dato contabile','Il server legge fatture e scadenze da MastroSQL da solo ogni ora (sola lettura). Per averle subito: Impostazioni → Importa da MastroSQL.')}</div>`}`;
 }
 
 function dueRows(list,cols){
@@ -123,7 +137,7 @@ function dueRows(list,cols){
   <td><div class="who"><span class="mark" style="--h:${hue(x.name)}">${esc(initials(x.name))}</span><div><strong>${hl(x.name,ui.q)}</strong><small class="mono">${esc(x.partyCode)}${x.payment?' · '+esc(x.payment):''}</small></div></div></td>
   <td class="mono"><span class="muted">doc.</span> ${x.docNumber?hl(x.docNumber,ui.q):'—'}<br><small class="muted">${x.docD?dShort(x.docD):''}</small></td>
   <td>${x.d?dShort(x.d):'—'}<br><small style="color:var(--${dueCls(x)==='bad'?'bad':dueCls(x)==='due'?'due':'text-3'})">${dueWhen(x)}</small></td>
-  <td class="mono"><strong>${eurA(x.left)}</strong>${x.paid>0&&x.left>0?`<br><small class="muted">su ${eurA(x.amount)}</small>`:''}</td>
+  <td class="num"><strong>${eurA(x.left)}</strong>${x.paid>0&&x.left>0?`<br><small class="muted">su ${eurA(x.amount)}</small>`:''}</td>
   ${cols?`<td>${x.note?.status?`<span class="badge ${DUE_CLS[x.note.status]||''}">${esc(x.note.status)}</span>`:x.open&&x.days<0?'<span class="badge bad">Scaduta</span>':x.open?'<span class="badge">Aperta</span>':'<span class="badge ok">Pagata</span>'}${x.note?.note?`<br><small class="muted acc-note">${esc(x.note.note)}</small>`:''}</td>`:''}
   <td><span class="row-go">${icon('chevron')}</span></td></tr>`).join('');
 }
@@ -138,7 +152,7 @@ function receivablesTab(){
  const list=filterDues(A.rec);const rows=pageOf(list,16);
  return`<div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Scadenzario clienti<span class="count">${fmt(list.length)}</span></h2><p>Residuo ${eurA(list.reduce((s,x)=>s+x.left,0))} · apri una rata per segnare il sollecito o la promessa di pagamento.</p></div></div>
  <div class="toolbar">${search('Cerca cliente, documento, nota…')}${onlySel(true)}</div>
- <div class="table-wrap"><table class="t-acc"><thead><tr><th>Cliente</th><th>Documento</th><th>Scadenza</th><th>Residuo</th><th>Stato</th><th></th></tr></thead><tbody>
+ <div class="table-wrap"><table class="t-acc"><thead><tr><th>Cliente</th><th>Documento</th><th>Scadenza</th><th class="num">Residuo</th><th>Stato</th><th></th></tr></thead><tbody>
  ${dueRows(rows,true)||`<tr><td colspan="6">${empty('check','Nessuna rata','Nessun incasso corrisponde ai filtri: ottimo segno.')}</td></tr>`}
  </tbody></table></div>${pager(list.length,16)}</div>`;
 }
@@ -146,19 +160,21 @@ function payablesTab(){
  const list=filterDues(A.pay);const rows=pageOf(list,16);
  return`<div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Pagamenti ai fornitori<span class="count">${fmt(list.length)}</span></h2><p>Residuo ${eurA(list.reduce((s,x)=>s+x.left,0))} · in ordine di scadenza.</p></div></div>
  <div class="toolbar">${search('Cerca fornitore, documento…')}${onlySel(false)}</div>
- <div class="table-wrap"><table class="t-acc"><thead><tr><th>Fornitore</th><th>Documento</th><th>Scadenza</th><th>Residuo</th><th>Stato</th><th></th></tr></thead><tbody>
+ <div class="table-wrap"><table class="t-acc"><thead><tr><th>Fornitore</th><th>Documento</th><th>Scadenza</th><th class="num">Residuo</th><th>Stato</th><th></th></tr></thead><tbody>
  ${dueRows(rows,true)||`<tr><td colspan="6">${empty('check','Nessun pagamento','Nessuna scadenza fornitore corrisponde ai filtri.')}</td></tr>`}
  </tbody></table></div>${pager(list.length,16)}</div>`;
 }
 function invoicesTab(){
  const q=norm(ui.q);let list=A.inv;if(q)list=list.filter(i=>i.search.includes(q));
  if(aui.year)list=list.filter(i=>i.d&&String(i.d.getFullYear())===aui.year);
+ if(aui.mm)list=list.filter(i=>i.d&&i.d.getMonth()+1===+aui.mm);
+ if(aui.kind)list=list.filter(i=>aui.kind==='nc'?i.sign<0:i.sign>0);
  const rows=pageOf(list,18);const tot=list.reduce((s,i)=>s+i.net,0);
  return`<div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Fatture e note di credito<span class="count">${fmt(list.length)}</span></h2><p>Imponibile ${eurA(tot)}${list.length?` · ${eurA(list.reduce((s,i)=>s+i.gross,0))} con IVA`:''}.</p></div></div>
- <div class="toolbar">${search('Cerca numero, cliente, pagamento…')}<select class="select" id="f-acc-year"><option value="">Tutti gli anni</option>${A.years.map(y=>`<option${aui.year===String(y)?' selected':''}>${y}</option>`).join('')}</select></div>
- <div class="table-wrap"><table class="t-acc"><thead><tr><th>Documento</th><th>Cliente</th><th>Imponibile</th><th>IVA</th><th>Totale</th><th>Pagamento</th></tr></thead><tbody>
+ <div class="toolbar">${search('Cerca numero, cliente, pagamento…')}<select class="select" id="f-acc-year" aria-label="Anno"><option value="">Tutti gli anni</option>${A.years.map(y=>`<option${aui.year===String(y)?' selected':''}>${y}</option>`).join('')}</select><select class="select" id="f-acc-mm" aria-label="Mese"><option value="">Tutti i mesi</option>${MESI.map((m,k)=>`<option value="${k+1}"${aui.mm===String(k+1)?' selected':''}>${m}</option>`).join('')}</select><select class="select" id="f-acc-kind" aria-label="Tipo"><option value="">Fatture e note</option><option value="f"${aui.kind==='f'?' selected':''}>Solo fatture</option><option value="nc"${aui.kind==='nc'?' selected':''}>Solo note di credito</option></select>${aui.year||aui.mm||aui.kind?`<button class="btn sm ghost" data-acc-mon="" title="Togli i filtri">${icon('close')}Azzera</button>`:''}</div>
+ <div class="table-wrap"><table class="t-acc"><thead><tr><th>Documento</th><th>Cliente</th><th class="num">Imponibile</th><th class="num">IVA</th><th class="num">Totale</th><th>Pagamento</th></tr></thead><tbody>
  ${rows.map((i,k)=>`<tr class="reveal" style="--i:${Math.min(k,14)}" ${i.client?`data-client="${esc(i.client.code)}" tabindex="0"`:''}><td><strong class="mono">${hl(i.number,ui.q)}</strong> ${i.sign<0?'<span class="badge acc">Nota di credito</span>':''}<br><small class="muted">${i.d?dShort(i.d):esc(i.date)}</small></td>
-  <td><strong style="font-weight:560">${hl(i.name,ui.q)}</strong><br><small class="muted mono">${esc(i.clientCode)}</small></td><td class="mono">${eurA(i.net)}</td><td class="mono muted">${eurA(i.sign*Math.abs(i.vat||0))}</td><td class="mono"><strong>${eurA(i.gross)}</strong></td><td>${esc(i.payment||'—')}</td></tr>`).join('')
+  <td><strong style="font-weight:560">${hl(i.name,ui.q)}</strong><br><small class="muted mono">${esc(i.clientCode)}</small></td><td class="num">${eurA(i.net)}</td><td class="num muted">${eurA(i.sign*Math.abs(i.vat||0))}</td><td class="num"><strong>${eurA(i.gross)}</strong></td><td>${esc(i.payment||'—')}</td></tr>`).join('')
   ||`<tr><td colspan="6">${empty('file','Nessuna fattura','Modifica la ricerca o l’anno.')}</td></tr>`}
  </tbody></table></div>${pager(list.length,18)}</div>`;
 }
@@ -169,9 +185,9 @@ function clientsAccTab(){
  const rows=pageOf(list,16);
  return`<div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Situazione per cliente<span class="count">${fmt(list.length)}</span></h2><p>Prima chi ha importi scaduti. Clicca per aprire la scheda cliente.</p></div></div>
  <div class="toolbar">${search('Cerca cliente…')}</div>
- <div class="table-wrap"><table class="t-acc"><thead><tr><th>Cliente</th><th>Fatturato ${new Date().getFullYear()}</th><th>Da incassare</th><th>Scaduto</th><th>Ultima fattura</th><th></th></tr></thead><tbody>
+ <div class="table-wrap"><table class="t-acc"><thead><tr><th>Cliente</th><th class="num">Fatturato ${new Date().getFullYear()}</th><th class="num">Da incassare</th><th class="num">Scaduto</th><th>Ultima fattura</th><th></th></tr></thead><tbody>
  ${rows.map((x,k)=>`<tr class="reveal" style="--i:${Math.min(k,14)}" data-client="${esc(x.c.code)}" tabindex="0"><td><div class="who">${markEl(x.c.name,x.c.code)}<div><strong>${hl(x.c.name,ui.q)}</strong><small>${esc(x.c.city||'')}</small></div></div></td>
-  <td class="mono">${eurA(x.revY)}</td><td class="mono">${x.open?eurA(x.open):'<span class="muted">—</span>'}</td><td class="mono" style="color:var(--${x.overdue?'bad':'text-3'})">${x.overdue?'<strong>'+eurA(x.overdue)+'</strong>':'—'}</td>
+  <td class="num">${eurA(x.revY)}</td><td class="num">${x.open?eurA(x.open):'<span class="muted">—</span>'}</td><td class="num" style="color:var(--${x.overdue?'bad':'text-3'})">${x.overdue?'<strong>'+eurA(x.overdue)+'</strong>':'—'}</td>
   <td>${x.inv[0]?.d?dShort(x.inv[0].d):'—'}</td><td><span class="row-go">${icon('chevron')}</span></td></tr>`).join('')||`<tr><td colspan="6">${empty('users','Nessun cliente','Nessun cliente con movimenti contabili.')}</td></tr>`}
  </tbody></table></div>${pager(list.length,16)}</div>`;
 }
@@ -224,7 +240,12 @@ function openDue(id){
 }
 
 document.addEventListener('click',e=>{
- const t=e.target.closest('[data-acc-tab],[data-due],[data-acc-exp],[data-acc-client]');if(!t)return;const ds=t.dataset;
+ const t=e.target.closest('[data-acc-tab],[data-due],[data-acc-exp],[data-acc-client],[data-acc-m],[data-acc-mon]');if(!t)return;const ds=t.dataset;
+ if(ds.accM!==undefined){aui.sel=+ds.accM;const card=t.closest('.card');
+  const swap=()=>{card.querySelectorAll('[data-acc-m]').forEach(b=>{const on=b===t;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on);});
+   const r=card.querySelector('.acc-mon');if(r){r.outerHTML=accMonthReadout();card.querySelector('.acc-mon')?.classList.add('swap');}};
+  return document.startViewTransition&&!matchMedia('(prefers-reduced-motion: reduce)').matches?void document.startViewTransition(swap):swap();}
+ if(ds.accMon!==undefined){const m=ds.accMon;aui.year=m?m.slice(0,4):'';aui.mm=m?String(+m.slice(5)):'';aui.kind='';ui.p=1;if(m)ui.q='';return page==='accInv'?render(false):go('accInv');}
  if(ds.accTab){if(ds.accTab!=='invoices')aui.only=aui.only||'open';return go(ACC_PAGE[ds.accTab]||'accRec');}
  if(ds.due)return openDue(ds.due);
  if(ds.accExp)return send(ds.accExp==='dues'?'exportDues':'exportInvoices');
@@ -234,4 +255,6 @@ document.addEventListener('keydown',e=>{if(e.key!=='Enter')return;const r=e.targ
 document.addEventListener('change',e=>{const id=e.target.id;
  if(id==='f-acc-only'){aui.only=e.target.value;ui.p=1;render(false);}
  else if(id==='f-acc-year'){aui.year=e.target.value;ui.p=1;render(false);}
+ else if(id==='f-acc-mm'){aui.mm=e.target.value;ui.p=1;render(false);}
+ else if(id==='f-acc-kind'){aui.kind=e.target.value;ui.p=1;render(false);}
 });

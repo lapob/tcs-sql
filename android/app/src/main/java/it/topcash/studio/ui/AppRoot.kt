@@ -222,7 +222,7 @@ private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay")
                     screen("deadlines") { DeadlinesScreen(it, nav) }
                     screen("accounting") { if (seesAcc) AccountingScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("accSal") { if (seesAcc) SalesScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
-                    AccView.entries.forEach { v -> screen(v.route) { if (seesAcc) AccountingScreen(vm, it, nav, v, topLevel = true) else LaunchedEffect(Unit) { nav.switchTab("home") } } }
+                    AccView.entries.forEach { v -> screen(v.route) { if (seesAcc) AccountingScreen(vm, it, nav, v, topLevel = v.route in accTabRoutes) else LaunchedEffect(Unit) { nav.switchTab("home") } } }
                     screen("licenses") { LicensesScreen(vm, it, nav) }
                     screen("orders") { OrdersScreen(it, nav) }
                     screen("account") { AccountScreen(vm, nav) }
@@ -242,6 +242,9 @@ private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay")
                 }
             }
         }
+        // Back inside Contabilità: from Vendite, Incassi, Fatture or Altro to Riepilogo first (then, from Riepilogo, to Interventi).
+        // Registered after the NavHost so it is asked first (the last enabled callback wins).
+        androidx.activity.compose.BackHandler(enabled = editor == null && movement == null && area == "acc" && (route in accTabRoutes || route == "more") && route != "acc") { nav.switchTab("acc") }
         val ed = editor
         val mv = movement
         if (mv != null && a != null) MovementSheet(vm, a, mv.first, mv.second, onDismiss = { movement = null })
@@ -249,7 +252,9 @@ private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay")
     }
 }
 
-private val tabRoutes = setOf("home", "clients", "interventions", "warehouse", "more", "acc", "accSal", "accRec", "accInv", "accPay")
+private val tabRoutes = setOf("home", "clients", "interventions", "warehouse", "more", "acc", "accSal", "accRec", "accInv")
+/** Pages of the accounting area that sit in its bottom bar; "Da pagare" is opened from Altro and goes back there. */
+val accTabRoutes = setOf("acc", "accSal", "accRec", "accInv")
 private fun androidx.compose.animation.AnimatedContentTransitionScope<androidx.navigation.NavBackStackEntry>.isTabSwitch() =
     initialState.destination.route in tabRoutes && targetState.destination.route in tabRoutes
 
