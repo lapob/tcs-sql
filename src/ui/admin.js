@@ -12,7 +12,7 @@ function applyEdits(){
  for(const [code,e] of Object.entries(edits)){
   let c=D.byCode.get(code);
   if(!c){if(!e.created)continue;
-   c={code,name:e.name||code,vat:'',taxCode:'',city:'',address:'',phone:'',email:'',families:[],records:[],active:[],orders:[],status:'Senza licenze',next:null,meta:state.metadata?.[code]||{},note:state.notes?.[code]||'',registry:false,installer:'',machines:[],interventions:[],phones:[],emails:[],mastro:null,dtr:[],ital:[]};
+   c={code,name:e.name||code,vat:'',taxCode:'',city:'',address:'',phone:'',email:'',families:[],records:[],active:[],orders:[],status:'Senza licenze',next:null,meta:state.metadata?.[code]||{},note:state.notes?.[code]||'',registry:false,installer:'',machines:[],interventions:[],verifications:[],phones:[],emails:[],mastro:null,dtr:[],ital:[]};
    D.clients.push(c);D.byCode.set(code,c);}
   c.edit=e;D.edited++;
   for(const [k] of CE_FIELDS)if(e[k])c[k]=e[k];

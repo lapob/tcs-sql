@@ -11,7 +11,7 @@ public static class MastroReader
 {
  public sealed record Config(string Host,int Port,string Database,string User,string Password,string IniPath);
  public sealed record Preview(int Clients,int Machines,int Interventions,int WithPhone,int WithEmail,List<string> ClientColumns,List<string> MachineColumns,string InterventionTable,List<MastroClient> Sample,List<string> Warnings,
-  int Articles=0,int StockRows=0,int Warehouses=0,int Invoices=0,int Dues=0,int Balances=0);
+  int Invoices=0,int Dues=0,int Balances=0);
 
  public static readonly string[] IniCandidates=[@"C:\MastroSQL\RETE.ini",@"C:\mastro20\RETE.ini",@"C:\MastroSQL\utility\RETE.ini"];
  public static Config? FromIni(string? path=null)
@@ -343,45 +343,8 @@ public static class MastroReader
   }
   else warnings.Add("Archivio interventi di Mastro non trovato: verranno usati solo quelli creati nell'app.");
 
-  // ── warehouse: catalogue (arti), stock per warehouse (art_giace), categories (reparti), suppliers (fornito)
-  var articles=new List<Article>();var stock=new List<MastroStock>();
-  static decimal D(string s)=>decimal.TryParse(s,NumberStyles.Any,CultureInfo.InvariantCulture,out var v)?v:0;
-  var tArti=Tab("arti");
-  if(tArti!=null)
-  {
-   var cats=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);var sups=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
-   if(Tab("reparti") is string tr)foreach(var r in await All(tr,10_000)){var k=F(r,"NUME","CODI","REPA","CODICE");if(k.Length>0)cats[k]=F(r,"DESCRI");}
-   if(Tab("fornito") is string tf)foreach(var r in await All(tf,50_000)){var k=F(r,"CODI","CODICE");if(k.Length>0)sups[k]=F(r,"DESCRI");}
-   var seenBarcodes=new HashSet<string>();
-   foreach(var d in await All(tArti,300_000))
-   {
-    var code=F(d,"CODI","CODICE");var name=(F(d,"DESCRI")+" "+F(d,"DESCRI2")).Trim();if(code.Length==0||name.Length==0)continue;
-    var barcode=F(d,"BARCODE","EAN","CORTO");if(barcode.Length>0&&!seenBarcodes.Add(barcode))barcode=""; // a barcode identifies one article only
-    var cost=D(F(d,"COSM"));if(cost<=0)cost=D(F(d,"COST"));
-    var repa=F(d,"REPA");var forn=F(d,"FORNITO");
-    articles.Add(new(code,name.Length>200?name[..200]:name,barcode,cats.GetValueOrDefault(repa,repa),F(d,"MISU").ToUpperInvariant(),Math.Max(0,cost),Math.Max(0,D(F(d,"VEND"))),
-     Math.Clamp(D(F(d,"IVA")),0,100),sups.GetValueOrDefault(forn,forn),F(d,"CFOR"),false,true,"","mastro",""));
-   }
-   articles=articles.DistinctBy(a=>a.Code.ToUpperInvariant()).ToList();
-   if(Tab("art_giace") is string tg)
-   {
-    // Mastro 20: one row per article (CORTO = internal number of arti) × warehouse × year; the stock is ESIS of the latest real year
-    var byCorto=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
-    foreach(var d in await All(tArti,300_000)){var k=F(d,"CORTO");var code=F(d,"CODI","CODICE");if(k.Length>0&&code.Length>0)byCorto.TryAdd(k,code);}
-    var latest=new Dictionary<(string,string),(int Year,decimal Qty)>();
-    foreach(var d in await All(tg,500_000))
-    {
-     var code=F(d,"CODI","ARTI","ART_CODI","CODICE");if(code.Length==0&&byCorto.TryGetValue(F(d,"CORTO"),out var bc))code=bc;if(code.Length==0)continue;
-     var year=int.TryParse(F(d,"ANNO"),out var y)?y:0;if(year>DateTime.Today.Year)continue; // typos like 4202 in Mastro
-     var maga=F(d,"MAGA").Length>0?F(d,"MAGA"):"1";var key=(code,maga);
-     if(!latest.TryGetValue(key,out var cur)||year>=cur.Year)latest[key]=(year,D(F(d,"ESIS")));
-    }
-    foreach(var ((code,maga),v) in latest)if(v.Qty!=0)stock.Add(new(code,maga,v.Qty));
-   }
-   else warnings.Add("Tabella delle giacenze (art_giace) non trovata: verrà importato solo il catalogo articoli.");
-  }
-  else warnings.Add("Tabella articoli (arti) non trovata: magazzino non importato.");
 
+  static decimal D(string s)=>decimal.TryParse(s,NumberStyles.Any,CultureInfo.InvariantCulture,out var v)?v:0;
   // ── accounting: invoices (lis_fat), instalments (mov_sca), ledger balances (mov_con). Read only; Mastro stays the system of record.
   List<Invoice>? invoices=null;List<Due>? dues=null;List<Balance>? balances=null;
   var cliNames=clients.GroupBy(x=>x.Code,StringComparer.OrdinalIgnoreCase).ToDictionary(g=>g.Key,g=>g.First().Name,StringComparer.OrdinalIgnoreCase);
@@ -527,9 +490,54 @@ public static class MastroReader
   }
   catch(MySqlException ex){ledger=null;warnings.Add("Conti economici (mov_con) non leggibili: "+ex.Message);}
 
-  var batch=new MastroBatch(clients,machines,interventions,DateTimeOffset.Now.ToString("O"),$"MastroSQL {cfg.Host}/{cfg.Database}",articles,stock,false,invoices,dues,balances,rtList,sites,riba,sales,ledger);
+  // ── closed interventions with an amount that produced no document in Mastro (last 12 months)
+  List<InsUnbilled>? unbilled=null;
+  if(Tab("lis_int") is string tub)try
+  {
+   var have=await Cols(tub);
+   if(have.Contains("N_NUME_DOC")&&have.Contains("TOT_DOC"))
+   {
+    unbilled=[];
+    var want=new[]{"NUME","CODI","NOME_CLI","DATA","DIFETTO","LAVORO","TECNICO","TOT_DOC"}.Where(have.Contains);
+    await using var q=new MySqlCommand($"SELECT {string.Join(',',want.Select(x=>$"`{x}`"))} FROM `{tub.Replace("`","")}` WHERE DATA>=@s AND (CHIUSO=1 OR ESEGUITO=1) AND TOT_DOC>0 AND (N_NUME_DOC IS NULL OR N_NUME_DOC=0) ORDER BY DATA DESC LIMIT 500",c);
+    q.Parameters.AddWithValue("@s",DateTime.Today.AddMonths(-12));
+    await using var r=await q.ExecuteReaderAsync(ct);
+    while(await r.ReadAsync(ct))
+    {
+     var d=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);for(int i=0;i<r.FieldCount;i++){object? v;try{v=r.GetValue(i);}catch{v=null;}d[r.GetName(i)]=S(v);}
+     var code=Num(F(d,"CODI"));if(code.Length==0||code=="0")continue;
+     var dif=F(d,"DIFETTO").Trim();var first=F(d,"LAVORO").Trim().Split('\n')[0].Trim();
+     var title=dif.Length>0?Pretty(dif):first.Length>0?(first.Length>90?first[..90]+"…":first):"Intervento n. "+F(d,"NUME");
+     unbilled.Add(new("mi"+F(d,"NUME"),code,cliNames.GetValueOrDefault(code,F(d,"NOME_CLI")),F(d,"DATA"),title,Tech(F(d,"TECNICO")),D(F(d,"TOT_DOC")),"mastro"));
+    }
+   }
+  }
+  catch(MySqlException ex){unbilled=null;warnings.Add("Interventi non fatturati non leggibili: "+ex.Message);}
+  // ── e-invoices that did not reach the customer: never sent to SDI, rejected, or not delivered (to be told to the customer)
+  List<InsSdi>? sdi=null;
+  if(Tab("lis_fat") is string tsd)try
+  {
+   var have=await Cols(tsd);
+   if(have.Contains("XML_ESITO"))
+   {
+    sdi=[];
+    await using var q=new MySqlCommand($"SELECT NUME,BARRA,DATAI,CODI,TOT_DOC,XML_ESITO,{(have.Contains("XML_CODI_ESITO")?"XML_CODI_ESITO":"''")},FATT_NOTA FROM `{tsd.Replace("`","")}` WHERE DATAI>=@s AND (XML_ESITO IS NULL OR XML_ESITO<>1) AND NOT (XML_ESITO=52 AND DATAI<@m) ORDER BY DATAI DESC LIMIT 400",c);
+    q.Parameters.AddWithValue("@s",DateTime.Today.AddMonths(-18));q.Parameters.AddWithValue("@m",DateTime.Today.AddMonths(-4));
+    await using var r=await q.ExecuteReaderAsync(ct);
+    while(await r.ReadAsync(ct))
+    {
+     string G(int i){object? v;try{v=r.GetValue(i);}catch{v=null;}return S(v);}
+     var num=Num(G(0));var barra=G(1);var code=Num(G(3));var esito=G(5);var cod=G(6).Trim().ToUpperInvariant();
+     var status=esito is "" or "0"?"Non inviata":esito=="52"||cod=="MC"?"Mancata consegna":cod=="NS"?"Scartata":"Esito "+(cod.Length>0?cod:esito);
+     var credit=True(G(7));
+     sdi.Add(new(barra.Length>0?$"{num}/{barra}":num,G(2),code,cliNames.GetValueOrDefault(code,code),Math.Abs(D(G(4)))*(credit?-1:1),status));
+    }
+   }
+  }
+  catch(MySqlException ex){sdi=null;warnings.Add("Esiti SDI non leggibili: "+ex.Message);}
+  var batch=new MastroBatch(clients,machines,interventions,DateTimeOffset.Now.ToString("O"),$"MastroSQL {cfg.Host}/{cfg.Database}",invoices,dues,balances,rtList,sites,riba,sales,ledger,unbilled,sdi);
   var preview=new Preview(clients.Count,machines.Count,interventions.Count,clients.Count(x=>x.Phones.Count>0),clients.Count(x=>x.Emails.Count>0),cols,machineCols,interTable,clients.Take(6).ToList(),warnings,
-   articles.Count,stock.Count,stock.Select(s=>s.Warehouse).Distinct().Count(),invoices?.Count??0,dues?.Count??0,balances?.Count??0);
+   invoices?.Count??0,dues?.Count??0,balances?.Count??0);
   return(batch,preview);
  }
 }

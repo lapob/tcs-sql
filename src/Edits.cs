@@ -160,6 +160,27 @@ public sealed record MastroView(List<MastroClient> Clients, List<Machine> Machin
 
 public sealed partial class Store
 {
+ static readonly System.Text.RegularExpressions.Regex VerTitle = new(@"^\s*verific(a|azione)\s+periodic", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+ public static bool IsVerification(Intervention i) => VerTitle.IsMatch(i.Title ?? "");
+ /// Periodic verifications (every 2 years by law) are not repair work: Mastro records them as interventions titled
+ /// "Verifica periodica". They get Kind "Verifica" so every screen keeps them apart from the real interventions, and each
+ /// machine takes as last verification the most recent one among its own date, the closed verification jobs and the
+ /// fiscal history read from Mastro (the machine date is often behind).
+ (List<Machine>, List<Intervention>) SplitVerifications(List<Machine> machines, List<Intervention> iv)
+ {
+  var last = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+  void Seen(string id, string? date) { if (date is not { Length: >= 10 }) return; var d = date[..10]; if (!last.TryGetValue(id, out var o) || string.CompareOrdinal(d, o) > 0) last[id] = d; }
+  foreach (var r in RtInfos()) foreach (var v in r.Verifications ?? []) Seen(r.MachineId, v.Date);
+  var today = DateTime.Today.ToString("yyyy-MM-dd");
+  iv = iv.Select(i =>
+  {
+   if (!IsVerification(i)) return i;
+   if (i.Source == "mastro" && i.Status == "Chiuso" && string.CompareOrdinal(i.Date, today) <= 0) Seen("m" + i.Machine, i.Date);
+   return i with { Kind = "Verifica" };
+  }).ToList();
+  machines = machines.Select(m => last.TryGetValue(m.Id, out var d) && string.CompareOrdinal(d, m.Verification.Length >= 10 ? m.Verification[..10] : m.Verification) > 0 ? m with { Verification = d } : m).ToList();
+  return (machines, iv);
+ }
  public static readonly List<string> DefaultHiddenBrands = ["EDIT"];
  public List<string> HiddenBrands() => Setting<BrandRule>("hide.brands")?.Brands ?? [.. DefaultHiddenBrands];
  public void SaveHiddenBrands(IEnumerable<string> brands, string who)
@@ -179,6 +200,15 @@ public sealed partial class Store
  public MastroView Mastro()
  {
   var brands = HiddenBrands(); var cl = MastroClients(); var everything = Machines(); var iv = Interventions();
+  // technicians taken off the team disappear everywhere (the archive keeps them: putting the name back restores everything)
+  var roster = Roster();
+  if (roster.Hidden.Count > 0)
+  {
+   everything = everything.Select(m => HiddenTech(m.Technician, roster) ? m with { Technician = "" } : m).ToList();
+   iv = iv.Select(i => HiddenTech(i.Technician, roster) ? i with { Technician = "" } : i).ToList();
+   cl = cl.Select(c => HiddenTech(c.Agent, roster) ? c with { Agent = "" } : c).ToList();
+  }
+  (everything, iv) = SplitVerifications(everything, iv);
   var all = everything.Where(m => m.Active).ToList();
   var withActive = all.Select(m => m.ClientCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
   var keepKeys = ClientEdits().Where(e => e.Value.Keep || e.Value.Created).Select(e => e.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);

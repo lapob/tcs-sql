@@ -8,7 +8,7 @@ namespace TopCash.Licenze;
 // Ledger model: every stock change is a Movement with a positive quantity going FROM a location and/or TO a location.
 // Stock(article, location) = Σ qty IN − Σ qty OUT. Locations = the main warehouse plus one per van / technician.
 
-/// A stock location: the office warehouse ("sede") or a technician's van ("furgone").
+/// The stock location. There is one, the office warehouse "sede" (older archives may still list others).
 public sealed record Warehouse(string Id, string Name, string Kind, string Technician, bool Active, string Notes);
 /// Catalogue item. Serialized items (e.g. cash registers) are tracked by serial number in every movement.
 public sealed record Article(string Code, string Name, string Barcode, string Category, string Unit, decimal Cost, decimal Price, decimal Vat,
@@ -20,8 +20,6 @@ public sealed record Movement(string Id, string Date, string Type, string Articl
 /// Spare part used in an intervention: unloaded automatically from the given location (usually the technician's van).
 public sealed record PartUse(string Article, decimal Qty, string Warehouse, string Serial);
 public sealed record StockRow(string Article, string Warehouse, decimal Qty);
-/// Opening stock read from MastroSQL (warehouse number → quantity).
-public sealed record MastroStock(string Article, string Warehouse, decimal Qty);
 
 /// CSV reports (Italian Excel: ';' separator, UTF-8 BOM added by the caller).
 public static class WarehouseReports
@@ -66,8 +64,7 @@ public static class WarehouseReports
 
 public sealed partial class Store
 {
- public static readonly string[] MovementTypes = ["carico", "scarico", "trasferimento", "rettifica", "inventario", "intervento"];
- public static readonly string[] WarehouseKinds = ["sede", "furgone"];
+ public static readonly string[] MovementTypes = ["carico", "scarico", "rettifica", "inventario", "intervento"];
 
  void InitMagazzino(SqliteConnection c)
  {
@@ -85,6 +82,14 @@ public sealed partial class Store
   // a fresh archive always has the office warehouse
   using var w = c.CreateCommand(); w.CommandText = "INSERT OR IGNORE INTO warehouses VALUES('sede',$d)";
   w.Parameters.AddWithValue("$d", JsonSerializer.Serialize(new Warehouse("sede", "Magazzino sede", "sede", "", true, ""))); w.ExecuteNonQuery();
+  // 2.9.8: one warehouse, products entered by hand only. What older versions imported from Mastro goes away
+  // (catalogue, stock alignments, the extra Mastro warehouses); everything created in the app stays.
+  using var x = c.CreateCommand(); x.CommandText = """
+   DELETE FROM articles WHERE json_extract(data,'$.Source')='mastro';
+   DELETE FROM movements WHERE type='rettifica' AND json_extract(data,'$.Notes')='Allineamento giacenze MastroSQL';
+   DELETE FROM warehouses WHERE id LIKE 'mastro-%';
+   DELETE FROM stock_levels WHERE article COLLATE NOCASE NOT IN (SELECT code FROM articles) OR warehouse NOT IN (SELECT id FROM warehouses);
+   """; x.ExecuteNonQuery();
  }
 
  public List<Warehouse> Warehouses() => ReadAll<Warehouse>("SELECT data FROM warehouses");
@@ -112,22 +117,6 @@ public sealed partial class Store
   q.Parameters.AddWithValue("$a", (object?)article ?? DBNull.Value);
   using var r = q.ExecuteReader(); var l = new List<StockRow>();
   while (r.Read()) l.Add(new(r.GetString(0), r.GetString(1), Math.Round((decimal)r.GetDouble(2), 3))); return l;
- }
-
- static string Slug(string s) => new string(s.Trim().ToLowerInvariant().Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray()).Trim('-');
-
- public Warehouse SaveWarehouse(Warehouse w, string who)
- {
-  if (w == null || string.IsNullOrWhiteSpace(w.Name) || w.Name.Length > 80) throw new InvalidDataException("Scrivi il nome del magazzino.");
-  if (!WarehouseKinds.Contains(w.Kind)) throw new InvalidDataException("Tipo di magazzino non valido.");
-  var id = string.IsNullOrWhiteSpace(w.Id) ? (w.Kind == "furgone" ? "van-" : "wh-") + Slug(w.Name) : w.Id;
-  if (id.Length > 60) id = id[..60];
-  var rec = w with { Id = id, Name = w.Name.Trim(), Technician = (w.Technician ?? "").Trim(), Notes = w.Notes ?? "" };
-  using var c = Open();
-  if (!rec.Active && StockOf(c, null).Any(s => s.Warehouse == id && s.Qty != 0)) throw new InvalidDataException("Il magazzino contiene ancora articoli: trasferiscili prima di disattivarlo.");
-  using var q = c.CreateCommand(); q.CommandText = "INSERT INTO warehouses VALUES($i,$d) ON CONFLICT(id) DO UPDATE SET data=$d";
-  q.Parameters.AddWithValue("$i", id); q.Parameters.AddWithValue("$d", JsonSerializer.Serialize(rec)); q.ExecuteNonQuery();
-  Log("magazzino", $"{who}: magazzino «{rec.Name}» salvato."); return rec;
  }
 
  public Article SaveArticle(Article a, string who)
@@ -195,7 +184,6 @@ public sealed partial class Store
    {
     case "carico": if (m.To.Length == 0 || m.From.Length > 0) throw new InvalidDataException($"Riga {n}: il carico va in un magazzino di destinazione."); break;
     case "scarico": case "intervento": if (m.From.Length == 0 || m.To.Length > 0) throw new InvalidDataException($"Riga {n}: lo scarico parte da un magazzino."); break;
-    case "trasferimento": if (m.From.Length == 0 || m.To.Length == 0 || m.From == m.To) throw new InvalidDataException($"Riga {n}: scegli due magazzini diversi."); break;
     default: if ((m.From.Length == 0) == (m.To.Length == 0)) throw new InvalidDataException($"Riga {n}: una rettifica indica un solo magazzino."); break;
    }
    foreach (var w in new[] { m.From, m.To }) if (w.Length > 0 && !warehouses.Contains(w)) throw new InvalidDataException($"Riga {n}: magazzino non trovato.");
@@ -249,39 +237,4 @@ public sealed partial class Store
    "Intervento: " + i.Title, who, "")).ToList(), who, allowNegative: true, i.Id);
  }
 
- /// MastroSQL: catalogue upsert (keeps app-created articles) and optional alignment of quantities to Mastro.
- int ImportMastroWarehouse(SqliteConnection c, SqliteTransaction tx, List<Article> articles, List<MastroStock> stock, bool alignStock, string who)
- {
-  foreach (var a in articles.Where(a => !string.IsNullOrWhiteSpace(a.Code) && !string.IsNullOrWhiteSpace(a.Name)).DistinctBy(a => a.Code.ToUpperInvariant()))
-  {
-   var rec = a with { Source = "mastro", Updated = DateTimeOffset.Now.ToString("O"), Unit = string.IsNullOrWhiteSpace(a.Unit) ? "PZ" : a.Unit, Barcode = a.Barcode ?? "", Category = a.Category ?? "", Supplier = a.Supplier ?? "", SupplierCode = a.SupplierCode ?? "", Notes = a.Notes ?? "" };
-   // keep settings made in the app (barcode, serialized flag) when Mastro has none
-   using (var g = c.CreateCommand()) { g.Transaction = tx; g.CommandText = "SELECT data FROM articles WHERE code=$c"; g.Parameters.AddWithValue("$c", rec.Code);
-    if (g.ExecuteScalar() is string old) { var o = JsonSerializer.Deserialize<Article>(old)!; rec = rec with { Barcode = rec.Barcode.Length > 0 ? rec.Barcode : o.Barcode, Serialized = rec.Serialized || o.Serialized, Notes = o.Notes.Length > 0 ? o.Notes : rec.Notes }; } }
-   using var q = c.CreateCommand(); q.Transaction = tx; q.CommandText = "INSERT INTO articles VALUES($c,$b,$d) ON CONFLICT(code) DO UPDATE SET barcode=$b, data=$d";
-   q.Parameters.AddWithValue("$c", rec.Code); q.Parameters.AddWithValue("$b", rec.Barcode); q.Parameters.AddWithValue("$d", JsonSerializer.Serialize(rec)); q.ExecuteNonQuery();
-  }
-  if (!alignStock || stock.Count == 0) return 0;
-  // Mastro warehouse N → location "mastro-N" (warehouse 1 = office)
-  foreach (var w in stock.Select(s => s.Warehouse).Distinct())
-  {
-   var id = w is "1" or "" ? "sede" : "mastro-" + w;
-   using var q = c.CreateCommand(); q.Transaction = tx; q.CommandText = "INSERT OR IGNORE INTO warehouses VALUES($i,$d)";
-   q.Parameters.AddWithValue("$i", id); q.Parameters.AddWithValue("$d", JsonSerializer.Serialize(new Warehouse(id, id == "sede" ? "Magazzino sede" : "Magazzino Mastro " + w, "sede", "", true, "Creato dall'importazione MastroSQL"))); q.ExecuteNonQuery();
-  }
-  var current = StockOf(c, tx).ToDictionary(s => (s.Article.ToUpperInvariant(), s.Warehouse), s => s.Qty);
-  var target = stock.GroupBy(s => (s.Article.ToUpperInvariant(), s.Warehouse is "1" or "" ? "sede" : "mastro-" + s.Warehouse)).ToDictionary(g => g.Key, g => g.Sum(x => x.Qty));
-  var known = articles.Select(a => a.Code.ToUpperInvariant()).ToHashSet();
-  var moves = new List<Movement>();
-  foreach (var key in target.Keys.Union(current.Keys.Where(k => target.Keys.Any(t => t.Item2 == k.Item2))))
-  {
-   if (!known.Contains(key.Item1)) continue;
-   var diff = target.GetValueOrDefault(key) - current.GetValueOrDefault(key);
-   if (diff == 0) continue;
-   var code = articles.First(a => a.Code.ToUpperInvariant() == key.Item1).Code;
-   moves.Add(new("", "", "rettifica", code, Math.Abs(diff), diff < 0 ? key.Item2 : "", diff > 0 ? key.Item2 : "", 0, "", "", "", "Allineamento giacenze MastroSQL", who, ""));
-  }
-  for (int i = 0; i < moves.Count; i += 500) AddMovementsTx(c, tx, moves.Skip(i).Take(500).ToList(), who, allowNegative: true, null);
-  return moves.Count;
- }
 }

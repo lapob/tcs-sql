@@ -36,6 +36,8 @@ import kotlinx.serialization.Serializable
     val total: String = "", val source: String = "app", val created: String = "", val createdBy: String = "", val updated: String = "", val updatedBy: String = "",
     val parts: List<PartUse> = emptyList(), val hours: String = "", val signer: String = "", val signedAt: String = "", val reportNo: String = "",
     val sentTo: String = "", val sentAt: String = "",
+    /** "Verifica" = periodic verification (every 2 years), kept apart from the real interventions. */
+    val kind: String = "",
 )
 // ── warehouse
 @Serializable data class PartUse(val article: String = "", val qty: Double = 1.0, val warehouse: String = "", val serial: String = "")
@@ -56,6 +58,14 @@ import kotlinx.serialization.Serializable
 @Serializable data class Due(val id: String = "", val party: String = "C", val partyCode: String = "", val partyName: String = "", val docNumber: String = "", val docDate: String = "",
     val dueDate: String = "", val amount: Double = 0.0, val paid: Double = 0.0, val payment: String = "", val source: String = "")
 /** Last read of Mastro (the server does it by itself every hour). */
+/** Priorità: computed by the server from Mastro, the same lists the site shows. */
+@Serializable data class Insights(val at: String = "", val unbilled: List<InsUnbilled> = emptyList(), val sdi: List<InsSdi> = emptyList(), val payers: List<InsPayer> = emptyList(),
+    val churn: List<InsChurn> = emptyList(), val opps: List<InsOpp> = emptyList(), val registerPrice: Double = 0.0)
+@Serializable data class InsUnbilled(val id: String = "", val clientCode: String = "", val name: String = "", val date: String = "", val title: String = "", val technician: String = "", val amount: Double = 0.0, val source: String = "")
+@Serializable data class InsSdi(val number: String = "", val date: String = "", val clientCode: String = "", val name: String = "", val total: Double = 0.0, val status: String = "")
+@Serializable data class InsPayer(val clientCode: String = "", val name: String = "", val grade: String = "", val overdue: Double = 0.0, val rates: Int = 0, val oldestDays: Int = 0, val open: Double = 0.0, val revenue12: Double = 0.0)
+@Serializable data class InsChurn(val clientCode: String = "", val name: String = "", val last12: Double = 0.0, val prev12: Double = 0.0, val lastInvoice: String = "", val lost: Double = 0.0)
+@Serializable data class InsOpp(val kind: String = "", val clientCode: String = "", val name: String = "", val machineId: String = "", val what: String = "", val `when`: String = "", val value: Double = 0.0)
 @Serializable data class MastroSync(val at: String = "", val ok: Boolean = true, val who: String = "")
 @Serializable data class SaleRow(val month: String = "", val code: String = "", val name: String = "", val family: String = "", val qty: Double = 0.0, val revenue: Double = 0.0,
     val costedRevenue: Double = 0.0, val cost: Double = 0.0, val below: Double = 0.0, val docs: Int = 0)
@@ -75,6 +85,7 @@ import kotlinx.serialization.Serializable
     val stock: List<StockRow> = emptyList(), val movements: List<Movement> = emptyList(),
     val invoices: List<Invoice> = emptyList(), val dues: List<Due> = emptyList(), val balances: List<Balance> = emptyList(), val dueNotes: Map<String, DueNote> = emptyMap(),
     val sales: List<SaleRow> = emptyList(), val ledger: List<LedgerRow> = emptyList(), val mastroSync: MastroSync? = null,
+    val insights: Insights? = null,
     val features: Features = Features(),
     val dtr: List<DtrRegister> = emptyList(), val dtrStatus: DtrStatus = DtrStatus(),
     val ital: List<ItalDevice> = emptyList(), val italOrders: List<ItalOrder> = emptyList(), val italStatus: DtrStatus = DtrStatus(),

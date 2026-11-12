@@ -8,7 +8,8 @@ public static class MastroAuto
 {
  static readonly SemaphoreSlim gate=new(1,1);
  static string lastError="";
- public static async Task Tick(Store store,Hub hub,bool force=false)
+ public static string LastError=>lastError;
+ public static async Task Tick(Store store,Hub hub,bool force=false,string who="automatica")
  {
   var now=DateTime.Now;
   if(!force&&(now.Hour<6||now.Hour>=22))return;
@@ -20,7 +21,7 @@ public static class MastroAuto
   {
    var (batch,_)=await MastroReader.Read(cfg);
    var hash=Store.MastroHash(batch);
-   if(last!=null&&last.Hash==hash){store.SaveMastroSync(last with{At=DateTimeOffset.Now.ToString("O"),Ok=true});hub.Changed();lastError="";return;}
+   if(last!=null&&last.Hash==hash){store.SaveMastroSync(last with{At=DateTimeOffset.Now.ToString("O"),Ok=true,Who=who});hub.Changed();lastError="";return;}
    var have=store.MastroClientCount();
    if(have>100&&batch.Clients.Count<have*0.8)
    {
@@ -28,7 +29,7 @@ public static class MastroAuto
     if(why!=lastError){store.Log("error",why);lastError=why;}
     return;
    }
-   store.ImportMastro(batch,"automatica");hub.Changed();lastError="";
+   store.ImportMastro(batch,who);hub.Changed();lastError="";
   }
   catch(Exception ex)
   {

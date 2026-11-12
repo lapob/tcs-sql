@@ -31,7 +31,7 @@ public sealed class Hub(Store store)
  /// (usually a few KB instead of the whole archive); the full snapshot is assembled from the same bytes.
  sealed record Snap(long Version,byte[] Full,byte[] FullNoAccounting,Dictionary<string,(byte[] Json,string Hash)> Sections);
  /// Sections a technician never receives (accounting stays on the server for them).
- static readonly HashSet<string> Accounting=["invoices","dues","balances","dueNotes","riba","sales","ledger","mastroSync"];
+ static readonly HashSet<string> Accounting=["invoices","dues","balances","dueNotes","riba","sales","ledger","mastroSync","insights"];
  Snap? snap;
  /// Devices get the invoices from January 1st of last year (charts, receivables and client situation never look further back);
  /// the full history stays here, in the CSV export and in Mastro. 40k rows since 2019 were too much for a phone's memory.
@@ -50,7 +50,7 @@ public sealed class Hub(Store store)
     ("warehouses",store.Warehouses()),("articles",store.Articles()),("stockLevels",store.StockLevels()),("stock",store.Stock()),("movements",store.Movements()),("invoices",RecentInvoices()),("dues",store.Dues()),("balances",store.Balances()),("dueNotes",store.DueNotes()),("sales",store.Sales().Where(x=>string.CompareOrdinal(x.Month,SinceMonth)>=0).ToList()),("ledger",store.Ledger().Where(x=>string.CompareOrdinal(x.Month,SinceMonth)>=0).ToList()),
     ("sources",store.Sources()),("events",store.Events()),("notes",store.Notes()),("metadata",store.Metadata()),("dtr",store.DtrRegisters()),("dtrStatus",store.DtrState()),("ital",store.ItalDevices()),("italOrders",store.ItalOrders()),("italStatus",store.ItalState()),("rch",store.RchDevices()),("rchStatus",store.RchState()),
     ("rt",store.RtInfos()),("machineFlags",store.MachineFlags()),("routeDone",store.RouteDone()),("photos",store.Photos()),("sites",store.Sites()),("riba",store.RibaList()),("team",Team?.Invoke()??[]),
-    ("features",new{mail=store.MailReady(),backupError=Backups.Status(store).Error}),("mastroSync",(object?)store.LastMastroSync()??new{})};
+    ("features",new{mail=store.MailReady(),backupError=Backups.Status(store).Error}),("mastroSync",(object?)store.LastMastroSync()??new{}),("insights",store.Insights())};
    var sections=new Dictionary<string,(byte[],string)>(parts.Length);
    foreach(var(name,value) in parts){var b=JsonSerializer.SerializeToUtf8Bytes(value,value.GetType(),Json);sections[name]=(b,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(b),0,8));}
    snap=new Snap(v,Compose(v,sections,null,true),Compose(v,sections,null,false),sections);encoded.Clear();return snap;

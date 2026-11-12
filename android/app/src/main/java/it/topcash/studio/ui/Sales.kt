@@ -1,5 +1,7 @@
 package it.topcash.studio.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -36,7 +38,6 @@ import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Receipt
 import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.Scale
-import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Icon
@@ -44,11 +45,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -80,7 +79,7 @@ private fun Family.icon(): ImageVector = when (this) {
 }
 private fun Family.color(dark: Boolean) = Color.hsl(hue, if (hue == 0f) 0.05f else 0.62f, if (dark) 0.62f else 0.50f)
 private fun pctText(v: Double?) = v?.let { "${if (it >= 0) "▲" else "▼"} ${if (kotlin.math.abs(it) < 10) "%.1f".format(kotlin.math.abs(it)).replace('.', ',') else "%.0f".format(kotlin.math.abs(it))}%" }
-private fun kShort(v: Double): String { val a = kotlin.math.abs(v); return when { a >= 1e6 -> "%.1fM".format(a / 1e6).replace('.', ','); a >= 1e4 -> "${kotlin.math.round(a / 1e3).toLong()}k"; a >= 1e3 -> "%.1fk".format(a / 1e3).replace('.', ','); else -> "${kotlin.math.round(a).toLong()}" } }
+private fun kShort(v: Double): String { val a = kotlin.math.abs(v); return when { a >= 1e6 -> "%.1fM".format(a / 1e6).replace('.', ','); a >= 1e3 -> "${kotlin.math.round(a / 1e3).toLong()}k"; else -> "${kotlin.math.round(a).toLong()}" } }
 private fun qty(v: Double) = java.text.NumberFormat.getIntegerInstance(java.util.Locale.ITALY).format(kotlin.math.round(v).toLong())
 
 /** Vendite: what was sold (by family and article), bought (by counter-account or supplier), the margin and what was lost. */

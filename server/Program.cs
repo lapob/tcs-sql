@@ -18,7 +18,7 @@ var store=new Store(dataDir);
 var users=new Users(store.DatabasePath);
 if(users.PromotedOwner)store.Log("users","Il primo amministratore del server è diventato Proprietario (nuovo ruolo con poteri illimitati).");
 var hub=new Hub(store);
-hub.Team=()=>users.List().Where(u=>!u.Disabled).Select(u=>(object)new{name=u.Name,username=u.Username,role=u.Role}).ToArray();
+hub.Team=()=>store.Team().Select(u=>(object)new{name=u.Name,username=u.Username,role=u.Role}).ToArray();
 var devices=new Devices(store.DatabasePath);
 // 2.8.12: sign-in names asked by the owner (password, role and history unchanged)
 foreach(var (from,to) in users.RenameOnce("rename_2_8_12",("Lapo","Bardi"),("Andrea","Chiti")))
@@ -412,6 +412,13 @@ app.MapPost("/api/mastro/import",(HttpContext ctx,MastroBatch b)=>
  try{var msg=store.ImportMastro(b,Who(ctx));hub.Changed();return Results.Ok(new{message=msg});}
  catch(InvalidDataException ex){return Bad(ex.Message);}
 }).RequireAuthorization("export");
+// "Aggiorna ora": the same automatic read, at once (administrators; Mastro stays read-only)
+app.MapPost("/api/mastro/sync",async(HttpContext ctx)=>
+{
+ if(MastroReader.FromIni()==null)return Bad("Mastro non è raggiungibile da questo server: la lettura si fa dall'app Windows.");
+ await MastroAuto.Tick(store,hub,true,Who(ctx));
+ return MastroAuto.LastError.Length>0?Bad(MastroAuto.LastError):Results.Ok(new{message=store.LastMastroSync()?.Message??"Lettura completata."});
+}).RequireAuthorization("admin");
 app.MapPost("/api/interventions",(HttpContext ctx,Intervention i)=>
 {
  try{var r=store.SaveIntervention(i,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}
@@ -516,7 +523,6 @@ app.MapPost("/api/warehouse/inventory",(HttpContext ctx,InventoryRequest r)=>
  try{var n=store.RecordInventory(r.Warehouse,r.Counted,Who(ctx));hub.Changed();return Results.Ok(new{differences=n});}catch(InvalidDataException ex){return Bad(ex.Message);}
 }).RequireAuthorization("export");
 app.MapPost("/api/warehouse/articles",(HttpContext ctx,Article a)=>{try{var r=store.SaveArticle(a,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("export");
-app.MapPost("/api/warehouse/warehouses",(HttpContext ctx,Warehouse w)=>{try{var r=store.SaveWarehouse(w,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("export");
 app.MapPost("/api/warehouse/levels",(HttpContext ctx,StockLevel l)=>{try{store.SaveStockLevel(l);hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("export");
 app.MapGet("/api/export/stock.csv",()=>Results.File(Utf8Bom(WarehouseReports.StockCsv(store)),"text/csv; charset=utf-8",$"TopCash-giacenze-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("admin");
 app.MapGet("/api/export/reorder.csv",()=>Results.File(Utf8Bom(WarehouseReports.ReorderCsv(store)),"text/csv; charset=utf-8",$"TopCash-proposta-ordine-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("admin");

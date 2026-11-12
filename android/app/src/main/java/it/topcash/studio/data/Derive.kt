@@ -132,6 +132,7 @@ class UClient(
     /** left the app by itself: no active machine (see Archive) */
     var autoGone = false
     val interventions = mutableListOf<UIntervention>()
+    val verifications = mutableListOf<UIntervention>()
     val orders = mutableListOf<UOrder>()
     val active get() = licenses.filter { it.current }
     /** Technician: the one on most active machines, else the customer's referent in Mastro, else the latest intervention. */
@@ -190,6 +191,9 @@ class Archive(val state: ArchiveState) {
     /** Customers deleted by an administrator (hidden everywhere, restorable). */
     val deleted: List<UClient>
     val interventions: List<UIntervention>
+    /** Periodic verifications recorded as jobs in Mastro: shown in their own tab, never counted as work to do. */
+    val verifications: List<UIntervention>
+    fun interventionById(id: String) = interventions.firstOrNull { it.i.id == id } ?: verifications.firstOrNull { it.i.id == id }
     val orders: List<UOrder>
 
     init {
@@ -252,11 +256,12 @@ class Archive(val state: ArchiveState) {
             val c = cLink ?: m?.client ?: cVat ?: cName
             URegister(r, c, m, when { cLink != null -> "abbinata a mano"; m?.client != null -> "matricola"; cVat != null -> "P.IVA"; cName != null -> "nome"; else -> "" }).also { c?.registers?.add(it) }
         }
-        interventions = state.interventions.map { i ->
+        val (vers, ints) = state.interventions.map { i ->
             val c = if (i.source == "mastro") mastroTo[i.clientCode] else map[i.clientCode]
-            UIntervention(i, c, c?.name ?: i.clientName.ifBlank { "—" }, Dates.parse(i.date)).also { c?.interventions?.add(it) }
-        }.sortedByDescending { it.date ?: LocalDate.MIN }
-        map.values.forEach { it.interventions.sortByDescending { x -> x.date ?: LocalDate.MIN } }
+            UIntervention(i, c, c?.name ?: i.clientName.ifBlank { "—" }, Dates.parse(i.date)).also { if (i.kind == "Verifica") c?.verifications?.add(it) else c?.interventions?.add(it) }
+        }.sortedByDescending { it.date ?: LocalDate.MIN }.partition { it.i.kind == "Verifica" }
+        interventions = ints; verifications = vers
+        map.values.forEach { it.interventions.sortByDescending { x -> x.date ?: LocalDate.MIN }; it.verifications.sortByDescending { x -> x.date ?: LocalDate.MIN } }
         orders = state.orders.map { o ->
             val c = serialTo[o.serial] ?: nameTo[nameKey(o.client)]
             UOrder(o, c, Dates.parse(o.date)).also { c?.orders?.add(it) }
@@ -303,7 +308,7 @@ class Archive(val state: ArchiveState) {
             val c = map[code] ?: continue; val t = map[e.mergedInto] ?: continue
             if (c === t) continue
             t.licenses += c.licenses; c.machines.forEach { it.client = t }; t.machines += c.machines; t.registers += c.registers; t.italDevices += c.italDevices; t.rchDevices += c.rchDevices
-            t.interventions += c.interventions; t.orders += c.orders
+            t.interventions += c.interventions; t.verifications += c.verifications; t.orders += c.orders
             c.phones.filter { it !in t.phones }.forEach(t.phones::add); c.emails.filter { it !in t.emails }.forEach(t.emails::add)
             if (t.vat.isBlank()) t.vat = c.vat; if (t.taxCode.isBlank()) t.taxCode = c.taxCode; if (t.mastro == null) t.mastro = c.mastro; t.mastroCodes += c.mastroCodes
             t.mergedFrom += c; aliases[code] = t; mergedList += c; map.remove(code)

@@ -193,8 +193,7 @@ public partial class MainWindow : Window
     case "mastroRead":await MastroRead();break;
     case "mastroImport":
      if(lastMastro==null){await Notify("Prima esegui la lettura da MastroSQL.");break;}
-     var align=root.TryGetProperty("align",out var al)&&al.ValueKind==JsonValueKind.True;
-     var mmsg=store.ImportMastro(lastMastro with{AlignStock=align},Environment.UserName);lastMastro=null;await Push();await Notify(mmsg);break;
+     var mmsg=store.ImportMastro(lastMastro,Environment.UserName);lastMastro=null;await Push();await Notify(mmsg);break;
     case "intervention":
      var iv=JsonSerializer.Deserialize<Intervention>(root.GetProperty("item").GetRawText(),jsonIn)!;
      try{store.SaveIntervention(iv,Environment.UserName);await Push();await Notify("Intervento salvato.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
@@ -204,8 +203,6 @@ public partial class MainWindow : Window
      try{var counted=JsonSerializer.Deserialize<Dictionary<string,decimal>>(root.GetProperty("counted").GetRawText(),jsonIn)!;var nd=store.RecordInventory(root.GetProperty("warehouse").GetString()??"",counted,Environment.UserName);await Push();await Notify($"Inventario registrato: {nd} differenze.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
     case "articleSave":
      try{store.SaveArticle(JsonSerializer.Deserialize<Article>(root.GetProperty("item").GetRawText(),jsonIn)!,Environment.UserName);await Push();await Notify("Articolo salvato.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
-    case "warehouseSave":
-     try{store.SaveWarehouse(JsonSerializer.Deserialize<Warehouse>(root.GetProperty("item").GetRawText(),jsonIn)!,Environment.UserName);await Push();await Notify("Magazzino salvato.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
     case "levelSave":
      try{store.SaveStockLevel(JsonSerializer.Deserialize<StockLevel>(root.GetProperty("item").GetRawText(),jsonIn)!);await Push();}catch(InvalidDataException ex){await Notify(ex.Message);}break;
     case "dueNote":
@@ -410,7 +407,7 @@ public partial class MainWindow : Window
   bool running=portal?.Running??false,connected=portal?.Authenticated??false;string progress=portal?.Progress??"";
   var text=await Task.Run(()=>{var mv=store.Mastro();
  
-  return JsonSerializer.Serialize(new{type="state",records=store.Licenses(),licenseEdits=store.LicenseEdits(),licenseCleanup=store.LicenseCleanup(),clientEdits=store.ClientEdits(),clients=store.Clients(),orders=store.Orders(),mastroClients=mv.Clients,machines=mv.Machines,interventions=mv.Interventions,brandRule=mv.Excluded,assets=store.Assets(),renewals=store.Renewals(),deviceLinks=store.DeviceLinks(),rt=store.RtInfos(),machineFlags=store.MachineFlags(),routeDone=store.RouteDone(),photos=store.Photos(),sites=store.Sites(),riba=store.RibaList(),warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),sales=store.Sales(),ledger=store.Ledger(),mastroSync=store.LastMastroSync(),syncRunning=running,syncProgress=progress,sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),dtr=store.DtrRegisters(),dtrStatus=store.DtrState(),ital=store.ItalDevices(),italOrders=store.ItalOrders(),italStatus=store.ItalState(),rch=store.RchDevices(),rchStatus=store.RchState(),sourceFolder,dataFolder=store.Folder,autoImport=true,portalConnected=connected},json);});
+  return JsonSerializer.Serialize(new{type="state",records=store.Licenses(),licenseEdits=store.LicenseEdits(),licenseCleanup=store.LicenseCleanup(),clientEdits=store.ClientEdits(),clients=store.Clients(),orders=store.Orders(),mastroClients=mv.Clients,machines=mv.Machines,interventions=mv.Interventions,brandRule=mv.Excluded,assets=store.Assets(),renewals=store.Renewals(),deviceLinks=store.DeviceLinks(),rt=store.RtInfos(),machineFlags=store.MachineFlags(),routeDone=store.RouteDone(),photos=store.Photos(),sites=store.Sites(),riba=store.RibaList(),warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),sales=store.Sales(),ledger=store.Ledger(),mastroSync=store.LastMastroSync(),insights=store.Insights(),team=store.Team(),syncRunning=running,syncProgress=progress,sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),dtr=store.DtrRegisters(),dtrStatus=store.DtrState(),ital=store.ItalDevices(),italOrders=store.ItalOrders(),italStatus=store.ItalState(),rch=store.RchDevices(),rchStatus=store.RchState(),sourceFolder,dataFolder=store.Folder,autoImport=true,portalConnected=connected},json);});
   if(text==lastJson)return;lastJson=text;
   Dashboard.CoreWebView2?.PostWebMessageAsJson(text);
   }catch(Exception ex){System.Diagnostics.Debug.WriteLine(ex);}

@@ -1,5 +1,7 @@
 package it.topcash.studio.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.flow.first
 
 import android.content.ActivityNotFoundException
@@ -40,10 +42,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
@@ -57,7 +57,6 @@ import it.topcash.studio.data.Screen
 import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.ShoppingBag
 import androidx.compose.material.icons.rounded.Payments
-import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Row
@@ -113,7 +112,7 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
 // the accounting area (like Mastro's Contabilità): its own four pages in the bottom bar
 private val accTabs = listOf(Tab("acc", "Riepilogo", Icons.Rounded.Insights), Tab("accSal", "Vendite", Icons.Rounded.ShoppingBag), Tab("accRec", "Incassi", Icons.Rounded.Payments),
     Tab("accInv", "Fatture", Icons.AutoMirrored.Rounded.ReceiptLong), Tab("more", "Altro", Icons.Rounded.MoreHoriz))
-private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay")
+private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay", "accOpp")
 
 @Composable fun MainScreen(vm: AppViewModel) {
     val nav = rememberNavController()
@@ -136,7 +135,7 @@ private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay")
         if (s.startsWith("int:")) {
             // tap on a notification: the intervention opens as soon as the archive has it (a fresh one arrives with the update)
             val id = s.removePrefix("int:")
-            if (ar.interventions.none { it.i.id == id }) { vm.refresh(); return@LaunchedEffect }
+            if (ar.interventionById(id) == null) { vm.refresh(); return@LaunchedEffect }
             editor = EditorRequest(interventionId = id); vm.shortcut.value = null; return@LaunchedEffect
         }
         when (s) { "new" -> editor = EditorRequest(); "load" -> if (admin) movement = "carico" to null else vm.notify("Il magazzino è riservato all'amministratore"); "search" -> nav.navigate("search") { launchSingleTop = true }; "route" -> nav.navigate("route") { launchSingleTop = true }; else -> return@LaunchedEffect }
@@ -222,6 +221,7 @@ private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay")
                     screen("deadlines") { DeadlinesScreen(it, nav) }
                     screen("accounting") { if (seesAcc) AccountingScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("accSal") { if (seesAcc) SalesScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
+                    screen("accOpp") { if (seesAcc) InsightsScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     AccView.entries.forEach { v -> screen(v.route) { if (seesAcc) AccountingScreen(vm, it, nav, v, topLevel = v.route in accTabRoutes) else LaunchedEffect(Unit) { nav.switchTab("home") } } }
                     screen("licenses") { LicensesScreen(vm, it, nav) }
                     screen("orders") { OrdersScreen(it, nav) }

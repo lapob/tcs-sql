@@ -39,9 +39,11 @@ class AccountingView(state: ArchiveState, clients: List<UClient>) {
     val toPay: Double
     val hasData = state.invoices.isNotEmpty() || state.dues.isNotEmpty()
     private val perClient = HashMap<String, ClientAccounting>()
+    private val byMastro = HashMap<String, UClient>()
+    /** The customer of a Mastro code (used by the Priorità lists). */
+    fun client(code: String): UClient? = byMastro[code.uppercase()]
 
     init {
-        val byMastro = HashMap<String, UClient>()
         clients.forEach { c -> c.mastroCodes.forEach { byMastro.putIfAbsent(it.uppercase(), c) } }
         fun cl(code: String) = byMastro[code.uppercase()]
         invoices = state.invoices.map { UInvoice(it, Dates.parse(it.date), cl(it.clientCode)) }.sortedByDescending { it.date }

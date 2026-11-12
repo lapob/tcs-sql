@@ -1,12 +1,8 @@
 package it.topcash.studio.ui
 
-import androidx.compose.animation.AnimatedContent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,10 +28,6 @@ import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.SwapHoriz
-import androidx.compose.animation.animateContentSize
-import androidx.compose.material3.TextButton
-import androidx.compose.material.icons.rounded.LocalShipping
-import androidx.compose.material.icons.rounded.Warehouse
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenu
@@ -44,7 +36,6 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -59,16 +50,13 @@ import it.topcash.studio.data.Article
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -91,21 +79,17 @@ private val stockFilters = listOf("Tutti", "Disponibili", "Sotto scorta", "Esaur
 @Composable fun WarehouseScreen(vm: AppViewModel, a: Archive, nav: NavHostController, onMovement: (String, String?) -> Unit) {
     val wh = a.wh
     val me by vm.me.collectAsStateWithLifecycle()
-    val myVan = remember(wh, me) { wh.vanOf(me?.name) }
-    var loc by rememberSaveable { mutableStateOf<String?>(null) }
-    var locSet by rememberSaveable { mutableStateOf(false) }
-    if (!locSet && myVan != null) { loc = myVan.id; locSet = true }
     var q by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf("Tutti") }
     var scan by remember { mutableStateOf(false) }
     // office and administrators create articles here too (also straight from a scanned code that is not in the archive yet)
     val canManage = me?.role != "tecnico"
     var newArticle by remember { mutableStateOf<String?>(null) }
-    val list = remember(wh, loc, q, filter) {
+    val list = remember(wh, q, filter) {
         val n = norm(q.trim())
         wh.articles.filter { x ->
-            x.a.active && (n.isEmpty() || x.search.contains(n)) && (loc == null || x.qtyIn(loc) != 0.0 || x.levels.containsKey(loc) || n.isNotEmpty()) &&
-                when (filter) { "Disponibili" -> x.qtyIn(loc) > 0; "Sotto scorta" -> if (loc == null) x.below.isNotEmpty() else x.below.containsKey(loc); "Esauriti" -> x.qtyIn(loc) <= 0; else -> true }
+            x.a.active && (n.isEmpty() || x.search.contains(n)) &&
+                when (filter) { "Disponibili" -> x.total > 0; "Sotto scorta" -> x.below.isNotEmpty(); "Esauriti" -> x.total <= 0; else -> true }
         }
     }
     Page(vm, "Magazzino", "${eur(wh.value)} · ${wh.belowMin.size} sotto scorta",
@@ -113,29 +97,21 @@ private val stockFilters = listOf("Tutti", "Disponibili", "Sotto scorta", "Esaur
             if (canManage) IconButton({ newArticle = "" }) { Icon(Icons.Rounded.Add, "Nuovo articolo") }
             IconButton({ scan = true }) { Icon(Icons.Rounded.QrCodeScanner, "Scansiona codice") }
         },
-        fab = { ExtendedFloatingActionButton(onClick = { onMovement(if (myVan != null) "scarico" else "carico", null) }, icon = { Icon(Icons.Rounded.SwapHoriz, null) }, text = { Text("Movimento") }) }) {
+        fab = { ExtendedFloatingActionButton(onClick = { onMovement("carico", null) }, icon = { Icon(Icons.Rounded.SwapHoriz, null) }, text = { Text("Movimento") }) }) {
         item(key = "search") { SearchField(q, { q = it }, "Cerca o scansiona un articolo") }
-        item(key = "locs") {
-            val opts = listOf<Pair<String?, String>>(null to "Tutti i magazzini") + wh.warehouses.filter { it.active }.map { it.id to (if (it.id == myVan?.id) "Il mio furgone" else it.name) }
-            androidx.compose.foundation.lazy.LazyRow(Modifier.padding(top = 10.dp).bleed(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp)) {
-                items(opts.size) { i -> val (id, label) = opts[i]
-                    FilterChip(loc == id, { loc = id; locSet = true }, label = { Text(label, maxLines = 1) }, shape = MaterialTheme.shapes.small,
-                        leadingIcon = if (loc == id) { { Icon(Icons.Rounded.Warehouse, null, Modifier.size(16.dp)) } } else null) }
-            }
-        }
         item(key = "filters") { ChoiceChips(stockFilters, filter, { filter = it }, Modifier.padding(vertical = 8.dp)) }
-        if (wh.articles.isEmpty()) item(key = "none") { Empty(Icons.Rounded.Inventory2, "Magazzino vuoto", if (canManage) "Tocca + in alto per creare il primo articolo, oppure importali da MastroSQL." else "Gli articoli li crea l'ufficio.") }
-        else if (list.isEmpty()) item(key = "empty") { Empty(Icons.Rounded.Inventory2, "Nessun articolo", if (loc != null) "Niente in ${wh.name(loc!!)} con questi filtri." else "Modifica la ricerca o i filtri.") }
+        if (wh.articles.isEmpty()) item(key = "none") { Empty(Icons.Rounded.Inventory2, "Magazzino vuoto", if (canManage) "Tocca + in alto per inserire il primo prodotto." else "Gli articoli li crea l'ufficio.") }
+        else if (list.isEmpty()) item(key = "empty") { Empty(Icons.Rounded.Inventory2, "Nessun articolo", "Modifica la ricerca o i filtri.") }
         if (canManage && q.isNotBlank() && list.isEmpty()) item(key = "create") {
             FilledTonalButton({ newArticle = q.trim() }, Modifier.fillMaxWidth().padding(top = 4.dp)) { Icon(Icons.Rounded.Add, null, Modifier.size(18.dp)); Text("Crea «${q.trim().take(30)}» come nuovo articolo", Modifier.padding(start = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
-        items(list.size.coerceAtMost(1500), key = { list[it].a.code }) { i -> ArticleRow(list[i], loc, Modifier.padding(bottom = 8.dp).animateItem()) { nav.navigate("article/" + android.net.Uri.encode(list[i].a.code)) } }
+        items(list.size.coerceAtMost(1500), key = { list[it].a.code }) { i -> ArticleRow(list[i], Modifier.padding(bottom = 8.dp).animateItem()) { nav.navigate("article/" + android.net.Uri.encode(list[i].a.code)) } }
     }
     if (scan) BarcodeScannerDialog(onResult = { code -> scan = false; val found = wh.find(code); if (found != null) nav.navigate("article/" + android.net.Uri.encode(found.a.code)) else { q = code; if (canManage) newArticle = code } }, onDismiss = { scan = false })
     newArticle?.let { seed -> ArticleEditorSheet(vm, a, null, seed, onDismiss = { newArticle = null }, onSaved = { code -> newArticle = null; q = ""; nav.navigate("article/" + android.net.Uri.encode(code)) }) }
 }
 
-@Composable private fun ArticleRow(x: UArticle, loc: String?, modifier: Modifier, onClick: () -> Unit) {
+@Composable private fun ArticleRow(x: UArticle, modifier: Modifier, onClick: () -> Unit) {
     CardBox(modifier, onClick = onClick, padding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(hueColor(x.a.category.ifBlank { x.a.code }, MaterialTheme.colorScheme.background.luminanceDark()).copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
@@ -146,7 +122,7 @@ private val stockFilters = listOf("Tutti", "Disponibili", "Sotto scorta", "Esaur
                 Text(listOf(x.a.code, x.a.category).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Column(horizontalAlignment = Alignment.End) {
-                val v = x.qtyIn(loc)
+                val v = x.total
                 Text("${qty(v)} ${x.a.unit}", style = MaterialTheme.typography.titleMedium.tabular, color = if (v < 0) LocalStatus.current.bad else MaterialTheme.colorScheme.onSurface)
                 if (x.status != "Disponibile") Text(x.status, style = MaterialTheme.typography.labelSmall, color = LocalStatus.current.of(statusTone(x.status)))
             }
@@ -179,7 +155,7 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
                 Row(verticalAlignment = Alignment.Bottom) {
                     val shown by androidx.compose.animation.core.animateFloatAsState(x.total.toFloat(), label = "tot")
                     Text(qty(Math.round(shown * 1000) / 1000.0), style = MaterialTheme.typography.displaySmall.tabular)
-                    Text(" ${x.a.unit} in totale", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
+                    Text(" ${x.a.unit} in magazzino", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
                 }
                 Text("Valore ${eur(x.value)} · costo medio ${eur(x.cost)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -188,34 +164,13 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
             Row(Modifier.fillMaxWidth().padding(top = 12.dp).appear(1), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ActionTile(Icons.AutoMirrored.Rounded.CallReceived, "Carico", { onMovement("carico", x.a.code) }, Modifier.weight(1f))
                 ActionTile(Icons.AutoMirrored.Rounded.CallMade, "Scarico", { onMovement("scarico", x.a.code) }, Modifier.weight(1f))
-                ActionTile(Icons.Rounded.SwapHoriz, "Trasferisci", { onMovement("trasferimento", x.a.code) }, Modifier.weight(1f))
             }
         }
-        item(key = "stock-title") { SectionTitle("Dove si trova") }
-        item(key = "stock") {
-            // where the article really is first; the empty warehouses (often many) behind one tap
-            var showEmpty by rememberSaveable(x.a.code) { mutableStateOf(false) }
-            CardBox(Modifier.appear(2).animateContentSize()) {
-                val all = wh.warehouses.filter { it.active || (x.perWarehouse[it.id] ?: 0.0) != 0.0 }
-                val full = all.filter { (x.perWarehouse[it.id] ?: 0.0) != 0.0 || x.levels[it.id] != null }
-                val empty = all - full.toSet()
-                val rows = if (showEmpty || full.isEmpty() && empty.size <= 3) full + empty else full
-                if (rows.isEmpty()) Text("Nessuna giacenza in magazzino", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp))
-                rows.forEachIndexed { i, w ->
-                    val v = x.perWarehouse[w.id] ?: 0.0; val l = x.levels[w.id]
-                    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(if (w.kind == "furgone") Icons.Rounded.LocalShipping else Icons.Rounded.Warehouse, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                            Text(w.name, style = MaterialTheme.typography.bodyLarge)
-                            if (l != null) Text("scorta min ${qty(l.min)} · max ${qty(l.max)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Text("${qty(v)} ${x.a.unit}", style = MaterialTheme.typography.titleMedium.tabular,
-                            color = when { v < 0 -> LocalStatus.current.bad; l != null && v <= l.min -> LocalStatus.current.due; else -> MaterialTheme.colorScheme.onSurface })
-                    }
-                    if (i < rows.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                }
-                if (empty.isNotEmpty() && rows.size < all.size || showEmpty && empty.isNotEmpty()) TextButton({ showEmpty = !showEmpty }, Modifier.padding(top = 2.dp)) {
-                    Text(if (showEmpty) "Nascondi i magazzini vuoti" else if (empty.size == 1) "Mostra 1 magazzino vuoto" else "Mostra ${empty.size} magazzini vuoti")
+        x.level?.let { l ->
+            item(key = "level") {
+                CardBox(Modifier.padding(top = 12.dp).appear(2)) {
+                    Fact("Scorta minima", "${qty(l.min)} ${x.a.unit}" + if (x.below.isNotEmpty()) " · da riordinare" else "")
+                    if (l.max > 0) Fact("Scorta massima", "${qty(l.max)} ${x.a.unit}")
                 }
             }
         }
@@ -230,48 +185,44 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
         }
         if (recent.isNotEmpty()) {
             item(key = "mv-title") { SectionTitle("Ultimi movimenti") }
-            recent.forEach { m -> item(key = "mv" + m.m.id) { MovementRow(m.m, wh, Modifier.padding(bottom = 8.dp)) } }
+            recent.forEach { m -> item(key = "mv" + m.m.id) { MovementRow(m.m, Modifier.padding(bottom = 8.dp)) } }
         }
     }
 }
 
-@Composable private fun MovementRow(m: Movement, wh: WarehouseView, modifier: Modifier) {
+@Composable private fun MovementRow(m: Movement, modifier: Modifier) {
     val tone = when (m.type) { "carico" -> Tone.Ok; "scarico", "intervento" -> Tone.Due; "trasferimento" -> Tone.Info; else -> Tone.Accent }
     CardBox(modifier, padding = PaddingValues(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("${WarehouseView.typeLabel[m.type] ?: m.type} · ${qty(m.qty)}", style = MaterialTheme.typography.titleSmall)
-                Text(listOf(if (m.from.isNotBlank()) wh.name(m.from) else null, if (m.to.isNotBlank()) "→ " + wh.name(m.to) else if (m.from.isNotBlank()) "→ consumo" else null).filterNotNull().joinToString(" ") +
-                    " · " + m.user + (if (m.serial.isNotBlank()) " · matr. " + m.serial else ""), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                val sign = if (m.to.isNotBlank() && m.from.isBlank()) "+" else if (m.from.isNotBlank() && m.to.isBlank()) "−" else ""
+                Text("${WarehouseView.typeLabel[m.type] ?: m.type} · $sign${qty(m.qty)}", style = MaterialTheme.typography.titleSmall)
+                Text(listOf(m.user, if (m.serial.isNotBlank()) "matr. " + m.serial else "", m.notes).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
             }
             Text(m.date.take(10).split("-").reversed().joinToString("/"), style = MaterialTheme.typography.labelMedium, color = LocalStatus.current.of(tone))
         }
     }
 }
 
-/** Load / unload / transfer in a bottom sheet: article by search or camera scan, quantity stepper, locations as chips. */
+/** Load / unload in a bottom sheet: article by search or camera scan, quantity stepper. */
 @Composable fun MovementSheet(vm: AppViewModel, a: Archive, initialType: String, articleCode: String?, onDismiss: () -> Unit) {
-    val wh = a.wh; val me by vm.me.collectAsStateWithLifecycle()
-    val myVan = wh.vanOf(me?.name)
+    val wh = a.wh
     val sheet = rememberSheet(); val scope = rememberCoroutineScope()
-    var type by remember { mutableStateOf(initialType) }
+    var type by remember { mutableStateOf(if (initialType == "scarico") "scarico" else "carico") }
     var article by remember { mutableStateOf(articleCode?.let { wh.byCode[it.uppercase()] }) }
     var query by remember { mutableStateOf(article?.a?.name.orEmpty()) }
     var amount by remember { mutableStateOf("1") }
-    var from by remember { mutableStateOf(myVan?.id ?: "sede") }
-    var to by remember { mutableStateOf(if (initialType == "trasferimento") (myVan?.id ?: wh.warehouses.firstOrNull { it.kind == "furgone" && it.active }?.id ?: "sede") else "sede") }
     var serial by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
     var scan by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
-    if (type == "trasferimento" && from == to) to = wh.warehouses.firstOrNull { it.active && it.id != from }?.id ?: to
     val close: () -> Unit = { scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss() } }
     val n = amount.replace(',', '.').toDoubleOrNull() ?: 0.0
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
             Text("Movimento di magazzino", style = MaterialTheme.typography.headlineSmall)
             Gap(14.dp)
-            val types = listOf("carico" to "Carico", "scarico" to "Scarico", "trasferimento" to "Trasferisci")
+            val types = listOf("carico" to "Carico", "scarico" to "Scarico")
             SegmentedPicker(types.map { it.second }, types.indexOfFirst { it.first == type }, { type = types[it].first })
             Gap(14.dp)
             // article: type to search, or scan
@@ -281,7 +232,7 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
                 ExposedDropdownMenuBox(menu && suggestions.isNotEmpty(), { menu = it }, Modifier.weight(1f)) {
                     OutlinedTextField(query, { query = it; article = wh.find(it); menu = true }, Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
                         label = { Text("Articolo") }, singleLine = true, shape = MaterialTheme.shapes.medium,
-                        supportingText = { article?.let { x -> Text("${x.a.code} · disponibili: " + wh.warehouses.filter { (x.perWarehouse[it.id] ?: 0.0) != 0.0 }.joinToString(" · ") { "${it.name} ${qty(x.perWarehouse[it.id]!!)}" }.ifBlank { "nessuna giacenza" }, maxLines = 2) } })
+                        supportingText = { article?.let { x -> Text("${x.a.code} · in magazzino: ${qty(x.total)} ${x.a.unit}", maxLines = 1) } })
                     ExposedDropdownMenu(menu && suggestions.isNotEmpty(), { menu = false }, shape = RoundedCornerShape(18.dp), containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
                         suggestions.forEach { s -> DropdownMenuItem(text = { Column { Text(s.a.name, maxLines = 1); Text(s.a.code + " · " + qty(s.total) + " " + s.a.unit, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
                             onClick = { article = s; query = s.a.name; menu = false }) }
@@ -299,19 +250,13 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
                 FilledTonalIconButton({ amount = qty(n + 1) }, Modifier.size(48.dp)) { Icon(Icons.Rounded.Add, "Più") }
                 Text("  " + (article?.a?.unit ?: "PZ"), style = MaterialTheme.typography.bodyLarge)
             }
-            AnimatedContent(type, transitionSpec = { (fadeIn() + slideInVertically { it / 4 }) togetherWith (fadeOut() + slideOutVertically { -it / 4 }) }, label = "loc") { t ->
-                Column {
-                    if (t == "scarico" || t == "trasferimento") LocationPicker("Da", wh, from) { from = it }
-                    if (t == "carico" || t == "trasferimento") LocationPicker(if (t == "carico") "In" else "A", wh, to, exclude = if (t == "trasferimento") from else null) { to = it }
-                }
-            }
             if (article?.a?.serialized == true) OutlinedTextField(serial, { serial = it.take(60) }, Modifier.fillMaxWidth().padding(top = 10.dp), label = { Text("Matricola / numero di serie") }, singleLine = true, shape = MaterialTheme.shapes.medium)
             OutlinedTextField(notes, { notes = it.take(300) }, Modifier.fillMaxWidth().padding(top = 10.dp), label = { Text("Note (DDT, cliente, motivo…)") }, singleLine = true, shape = MaterialTheme.shapes.medium)
             Gap(16.dp)
-            val ok = article != null && n > 0 && !saving && (type != "trasferimento" || from != to)
+            val ok = article != null && n > 0 && !saving
             Button({
                 saving = true
-                val m = Movement(type = type, article = article!!.a.code, qty = n, from = if (type == "carico") "" else from, to = if (type == "scarico") "" else to, serial = serial.trim(), notes = notes.trim())
+                val m = Movement(type = type, article = article!!.a.code, qty = n, from = if (type == "carico") "" else WarehouseView.SEDE, to = if (type == "scarico") "" else WarehouseView.SEDE, serial = serial.trim(), notes = notes.trim())
                 vm.saveMovements(listOf(m)) { saving = false; close() }.invokeOnCompletion { saving = false }
             }, Modifier.fillMaxWidth().height(54.dp), enabled = ok, shape = MaterialTheme.shapes.medium) { Text(if (saving) "Registrazione…" else "Registra") }
         }
@@ -319,23 +264,10 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
     if (scan) BarcodeScannerDialog(onResult = { code -> scan = false; val f = wh.find(code); if (f != null) { article = f; query = f.a.name } else { query = code; article = null } }, onDismiss = { scan = false })
 }
 
-@Composable private fun LocationPicker(label: String, wh: WarehouseView, selected: String, exclude: String? = null, onSelect: (String) -> Unit) {
-    Column(Modifier.padding(top = 12.dp)) {
-        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        FlowRow(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            wh.warehouses.filter { it.active && it.id != exclude }.forEach { w ->
-                val s by animateFloatAsState(if (selected == w.id) 1.04f else 1f, Bouncy, label = "loc")
-                FilterChip(selected == w.id, { onSelect(w.id) }, label = { Text(w.name, maxLines = 1) }, modifier = Modifier.graphicsLayer { scaleX = s; scaleY = s },
-                    leadingIcon = { Icon(if (w.kind == "furgone") Icons.Rounded.SwapHoriz else Icons.Rounded.Warehouse, null, Modifier.size(16.dp)) })
-            }
-        }
-    }
-}
-
-/** Spare parts in the intervention editor: unloaded from the technician's van when the intervention is saved. */
+/** Spare parts in the intervention editor: unloaded from the warehouse when the intervention is saved. */
 @Composable fun PartsEditor(a: Archive, parts: List<it.topcash.studio.data.PartUse>, technician: String, readOnly: Boolean, onChange: (List<it.topcash.studio.data.PartUse>) -> Unit) {
     val wh = a.wh; var scan by remember { mutableStateOf(false) }; var query by remember { mutableStateOf("") }
-    val van = wh.vanOf(technician)?.id ?: "sede"
+    val van = WarehouseView.SEDE
     if (readOnly && parts.isEmpty()) return // a closed report without parts: no empty title
     Text("Ricambi usati", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp))
     parts.forEachIndexed { i, p ->
@@ -343,7 +275,7 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
         Row(Modifier.fillMaxWidth().padding(top = 6.dp).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(x?.a?.name ?: p.article, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("da " + wh.name(p.warehouse), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (p.serial.isNotBlank()) Text("matr. " + p.serial, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (!readOnly) IconButton({ onChange(parts.toMutableList().also { l -> if (p.qty <= 1) l.removeAt(i) else l[i] = p.copy(qty = p.qty - 1) }) }) { Icon(Icons.Rounded.Remove, "Meno") }
             Text(qty(p.qty), style = MaterialTheme.typography.titleMedium.tabular)
@@ -360,7 +292,7 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
             ExposedDropdownMenuBox(menu && sugg.isNotEmpty(), { menu = it }, Modifier.weight(1f)) {
                 OutlinedTextField(query, { query = it; menu = true }, Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable), placeholder = { Text("Aggiungi ricambio…", maxLines = 1) }, singleLine = true, shape = MaterialTheme.shapes.medium)
                 ExposedDropdownMenu(menu && sugg.isNotEmpty(), { menu = false }, shape = RoundedCornerShape(18.dp), containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                    sugg.forEach { s -> DropdownMenuItem(text = { Text(s.a.name + " · " + qty(s.qtyIn(van)) + " " + s.a.unit + " sul furgone", maxLines = 1) }, onClick = { add(s) }) }
+                    sugg.forEach { s -> DropdownMenuItem(text = { Text(s.a.name + " · " + qty(s.total) + " " + s.a.unit + " in magazzino", maxLines = 1) }, onClick = { add(s) }) }
                 }
             }
             FilledTonalIconButton({ scan = true }, Modifier.padding(start = 8.dp).size(52.dp)) { Icon(Icons.Rounded.QrCodeScanner, "Scansiona ricambio") }

@@ -1,5 +1,7 @@
 package it.topcash.studio.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -37,10 +39,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -158,6 +158,10 @@ import java.time.ZoneOffset
         item(key = "int-title") { SectionTitle("Interventi") { TextButton(onNewIntervention) { Icon(Icons.Rounded.Add, null, Modifier.size(18.dp)); Text("Nuovo", Modifier.padding(start = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) } } }
         if (c.interventions.isEmpty()) item(key = "int-empty") { CardBox { Text("Nessun intervento registrato.", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
         c.interventions.take(15).forEach { x -> item(key = "i" + x.i.id) { InterventionRow(x, a, Modifier.padding(bottom = 8.dp).animateItem(), showClient = false, vm = vm) { onOpenIntervention(x.i.id) } } }
+        if (c.verifications.isNotEmpty()) {
+            item(key = "ver-title") { SectionTitle("Verifiche periodiche · ${c.verifications.size}") }
+            c.verifications.take(10).forEach { x -> item(key = "v" + x.i.id) { InterventionRow(x, a, Modifier.padding(bottom = 8.dp).animateItem(), showClient = false, vm = vm) { onOpenIntervention(x.i.id) } } }
+        }
         }
         if (tab == "Dispositivi") {
         val off = c.machines.count { !it.m.active }

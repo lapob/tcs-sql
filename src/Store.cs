@@ -182,25 +182,24 @@ public sealed partial class Store
   decimal Q(string a,string w)=>store.Stock().Where(s=>s.Article==a&&s.Warehouse==w).Sum(s=>s.Qty);
   store.SaveArticle(new("ROT-80","Rotolo carta 80mm","8001234567890","Consumabili","PZ",0.5m,1.2m,22,"","",false,true,"","",""),"test");
   store.SaveArticle(new("RT-200","RT Form 200","","Registratori","PZ",350,590,22,"","",true,true,"","",""),"test");
-  var van=store.SaveWarehouse(new("","Furgone Mario","furgone","Mario",true,""),"test");
-  store.AddMovements([new("","","carico","ROT-80",100,"","sede",0.45m,"","","","DDT 1","",""),new("","","trasferimento","ROT-80",20,"sede",van.Id,0,"","","","","","")],"test");
-  if(Q("ROT-80","sede")!=80||Q("ROT-80",van.Id)!=20)throw new Exception("Giacenze dopo carico/trasferimento");
-  try{store.AddMovements([new("","","scarico","ROT-80",21,van.Id,"",0,"","","","","","")],"test");throw new Exception("Giacenza negativa accettata");}catch(InvalidDataException){}
+  store.AddMovements([new("","","carico","ROT-80",100,"","sede",0.45m,"","","","DDT 1","","")],"test");
+  if(Q("ROT-80","sede")!=100)throw new Exception("Giacenza dopo il carico");
+  try{store.AddMovements([new("","","scarico","ROT-80",101,"sede","",0,"","","","","","")],"test");throw new Exception("Giacenza negativa accettata");}catch(InvalidDataException){}
   try{store.AddMovements([new("","","carico","RT-200",1.5m,"","sede",0,"","","","","","")],"test");throw new Exception("Decimali su articolo a matricola");}catch(InvalidDataException){}
   try{store.SaveArticle(new("ALTRO","x","8001234567890","","PZ",0,0,22,"","",false,true,"","",""),"test");throw new Exception("Codice a barre duplicato");}catch(InvalidDataException){}
   store.ImportMastro(new([mc],[],[],"t","test"),"test");
-  var iv=store.SaveIntervention(new("","M15","Cliente Mastro","2026-11-09","","Cambio rotoli","","Chiuso","Mario","Normale","","","","","","",[new("ROT-80",5,van.Id,"")]),"test");
-  store.SaveIntervention(iv with{Parts=[new("ROT-80",3,van.Id,"")]},"test"); // edit: 3 instead of 5, not 5+3
-  if(Q("ROT-80",van.Id)!=17)throw new Exception("Ricambi intervento non idempotenti");
-  store.DeleteIntervention(iv.Id);if(Q("ROT-80",van.Id)!=20)throw new Exception("Ricambi non restituiti alla cancellazione");
-  if(store.RecordInventory("sede",new(){["ROT-80"]=78},"test")!=1||Q("ROT-80","sede")!=78)throw new Exception("Inventario");
-  store.ImportMastro(new([mc],[],[],"t","test",[new("ROT-80","Rotolo carta 80mm","","Consumabili","PZ",0.5m,1.2m,22,"","",false,true,"","",""),new("NUOVO","Articolo Mastro","","","PZ",1,2,22,"","",false,true,"","","")],[new("ROT-80","1",90),new("NUOVO","1",4)],true),"test");
-  if(Q("ROT-80","sede")!=90||Q("NUOVO","sede")!=4||Q("ROT-80",van.Id)!=20)throw new Exception("Allineamento giacenze Mastro");
-  if(store.Articles().Single(a=>a.Code=="ROT-80").Barcode!="8001234567890")throw new Exception("Import Mastro ha cancellato il codice a barre");
+  var iv=store.SaveIntervention(new("","M15","Cliente Mastro","2026-11-09","","Cambio rotoli","","Chiuso","Mario","Normale","","","","","","",[new("ROT-80",5,"","")]),"test");
+  store.SaveIntervention(iv with{Parts=[new("ROT-80",3,"sede","")]},"test"); // edit: 3 instead of 5, not 5+3
+  if(Q("ROT-80","sede")!=97)throw new Exception("Ricambi intervento non idempotenti");
+  store.DeleteIntervention(iv.Id);if(Q("ROT-80","sede")!=100)throw new Exception("Ricambi non restituiti alla cancellazione");
+  if(store.RecordInventory("sede",new(){["ROT-80"]=98},"test")!=1||Q("ROT-80","sede")!=98)throw new Exception("Inventario");
+  // products are entered by hand only: a Mastro import never touches the catalogue or the quantities
+  store.ImportMastro(new([mc],[],[],"t","test"),"test");
+  if(Q("ROT-80","sede")!=98||store.Articles().Single(a=>a.Code=="ROT-80").Barcode!="8001234567890")throw new Exception("Import Mastro ha toccato il magazzino");
   // signed report: yearly number, lock, unsign/re-sign keeps the number, PDF
 #if !TOPCASH_SERVER
   var sig=TestSignature();
-  var rv=store.SaveIntervention(new("","M15","Cliente Mastro","2026-11-09","","Sostituzione stampante fiscale","Sostituita la stampante termica guasta e verificato il collegamento con l'Agenzia delle Entrate.\nCliente istruito sull'uso.","Aperto","Mario","Alta","","","","","","",[new("ROT-80",2,van.Id,"")],"1.5"),"test");
+  var rv=store.SaveIntervention(new("","M15","Cliente Mastro","2026-11-09","","Sostituzione stampante fiscale","Sostituita la stampante termica guasta e verificato il collegamento con l'Agenzia delle Entrate.\nCliente istruito sull'uso.","Aperto","Mario","Alta","","","","","","",[new("ROT-80",2,"sede","")],"1.5"),"test");
   try{store.SignIntervention(rv.Id,"Cliente","",[1,2,3],true,"test");throw new Exception("Firma non valida accettata");}catch(InvalidDataException){}
   var signed=store.SignIntervention(rv.Id,"Mario Rossi","1,5",sig,true,"test");
   if(!signed.ReportNo.EndsWith("/0001")||signed.Status!="Chiuso"||store.Signature(rv.Id)==null)throw new Exception("Firma rapportino");
@@ -270,14 +269,16 @@ public sealed partial class Store
   Backups.Save(store,ext,"test");bs=Backups.Run(store,folder,true,"test");if(bs.Error.Length>0||Directory.GetFiles(ext,"TopCash-*.sqlite").Length!=2)throw new Exception("Ripresa backup esterno");
   // accounting: Mastro mirror replaced atomically, office notes survive re-imports, null lists keep existing data, CSV guards
   var dues=new List<Due>{new("C15-1-2026-01-31-1","C","15","Cliente Mastro","1","2026-01-01","2026-01-31",122,0,"Bonifico"),new("C15-2-2026-12-31-2","C","15","Cliente Mastro","2","2026-12-01","2026-12-31",50,50,""),new("F9-7-2026-11-30-3","F","9","=Fornitore","7","2026-11-01","2026-11-30",80,200,"")};
-  store.ImportMastro(new([mc],[],[],"t","test",null,null,false,[new("2026-1-F","1","2026-01-01","15","Cliente Mastro","Fattura",100,22,122,"Bonifico"),new("2026-2-N","2","2026-02-01","15","Cliente Mastro","Nota di credito",10,2.2m,12.2m,"")],dues,[new("C","15",122,0)]),"test");
+  store.ImportMastro(new([mc],[],[],"t","test",[new("2026-1-F","1","2026-01-01","15","Cliente Mastro","Fattura",100,22,122,"Bonifico"),new("2026-2-N","2","2026-02-01","15","Cliente Mastro","Nota di credito",10,2.2m,12.2m,"")],dues,[new("C","15",122,0)]),"test");
   if(store.Invoices().Count!=2||store.Dues().Count!=3||store.Balances().Single().Debit!=122)throw new Exception("Import contabilità");
   if(store.Dues().Single(d=>d.Party=="F").Paid!=80)throw new Exception("Pagato oltre l'importo accettato");
   store.SaveDueNote("C15-1-2026-01-31-1","Sollecitato","Telefonato il 9/11","test");
   try{store.SaveDueNote("C15-1-2026-01-31-1","Boh","","test");throw new Exception("Stato scadenza non validato");}catch(InvalidDataException){}
   try{store.SaveDueNote("NON-ESISTE","Promesso","","test");throw new Exception("Nota su scadenza inesistente");}catch(InvalidDataException){}
-  store.ImportMastro(new([mc],[],[],"t","test",null,null,false,null,dues.Take(1).ToList(),null),"test");
+  store.ImportMastro(new([mc],[],[],"t","test",null,dues.Take(1).ToList(),null),"test");
   if(store.Invoices().Count!=2||store.Balances().Count!=1||store.Dues().Count!=1||store.DueNotes()["C15-1-2026-01-31-1"].Status!="Sollecitato")throw new Exception("Note o dati contabili persi al re-import");
+  // insights: an instalment 9 months late makes the customer a "C" payer
+  var ins=store.Insights(new DateTime(2026,11,12));if(ins.Payers.SingleOrDefault(p=>p.ClientCode=="15") is not {Grade:"C",Rates:1})throw new Exception("Analisi: clienti in ritardo");
   if(!AccountingReports.DuesCsv(store).Contains("Sollecitato")||AccountingReports.InvoicesCsv(store).Split('\n').Length<3)throw new Exception("Export contabilità");
   store.SaveDueNote("C15-1-2026-01-31-1","","","test");if(store.DueNotes().Count!=0)throw new Exception("Cancellazione nota scadenza");
   // DTR-Service: whole-list replace, dates parsed, wrong columns rejected, session state tracked

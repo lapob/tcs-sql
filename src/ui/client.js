@@ -123,7 +123,8 @@ function interventionsTab(c){
  return`<button class="btn accent block" data-newint="${esc(c.code)}">${icon('plus')}Nuovo intervento per ${esc(c.name)}</button>
  <div class="d-section"><h3>${icon('tool')} Da fare <span>${fmt(open.length)}</span></h3>${open.map(i=>intRow(i)).join('')||'<p class="sub">Nessun intervento aperto.</p>'}</div>
  ${done.length?`<div class="d-section"><h3>${icon('check')} Chiusi <span>${fmt(done.length)}</span></h3>${done.slice(0,8).map(i=>intRow(i)).join('')}${done.length>8?`<p class="sub">e altri ${done.length-8} nella pagina Interventi.</p>`:''}</div>`:''}
- ${hist.length?`<details class="d-section extra-sec"><summary><h3>Storico MastroSQL <span>${fmt(hist.length)}</span></h3></summary>${hist.slice(0,30).map(i=>intRow(i)).join('')}</details>`:''}`;
+ ${hist.length?`<details class="d-section extra-sec"><summary><h3>Storico MastroSQL <span>${fmt(hist.length)}</span></h3></summary>${hist.slice(0,30).map(i=>intRow(i)).join('')}</details>`:''}
+ ${c.verifications?.length?`<details class="d-section extra-sec"><summary><h3>Verifiche periodiche <span>${fmt(c.verifications.length)}</span></h3></summary><p class="sub">Ogni 2 anni per ogni registratore: non sono interventi di riparazione.</p>${c.verifications.slice(0,20).map(i=>intRow(i)).join('')}</details>`:''}`;
 }
 
 function pickDate(title,current){return new Promise(res=>{

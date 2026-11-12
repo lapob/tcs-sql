@@ -1,5 +1,7 @@
 package it.topcash.studio.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import android.content.Intent
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -7,7 +9,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -44,12 +45,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -111,7 +110,7 @@ enum class AccView(val route: String, val title: String) { Home("acc", "Contabil
     val go: (AccView, String) -> Unit = { v, f -> nav.openAccounting(v, f) }
     Page(vm, view.title, subtitle, onBack = if (topLevel) null else ({ nav.popBackStack() })) {
         if (!acc.hasData) { item(key = "none") { Empty(Icons.Rounded.Euro, "Nessun dato contabile", "Il server legge fatture e scadenze da MastroSQL da solo ogni ora: compaiono qui alla prossima lettura.") }; return@Page }
-        if (view == AccView.Home) accSummary(acc, nav, go) { open = it } else accRegister(view, tab, filter, { filter = it }, q, { q = it }, dues, invoices, invMonths, month, { month = it }, nav) { open = it }
+        if (view == AccView.Home) { insightsStrip(a, nav); accSummary(acc, nav, go) { open = it } } else accRegister(view, tab, filter, { filter = it }, q, { q = it }, dues, invoices, invMonths, month, { month = it }, nav) { open = it }
     }
     open?.let { id -> acc.due(id)?.let { d -> DueSheet(vm, d, nav, onDismiss = { open = null }) } ?: LaunchedEffect(id) { open = null } }
 }

@@ -1,5 +1,7 @@
 package it.topcash.studio.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,12 +55,10 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -82,7 +82,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
-private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "Storico Mastro", "Tutti")
+private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "Storico Mastro", "Tutti", "Verifiche")
 
 @Composable fun InterventionsScreen(vm: AppViewModel, a: Archive, onOpen: (String) -> Unit, onNew: () -> Unit) {
     var tab by rememberSaveable { mutableStateOf("Da fare") }
@@ -95,7 +95,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
     LaunchedEffect(me) { if (!roleTab && me?.role == "tecnico") { tab = "I miei"; roleTab = true } }
     val list = remember(a, tab, q, tech, me) {
         val n = norm(q.trim())
-        a.interventions.filter { x ->
+        (if (tab == "Verifiche") a.verifications else a.interventions).filter { x ->
             when (tab) { "Da fare" -> x.i.status != "Chiuso"
                 "I miei" -> x.i.status != "Chiuso" && x.i.source == "app" && me != null && norm(x.i.technician) == norm(me!!.name)
                 "Oggi e in ritardo" -> x.i.status != "Chiuso" && x.date?.let { !it.isAfter(LocalDate.now()) } == true "Chiusi" -> x.i.status == "Chiuso" && x.i.source == "app"; "Storico Mastro" -> x.i.source == "mastro"; else -> true } &&
@@ -113,7 +113,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
                 items(a.technicians) { t -> FilterChip(tech == t, { tech = if (tech == t) "" else t }, label = { Text(t) }) }
             }
         }
-        if (list.isEmpty()) item(key = "empty") { Empty(Icons.Rounded.Build, "Nessun intervento", if (tab == "Da fare") "Non ci sono interventi da fare. Ottimo!" else "Modifica i filtri o crea un nuovo intervento.") }
+        if (list.isEmpty()) item(key = "empty") { Empty(Icons.Rounded.Build, "Nessun intervento", if (tab == "Da fare") "Non ci sono interventi da fare. Ottimo!" else if (tab == "Verifiche") "Nessuna verifica periodica registrata." else "Modifica i filtri o crea un nuovo intervento.") }
         items(list.size.coerceAtMost(800), key = { list[it].i.id }) { i -> InterventionRow(list[i], a, Modifier.padding(bottom = 8.dp).animateItem(), vm = vm) { onOpen(list[i].i.id) } }
     }
 }
@@ -169,7 +169,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
 /** Bottom sheet to create / edit an intervention. Mastro history opens read-only. */
 @Composable fun InterventionEditor(vm: AppViewModel, a: Archive, req: EditorRequest, onDismiss: () -> Unit, onOpenClient: (String) -> Unit) {
     val me by vm.me.collectAsStateWithLifecycle()
-    val existing = req.interventionId?.let { id -> a.interventions.firstOrNull { it.i.id == id } }
+    val existing = req.interventionId?.let { id -> a.interventionById(id) }
     val signed = existing?.i?.signedAt?.isNotBlank() == true
     val ro = existing?.i?.source == "mastro" || signed
     val ctx = androidx.compose.ui.platform.LocalContext.current

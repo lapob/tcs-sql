@@ -1,5 +1,7 @@
 package it.topcash.studio.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Euro
 import it.topcash.studio.data.AccountingView
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Route
@@ -33,11 +36,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -115,6 +116,9 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
                 MoreGroup("Contabilità") {
                     if (!ac.hasData) MoreRow(Icons.Rounded.Euro, "Nessun dato contabile", "Fatture, incassi e pagamenti arrivano da MastroSQL da soli, ogni ora", Modifier.appear(0)) { nav.switchTab("acc") }
                     else {
+                        a.state.insights?.let { ins ->
+                            MoreRow(Icons.Rounded.AutoAwesome, "Priorità", "${ins.unbilled.size} da fatturare · ${ins.payers.size} pagano tardi · ${ins.opps.size} da vendere", Modifier.appear(0)) { nav.navigate("accOpp") { launchSingleTop = true } }
+                        }
                         MoreRow(Icons.Rounded.Euro, "Rate scadute da incassare", "${ac.overdue.size} rate · ${AccountingView.money0(ac.overdueSum)}", Modifier.appear(0)) { nav.openAccounting(AccView.Receivables, "Scadute") }
                         MoreRow(Icons.Rounded.CalendarMonth, "In scadenza nei prossimi 7 giorni", "Incassi da seguire questa settimana", Modifier.appear(0)) { nav.openAccounting(AccView.Receivables, "7 giorni") }
                         MoreRow(Icons.Rounded.Euro, "Da pagare", "${AccountingView.money0(ac.toPay30)} entro 30 giorni · ${AccountingView.money0(ac.toPay)} in tutto", Modifier.appear(1)) { nav.openAccounting(AccView.Payables, "Aperte") }

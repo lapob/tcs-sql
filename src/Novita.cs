@@ -143,12 +143,6 @@ public sealed partial class Store
   using (var c = Open()) { using var q = c.CreateCommand(); q.CommandText = "DELETE FROM photos WHERE id=$i"; q.Parameters.AddWithValue("$i", p.Id); q.ExecuteNonQuery(); }
   Log("edit", $"{Trim(who, 80)} ha tolto una foto da un intervento.");
  }
- /// The photos go with their intervention (called when an intervention is deleted).
- public void DeletePhotosOf(string interventionId)
- {
-  using var c = Open(); using var q = c.CreateCommand(); q.CommandText = "DELETE FROM photos WHERE intervention=$i"; q.Parameters.AddWithValue("$i", interventionId); q.ExecuteNonQuery();
- }
-
  // ── notices for the phones (checked in the background every quarter of an hour)
  static string NameKey(string? s) => (s ?? "").Trim().ToLowerInvariant();
  /// Interventions changed since [since] that concern [me]: assigned to me by someone else, or a new urgent one nobody has yet.

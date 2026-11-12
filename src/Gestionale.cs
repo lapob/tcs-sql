@@ -13,11 +13,11 @@ public sealed record Machine(string Id,string ClientCode,string Model,string Typ
 /// Technical intervention / ticket. Source "mastro" = history imported from Mastro, "app" = created in Top Cash Studio.
 public sealed record Intervention(string Id,string ClientCode,string ClientName,string Date,string Machine,string Title,string Work,string Status,
  string Technician,string Priority,string Total,string Source,string Created,string CreatedBy,string Updated,string UpdatedBy,List<PartUse>? Parts=null,
- string Hours="",string Signer="",string SignedAt="",string ReportNo="",string SentTo="",string SentAt="");
+ string Hours="",string Signer="",string SignedAt="",string ReportNo="",string SentTo="",string SentAt="",string Kind="");
 public sealed record MastroBatch(List<MastroClient> Clients,List<Machine> Machines,List<Intervention> Interventions,string CapturedAt,string Source,
- List<Article>? Articles=null,List<MastroStock>? Stock=null,bool AlignStock=false,
  List<Invoice>? Invoices=null,List<Due>? Dues=null,List<Balance>? Balances=null,
- List<RtInfo>? Rt=null,List<Site>? Sites=null,List<Riba>? Riba=null,List<SaleRow>? Sales=null,List<LedgerRow>? Ledger=null);
+ List<RtInfo>? Rt=null,List<Site>? Sites=null,List<Riba>? Riba=null,List<SaleRow>? Sales=null,List<LedgerRow>? Ledger=null,
+ List<InsUnbilled>? Unbilled=null,List<InsSdi>? Sdi=null);
 /// Last automatic or manual read of Mastro: when, what it brought and the fingerprint of the data (an unchanged read is not re-imported).
 public sealed record MastroSync(string At,string Hash,string Message,bool Ok,string Who="");
 /// Fiscal and technical details of a register from Mastro (firmware, electronic journal, RT activation, lottery, census,
@@ -59,12 +59,14 @@ public sealed partial class Store
   using var q=c.CreateCommand();q.CommandText="INSERT INTO mastro_extra VALUES('auto',$d) ON CONFLICT(kind) DO UPDATE SET data=$d";q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(new[]{s}));q.ExecuteNonQuery();
  }
  /// Fingerprint of what a Mastro read contains (not when or by whom it was read).
- public static string MastroHash(MastroBatch b)=>Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(b with{CapturedAt="",Source="",AlignStock=false})));
+ public static string MastroHash(MastroBatch b)=>Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(b with{CapturedAt="",Source=""})));
  public int MastroClientCount(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT COUNT(*) FROM mastro_clients";return Convert.ToInt32(q.ExecuteScalar());}
  public List<Site> Sites()=>MastroExtra<Site>("sites");
  public List<Riba> RibaList()=>MastroExtra<Riba>("riba");
  public List<SaleRow> Sales()=>MastroExtra<SaleRow>("sales");
  public List<LedgerRow> Ledger()=>MastroExtra<LedgerRow>("ledger");
+ public List<InsUnbilled> MastroUnbilled()=>MastroExtra<InsUnbilled>("unbilled");
+ public List<InsSdi> MastroSdi()=>MastroExtra<InsSdi>("sdi");
  public List<MastroClient> MastroClients()=>ReadAll<MastroClient>("SELECT data FROM mastro_clients");
  public List<Machine> Machines()=>ReadAll<Machine>("SELECT data FROM machines");
  public List<Intervention> Interventions()=>ReadAll<Intervention>("SELECT data FROM interventions");
@@ -83,13 +85,12 @@ public sealed partial class Store
   foreach(var m in b.Clients){using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="INSERT INTO mastro_clients VALUES($c,$d)";q.Parameters.AddWithValue("$c",m.Code);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(m));q.ExecuteNonQuery();}
   foreach(var m in (b.Machines??[]).DistinctBy(x=>x.Id)){using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="INSERT INTO machines VALUES($i,$c,$d)";q.Parameters.AddWithValue("$i",m.Id);q.Parameters.AddWithValue("$c",m.ClientCode);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(m));q.ExecuteNonQuery();}
   foreach(var i in (b.Interventions??[]).DistinctBy(x=>x.Id)){using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="INSERT OR REPLACE INTO interventions VALUES($i,$c,'mastro',$d)";q.Parameters.AddWithValue("$i",i.Id);q.Parameters.AddWithValue("$c",i.ClientCode);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(i with{Source="mastro"}));q.ExecuteNonQuery();}
-  var adjusted=ImportMastroWarehouse(c,tx,b.Articles??[],b.Stock??[],b.AlignStock,who);
   var acc=ImportMastroAccounting(c,tx,b.Invoices,b.Dues,b.Balances);
   // optional datasets (older apps do not send them: what is already stored is kept)
   using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="CREATE TABLE IF NOT EXISTS mastro_extra(kind TEXT PRIMARY KEY,data TEXT NOT NULL)";q.ExecuteNonQuery();}
   void Extra(string kind,object? data){if(data==null)return;using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="INSERT INTO mastro_extra VALUES($k,$d) ON CONFLICT(kind) DO UPDATE SET data=$d";q.Parameters.AddWithValue("$k",kind);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(data));q.ExecuteNonQuery();}
-  Extra("rt",b.Rt);Extra("sites",b.Sites);Extra("riba",b.Riba);Extra("sales",b.Sales);Extra("ledger",b.Ledger);
-  var msg=$"Importazione MastroSQL ({who}): {b.Clients.Count} clienti · {b.Machines?.Count??0} macchine · {b.Interventions?.Count??0} interventi storici · {b.Articles?.Count??0} articoli"+(b.Rt!=null?$" · {b.Rt.Sum(r=>r.VerificationCount)} verifiche periodiche":"")+(b.Sites!=null?$" · {b.Sites.Count} sedi":"")+(b.AlignStock?$" · {adjusted} giacenze allineate":"")+(b.Invoices!=null?$" · {acc[0]} fatture":"")+(b.Dues!=null?$" · {acc[1]} scadenze":"")+".";
+  Extra("rt",b.Rt);Extra("sites",b.Sites);Extra("riba",b.Riba);Extra("sales",b.Sales);Extra("ledger",b.Ledger);Extra("unbilled",b.Unbilled);Extra("sdi",b.Sdi);
+  var msg=$"Importazione MastroSQL ({who}): {b.Clients.Count} clienti · {b.Machines?.Count??0} macchine · {b.Interventions?.Count??0} interventi storici"+(b.Rt!=null?$" · {b.Rt.Sum(r=>r.VerificationCount)} verifiche periodiche":"")+(b.Sites!=null?$" · {b.Sites.Count} sedi":"")+(b.Invoices!=null?$" · {acc[0]} fatture":"")+(b.Dues!=null?$" · {acc[1]} scadenze":"")+".";
   using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="INSERT INTO events(time,kind,message) VALUES($t,'import',$m)";q.Parameters.AddWithValue("$t",DateTimeOffset.Now.ToString("O"));q.Parameters.AddWithValue("$m",msg);q.ExecuteNonQuery();}
   Extra("auto",new[]{new MastroSync(DateTimeOffset.Now.ToString("O"),MastroHash(b),msg,true,who)});
   tx.Commit();return msg;
@@ -125,7 +126,7 @@ public sealed partial class Store
    Hours=(i.Hours??"").Replace(',','.'),Signer=old?.Signer??"",SignedAt=old?.SignedAt??"",ReportNo=old?.ReportNo??"",SentTo=old?.SentTo??"",SentAt=old?.SentAt??""}; // signature fields only change via SignIntervention
   rec=rec with{Parts=(i.Parts??[]).Where(p=>p!=null&&!string.IsNullOrWhiteSpace(p.Article)&&p.Qty>0).Select(p=>p with{Article=p.Article.Trim(),Warehouse=p.Warehouse??"",Serial=p.Serial??""}).ToList()};
   if(rec.Parts!.Count>100)throw new InvalidDataException("Troppi ricambi in un intervento.");
-  if(rec.Parts.Any(p=>p.Warehouse.Length==0))throw new InvalidDataException("Indica da quale magazzino (furgone) arriva ogni ricambio.");
+  rec=rec with{Parts=rec.Parts.Select(p=>p.Warehouse.Length==0?p with{Warehouse="sede"}:p).ToList()};   // one warehouse
   // intervention + its spare-part unloads in one transaction
   using var tx=c.BeginTransaction();
   using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="INSERT INTO interventions VALUES($i,$c,'app',$d) ON CONFLICT(id) DO UPDATE SET client=$c,data=$d";

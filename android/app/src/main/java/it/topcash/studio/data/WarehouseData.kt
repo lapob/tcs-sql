@@ -2,7 +2,7 @@ package it.topcash.studio.data
 
 import java.time.OffsetDateTime
 
-/** Article with its stock in every location, average cost and status (same rules as the server and the web app). */
+/** Article with its stock, average cost and status (same rules as the server and the web app). One warehouse: "sede". */
 class UArticle(val a: Article, val perWarehouse: Map<String, Double>, val cost: Double, val levels: Map<String, StockLevel>) {
     val total = perWarehouse.values.sum()
     val value = maxOf(0.0, total) * cost
@@ -10,7 +10,8 @@ class UArticle(val a: Article, val perWarehouse: Map<String, Double>, val cost: 
     val negative = perWarehouse.values.any { it < 0 }
     val status = when { negative -> "Da verificare"; total <= 0 -> "Esaurito"; below.isNotEmpty() -> "Sotto scorta"; else -> "Disponibile" }
     val search = norm(listOf(a.code, a.name, a.barcode, a.category, a.supplier, a.supplierCode).joinToString(" "))
-    fun qtyIn(w: String?) = if (w == null) total else perWarehouse[w] ?: 0.0
+    /** Minimum / maximum stock set for the warehouse, if any. */
+    val level get() = levels[WarehouseView.SEDE]
 }
 
 data class UMovement(val m: Movement, val article: UArticle?, val date: OffsetDateTime?)
@@ -46,9 +47,9 @@ class WarehouseView(state: ArchiveState) {
     fun name(id: String) = byId[id]?.name ?: id.ifBlank { "—" }
     /** Exact barcode, then code, then name. */
     fun find(text: String): UArticle? { val t = text.trim(); if (t.isEmpty()) return null; return byBarcode[t] ?: byCode[t.uppercase()] ?: articles.firstOrNull { it.a.name.equals(t, true) } }
-    fun vanOf(technician: String?): Warehouse? = technician?.takeIf { it.isNotBlank() }?.let { t -> warehouses.firstOrNull { it.kind == "furgone" && it.active && norm(it.technician) == norm(t) } }
 
     companion object {
+        const val SEDE = "sede"
         val typeLabel = mapOf("carico" to "Carico", "scarico" to "Scarico", "trasferimento" to "Trasferimento", "rettifica" to "Rettifica", "inventario" to "Inventario", "intervento" to "Intervento")
         fun qty(d: Double): String = if (d == Math.floor(d)) "%,.0f".format(java.util.Locale.ITALIAN, d) else "%,.3f".format(java.util.Locale.ITALIAN, d).trimEnd('0').trimEnd(',')
         fun eur(d: Double): String = java.text.NumberFormat.getCurrencyInstance(java.util.Locale.ITALY).format(d)
