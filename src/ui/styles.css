@@ -1237,3 +1237,14 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}
 /* rounded panels that scroll (client card, intervention): the bar stays inside the rounded corners instead of running over them */
 .drawer.drawer,.modal-box.wide.wide{scrollbar-width:auto!important;scrollbar-color:auto!important}
 .drawer::-webkit-scrollbar-track,.modal-box.wide::-webkit-scrollbar-track{margin:22px 0}
+/* a call with no number: the icon stays in its place (rows aligned) but switched off */
+.icon-btn.off,.btn.off{opacity:.32;cursor:default;pointer-events:none;box-shadow:none}
+.icon-btn.off{pointer-events:auto}
+.icon-btn.off:hover{background:transparent;transform:none}
+/* the technician whose round is shown: a compact menu, so twelve names never run off the screen */
+.route-tech{position:relative;display:inline-flex;align-items:center;min-width:0}
+.route-tech>svg{position:absolute;left:12px;width:16px;height:16px;color:var(--text-3);pointer-events:none}
+.route-tech .select{padding-left:36px;min-width:210px;max-width:100%}
+/* every kind label as wide as the longest ("DGFE quasi pieno"): names start on the same line in every stop */
+.list-row.route-stop>.badge{flex:none;min-width:126px;box-sizing:border-box}
+@media (max-width:600px){.list-row.route-stop>.badge{min-width:0}}

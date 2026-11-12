@@ -299,7 +299,15 @@ fun teamOptions(team: List<it.topcash.studio.data.TeamMember>, current: String):
 /** Horizontally scrolling single-choice chips: labels are never truncated, on any screen width. */
 @Composable fun ChoiceChips(options: List<String>, selected: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
     // full bleed: the row runs edge to edge (chips slide under the screen edge, not under an invisible margin) but starts aligned with the page
-    androidx.compose.foundation.lazy.LazyRow(modifier.bleed(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
+    // the chosen chip is always in sight: a tap near the edge (or a choice made for you, like your own round) slides it into view
+    val row = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(selected, options.size) {
+        val i = options.indexOf(selected); if (i < 0) return@LaunchedEffect
+        val seen = row.layoutInfo.visibleItemsInfo.firstOrNull { it.index == i }
+        val inside = seen != null && seen.offset >= row.layoutInfo.viewportStartOffset && seen.offset + seen.size <= row.layoutInfo.viewportEndOffset - 16
+        if (!inside) row.animateScrollToItem(maxOf(0, i - 1))
+    }
+    androidx.compose.foundation.lazy.LazyRow(modifier.bleed(16.dp), state = row, horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
         items(options.size) { i -> val o = options[i]
             androidx.compose.material3.FilterChip(selected == o, { onSelect(o) }, label = { Text(o, maxLines = 1) }, shape = MaterialTheme.shapes.small,
                 leadingIcon = if (selected == o) { { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.Check, null, Modifier.size(16.dp)) } } else null)

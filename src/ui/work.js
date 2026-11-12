@@ -117,7 +117,7 @@ const renMail=(x)=>{const c=x.c;const to=c?.email||c?.emails?.[0]||'';const [lab
 async function openRenewal(key){
  const x=renewalItems().find(r=>r.key===key);if(!x)return;const c=x.c;const [label]=AG_KIND[x.k]||['Scadenza'];
  const steps=(x.mark?.steps||[]).slice().reverse();const tel=c?.phone||c?.phones?.[0]||'';
- const body=`<div class="ren-actions">${tel?`<a class="btn sm" href="tel:${esc(tel.replace(/\s/g,''))}">${icon('phone')}${esc(tel)}</a>`:''}<a class="btn sm" href="${esc(renMail(x))}">${icon('mail')}Email di promemoria</a>${c?`<button type="button" class="btn sm ghost" data-act="client">${icon('users')}Scheda cliente</button>`:''}</div>
+ const body=`<div class="ren-actions">${tel?`<a class="btn sm" href="tel:${esc(tel.replace(/\s/g,''))}">${icon('phone')}${esc(tel)}</a>`:`<span class="btn sm off" aria-disabled="true">${icon('phone')}Nessun telefono</span>`}<a class="btn sm" href="${esc(renMail(x))}">${icon('mail')}Email di promemoria</a>${c?`<button type="button" class="btn sm ghost" data-act="client">${icon('users')}Scheda cliente</button>`:''}</div>
   <div class="form-grid"><label class="field span-2">Esito<div class="seg ren-seg">${REN_STATES.map(([s])=>`<label><input type="radio" name="status" value="${esc(s)}"${(x.status||'Da contattare')===s?' checked':''}><span>${esc(s)}</span></label>`).join('')}</div></label>
   ${fieldHtml('nextContact','Richiama il','date',x.mark?.nextContact||'')}${fieldHtml('note','Nota','text',x.mark?.note||'',1,'maxlength="300" autocomplete="off" placeholder="Es. vuole il preventivo, richiamare dopo le 15"')}</div>
   ${steps.length?`<div class="d-section"><h3>Storia <span>${steps.length}</span></h3>${steps.map(s=>`<div class="dtr-ev"><time>${esc(dTime(s.at))}</time><span><b>${esc(s.status||'Nota')}</b>${s.note?' · '+esc(s.note):''} <span class="muted">· ${esc(s.by)}</span></span></div>`).join('')}</div>`:''}`;
@@ -131,19 +131,25 @@ async function openRenewal(key){
 // journal almost full), 2 normal job, 3 register reporting errors (often solved remotely, so they come last)
 function routeStops(){
  const stops=[];const add=(c,kind,cls,text,attr,tech,rank,key)=>{stops.push({c,kind,cls,text,attr,rank,key,tech:tech||'',city:(c?.city||c?.mastro?.city||'').trim()||'Senza località',cap:(c?.mastro?.cap||'').trim(),zone:c?.mastro?.zone||''});};
- for(const i of D.openInterventions){const r=i.priority==='Urgente'?0:i.priority==='Alta'?1:2;add(i.c,'Intervento',['bad','due','info'][r],i.title||'Intervento',`data-int="${esc(i.id)}"`,i.technician,r,'i'+i.id);}
- for(const m of D.machines)if(m.active&&!m.stale&&m.verDays!==null&&m.verDays<=30)add(m.c,'Verificazione',m.verDays<0?'bad':'due',`${m.model||'Macchina'} · ${m.serial} · ${rel(m.verDays)}`,m.code?`data-client="${esc(m.code)}"`:'','',m.verDays<0?0:1,'m'+m.id);
- if(typeof IT!=='undefined'&&IT)for(const r of IT.low||[])add(r.c,'DGFE quasi pieno','due',`${r.serial} · ${r.d?.dgfeFree}% libero`,`data-ital="${esc(r.serial)}"`,'',1,'it'+r.serial);
- if(typeof RC!=='undefined'&&RC)for(const r of RC.low||[])add(r.c,'DGFE quasi pieno','due',`${r.serial} · ${r.dgfeFree}% libero`,`data-rch="${esc(r.serial)}"`,'',1,'rc'+r.serial);
- if(typeof DT!=='undefined'&&DT)for(const r of DT.errors||[])add(r.c,'Errore DTR','bad',`${r.serial} · ${r.model||'cassa'}`,`data-dtr="${esc(r.serial)}"`,'',3,'d'+r.serial);
+ for(const i of D.openInterventions){const r=i.priority==='Urgente'?0:i.priority==='Alta'?1:2;add(i.c,'Intervento',['bad','due','info'][r],i.title||'Intervento',`data-int="${esc(i.id)}"`,i.technician||i.c?.tech,r,'i'+i.id);}
+ for(const m of D.machines)if(m.active&&!m.stale&&m.verDays!==null&&m.verDays<=30)add(m.c,'Verificazione',m.verDays<0?'bad':'due',`${m.model||'Macchina'} · ${m.serial} · ${rel(m.verDays)}`,m.code?`data-client="${esc(m.code)}"`:'',m.technician||m.c?.tech,m.verDays<0?0:1,'m'+m.id);
+ if(typeof IT!=='undefined'&&IT)for(const r of IT.low||[])add(r.c,'DGFE quasi pieno','due',`${r.serial} · ${r.d?.dgfeFree}% libero`,`data-ital="${esc(r.serial)}"`,r.c?.tech,1,'it'+r.serial);
+ if(typeof RC!=='undefined'&&RC)for(const r of RC.low||[])add(r.c,'DGFE quasi pieno','due',`${r.serial} · ${r.dgfeFree}% libero`,`data-rch="${esc(r.serial)}"`,r.c?.tech,1,'rc'+r.serial);
+ if(typeof DT!=='undefined'&&DT)for(const r of DT.errors||[])add(r.c,'Errore DTR','bad',`${r.serial} · ${r.model||'cassa'}`,`data-dtr="${esc(r.serial)}"`,r.c?.tech,3,'d'+r.serial);
+ // one name per technician whatever the source writes ("BARTOLI", "Bartoli "): the round is split by person
+ const votes=new Map();for(const s of stops){const t=s.tech.trim();if(!t||/^\d+$/.test(t))continue;const k=t.toLowerCase();const v=votes.get(k)||new Map();v.set(t,(v.get(t)||0)+1);votes.set(k,v);}
+ const canon=new Map([...votes].map(([k,v])=>[k,[...v].sort((a,b)=>b[1]-a[1])[0][0]]));
+ for(const s of stops)s.tech=canon.get(s.tech.trim().toLowerCase())||'';
  return stops;
 }
+const NO_TECH='Senza tecnico';
 // a technician opens the round on his own stops (his name contains the technician's name, e.g. "Marco Chiti" → "Chiti")
 function routeMine(techs){if(me?.role!=='tecnico')return'';const n=norm(me.name||'').trim();if(n.length<3)return'';return techs.find(t=>norm(t).trim().length>=3&&(n.includes(norm(t).trim())||norm(t).includes(n)))||'';}
 function routePage(){
  const all=routeStops();const techs=[...new Set(all.map(s=>s.tech).filter(Boolean))].sort();
- if(WK.route===undefined)WK.route=routeMine(techs);if(WK.route&&!techs.includes(WK.route))WK.route='';
- const byTech=all.filter(s=>!WK.route||s.tech===WK.route);
+ if(WK.route===undefined)WK.route=routeMine(techs);if(WK.route&&WK.route!==NO_TECH&&!techs.includes(WK.route))WK.route='';
+ const unassigned=all.filter(s=>!s.tech).length;if(WK.route===NO_TECH&&!unassigned)WK.route='';
+ const byTech=all.filter(s=>!WK.route||s.tech===WK.route||(WK.route===NO_TECH&&!s.tech));
  // what kind of stop: the counts help decide where to go first
  const KINDS=[['Intervento','Interventi'],['Verificazione','Verificazioni'],['DGFE quasi pieno','DGFE pieni'],['Errore DTR','Errori cassa']].map(([k,l])=>[k,l,byTech.filter(s=>s.kind===k).length]).filter(x=>x[2]);
  if(WK.kind&&!KINDS.some(x=>x[0]===WK.kind))WK.kind='';
@@ -164,9 +170,9 @@ function routePage(){
  return`${hero('<span class="grad">Giro di oggi</span>.','Interventi aperti, verificazioni entro 30 giorni, casse in errore e giornali quasi pieni, raggruppati per località: un tocco apre il percorso sul telefono, il cerchio segna la tappa come fatta.','')}
  ${list.length?`<div class="route-progress reveal" style="--i:1"><div class="rp-bar"><i style="width:${Math.round(doneN/list.length*100)}%"></i></div><span><b>${doneN}</b> di ${list.length} ${list.length===1?'tappa fatta':'tappe fatte'} oggi</span></div>`:''}
  <div class="toolbar route-tools reveal" style="--i:1">${KINDS.length>1?`<div class="seg"><button class="${!WK.kind?'active':''}" data-w-kind="">Tutto<span class="count">${byTech.length}</span></button>${KINDS.map(([k,l,n])=>`<button class="${WK.kind===k?'active':''}" data-w-kind="${esc(k)}">${l}<span class="count">${n}</span></button>`).join('')}</div>`:''}
-  ${techs.length?`<div class="seg"><button class="${!WK.route?'active':''}" data-w-route="">Tutti i tecnici</button>${techs.map(t=>`<button class="${WK.route===t?'active':''}" data-w-route="${esc(t)}">${esc(t)}</button>`).join('')}</div>`:''}</div>
+  ${techs.length?`<label class="route-tech">${icon('tool')}<select class="select" id="w-route" aria-label="Giro del tecnico"><option value="">Tutti i tecnici · ${all.length}</option>${techs.map(t=>`<option value="${esc(t)}"${WK.route===t?' selected':''}>${esc(t)} · ${all.filter(s=>s.tech===t).length}</option>`).join('')}${unassigned?`<option value="${NO_TECH}"${WK.route===NO_TECH?' selected':''}>${NO_TECH} · ${unassigned}</option>`:''}</select></label>`:''}</div>
  ${ordered.length?`<div class="route-grid">${ordered.slice(0,12+(WK.more.route||0)).map(([city,ss],gi)=>{const url=maps(ss);return`<div class="card reveal route-card" style="--i:${Math.min(gi+2,9)}"><div class="card-head"><div><h2>${esc(city)}<span class="count">${ss.length}</span></h2><p>${esc([...new Set(ss.map(s=>s.zone).filter(z=>z&&!/^\d+$/.test(z)))].join(', ')||(ss.length===1?'1 tappa':ss.length+' tappe'))}${ss.some(s=>s.rank===0&&!s.done)?` · <span style="color:var(--bad);font-weight:600">${ss.filter(s=>s.rank===0&&!s.done).length===1?'1 urgente':ss.filter(s=>s.rank===0&&!s.done).length+' urgenti'}</span>`:''}${ss.some(s=>s.done)?` · <span style="color:var(--ok);font-weight:600">${allDone(ss)?'tutto fatto':ss.filter(s=>s.done).length+' fatte'}</span>`:''}</p></div>${url?`<a class="btn sm accent" href="${esc(url)}" target="_blank" rel="noopener">${icon('pin')}Percorso</a>`:''}</div>
-  ${(WK.open.has(city)?ss:ss.slice(0,SHOW)).map(s=>`<div class="list-row route-stop${s.done?' done':''}" ${s.attr} tabindex="0"><button type="button" class="route-check${s.done?' on':''}" data-route-done="${esc(s.key)}" aria-pressed="${s.done}" aria-label="${s.done?'Segna di nuovo da fare':'Segna come fatta'}" data-tip="${s.done?esc('Fatta'+(state.routeDone[s.key]?.by?' da '+state.routeDone[s.key].by:'')+' · tocca per rifarla'):'Segna come fatta'}">${icon('check')}</button><span class="badge ${s.cls}">${esc(s.kind)}</span><div class="grow"><strong>${esc(s.c?.name||'Cliente da abbinare')}</strong><small>${esc(s.text)}${addr(s.c)?' · '+esc(addr(s.c)):''}${s.tech?' · '+esc(s.tech):''}</small></div>${s.c?.phone?`<a class="icon-btn sm" href="tel:${esc(s.c.phone.replace(/\s/g,''))}" aria-label="Chiama ${esc(s.c.name)}" data-stop>${icon('phone')}</a>`:''}</div>`).join('')}${ss.length>SHOW?`<button class="btn sm ghost route-more" data-w-city="${esc(city)}">${WK.open.has(city)?'Mostra meno':`Mostra altre ${ss.length-SHOW}`}</button>`:''}</div>`;}).join('')}</div>${ordered.length>12+(WK.more.route||0)?`<button class="btn route-more-cities" data-w-more="route">${icon('chevron')}Mostra altre ${ordered.length-12-(WK.more.route||0)} località</button>`:''}`
+  ${(WK.open.has(city)?ss:ss.slice(0,SHOW)).map(s=>`<div class="list-row route-stop${s.done?' done':''}" ${s.attr} tabindex="0"><button type="button" class="route-check${s.done?' on':''}" data-route-done="${esc(s.key)}" aria-pressed="${s.done}" aria-label="${s.done?'Segna di nuovo da fare':'Segna come fatta'}" data-tip="${s.done?esc('Fatta'+(state.routeDone[s.key]?.by?' da '+state.routeDone[s.key].by:'')+' · tocca per rifarla'):'Segna come fatta'}">${icon('check')}</button><span class="badge ${s.cls}">${esc(s.kind)}</span><div class="grow"><strong>${esc(s.c?.name||'Cliente da abbinare')}</strong><small>${esc(s.text)}${addr(s.c)?' · '+esc(addr(s.c)):''}${s.tech?' · '+esc(s.tech):''}</small></div>${s.c?.phone?`<a class="icon-btn sm" href="tel:${esc(s.c.phone.replace(/\s/g,''))}" aria-label="Chiama ${esc(s.c.name)}" data-stop>${icon('phone')}</a>`:`<span class="icon-btn sm off" aria-disabled="true" data-tip="Nessun numero di telefono" data-stop>${icon('phone')}</span>`}</div>`).join('')}${ss.length>SHOW?`<button class="btn sm ghost route-more" data-w-city="${esc(city)}">${WK.open.has(city)?'Mostra meno':`Mostra altre ${ss.length-SHOW}`}</button>`:''}</div>`;}).join('')}</div>${ordered.length>12+(WK.more.route||0)?`<button class="btn route-more-cities" data-w-more="route">${icon('chevron')}Mostra altre ${ordered.length-12-(WK.more.route||0)} località</button>`:''}`
  :`<div class="card reveal empty"><span class="orb">${icon('check')}</span><h3>Giornata libera</h3><p>Nessun intervento aperto né verificazione imminente.</p></div>`}`;
 }
 
@@ -246,6 +252,7 @@ function openDevice(serial){
 }
 
 // ── events (capture: run before the generic handlers)
+document.addEventListener('change',e=>{if(e.target.id==='w-route'){WK.route=e.target.value;WK.more.route=0;render(false);}});
 document.addEventListener('click',e=>{
  const t=e.target.closest?.('[data-w-inv],[data-w-ren],[data-w-route],[data-w-kind],[data-w-city],[data-w-check],[data-w-more],[data-asset],[data-asset-new],[data-ren],[data-merge],[data-link-dev],[data-device]');if(!t)return;
  if(e.target.closest('a[href],[data-stop]')&&!t.matches('a'))return;

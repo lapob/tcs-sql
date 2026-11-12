@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.Directions
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Mail
 import androidx.compose.material.icons.rounded.Route
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
@@ -258,7 +259,8 @@ private fun renTone(s: String) = when (s) { "Rinnovato" -> Tone.Ok; "Perso" -> T
             Text(d.clientName, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text("${d.kind} · ${d.detail} · scade il ${Dates.short(d.date)} (${Dates.relative(d.days)})", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                c?.phone?.takeIf { it.isNotBlank() }?.let { tel -> FilledTonalButton({ ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + tel.replace(" ", "")))) }) { Icon(Icons.Rounded.Call, null, Modifier.size(18.dp)); Text("Chiama", Modifier.padding(start = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) } }
+                val tel = c?.phone.orEmpty().trim()
+                run { FilledTonalButton({ runCatching { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + tel.replace(" ", "")))) } }, enabled = tel.isNotEmpty()) { Icon(Icons.Rounded.Call, null, Modifier.size(18.dp)); Text("Chiama", Modifier.padding(start = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) } }
                 FilledTonalButton({
                     val subj = "${d.kind} in scadenza il ${Dates.short(d.date)}"
                     val body = "Buongiorno,\n\nle ricordiamo che il ${Dates.short(d.date)} scade: ${d.kind.lowercase()} (${d.detail}).\nPer rinnovare senza interruzioni può rispondere a questa email o chiamarci: ci pensiamo noi.\n\nCordiali saluti\nTop Cash Service S.r.l."
@@ -285,10 +287,12 @@ private fun renTone(s: String) = when (s) { "Rinnovato" -> Tone.Ok; "Perso" -> T
 // ───────────────────────── Giro di oggi
 /** One stop of the day. [rank] orders the work: 0 urgent (urgent job, overdue verification), 1 soon (high priority,
  *  verification within 30 days, journal almost full), 2 normal job, 3 register reporting errors (often solved remotely). */
-private class Stop(val c: UClient?, val kind: String, val tone: Tone, val text: String, val tech: String, val rank: Int, val key: String, val open: () -> Unit) { var done = false }
+private class Stop(val c: UClient?, val kind: String, val tone: Tone, val text: String, var tech: String, val rank: Int, val key: String, val open: () -> Unit) { var done = false }
 private const val ROUTE_SHOW = 6
 private fun urgentLabel(n: Int) = if (n == 1) "1 urgente" else "$n urgenti"
 private const val ROUTE_SPLIT = 20
+/** Stops whose customer has no technician yet (no machine, referent or past job names one). */
+private const val NO_TECH = "Senza tecnico"
 private val routeKinds = listOf("Intervento" to "Interventi", "Verificazione" to "Verificazioni", "DGFE quasi pieno" to "DGFE pieni", "Errore DTR" to "Errori cassa")
 
 /**
@@ -305,25 +309,29 @@ private val routeKinds = listOf("Intervento" to "Interventi", "Verificazione" to
         buildList {
             a.openInterventions.forEach { i ->
                 val r = when (i.i.priority) { "Urgente" -> 0; "Alta" -> 1; else -> 2 }
-                add(Stop(i.client, "Intervento", when (r) { 0 -> Tone.Bad; 1 -> Tone.Due; else -> Tone.Info }, i.i.title.ifBlank { "Intervento" }, i.i.technician, r, "i" + i.i.id) { onOpenIntervention(i.i.id) })
+                add(Stop(i.client, "Intervento", when (r) { 0 -> Tone.Bad; 1 -> Tone.Due; else -> Tone.Info }, i.i.title.ifBlank { "Intervento" }, i.i.technician.ifBlank { i.client?.tech.orEmpty() }, r, "i" + i.i.id) { onOpenIntervention(i.i.id) })
             }
             // a verification overdue for over a year waits for the office's decision (Macchine da controllare), not in the round
             a.machines.filter { it.m.active && !it.stale && it.verDays != null && it.verDays <= 30 }.forEach { m ->
                 val late = (m.verDays ?: 0) < 0
-                add(Stop(m.client, "Verificazione", if (late) Tone.Bad else Tone.Due, "${m.m.model} · ${m.m.serial} · ${Dates.relative(m.verDays)}", "", if (late) 0 else 1, "m" + m.m.id) { m.client?.let { nav.openClient(it.code) } })
+                add(Stop(m.client, "Verificazione", if (late) Tone.Bad else Tone.Due, "${m.m.model} · ${m.m.serial} · ${Dates.relative(m.verDays)}", m.m.technician.ifBlank { m.client?.tech.orEmpty() }, if (late) 0 else 1, "m" + m.m.id) { m.client?.let { nav.openClient(it.code) } })
             }
             a.italLow.forEach { r -> add(Stop(r.client, "DGFE quasi pieno", Tone.Due, "${r.r.serial} · ${r.d?.dgfeFree}% libero", "", 1, "it" + r.r.serial) { r.client?.let { nav.openClient(it.code) } }) }
-            a.rchLow.forEach { r -> add(Stop(r.client, "DGFE quasi pieno", Tone.Due, "${r.r.serial} · ${r.r.dgfeFree}% libero", "", 1, "rc" + r.r.serial) { r.client?.let { nav.openClient(it.code) } }) }
-            a.dtrErrors.forEach { r -> add(Stop(r.client, "Errore DTR", Tone.Bad, r.r.serial, "", 3, "d" + r.r.serial) { r.client?.let { nav.openClient(it.code) } }) }
+            a.rchLow.forEach { r -> add(Stop(r.client, "DGFE quasi pieno", Tone.Due, "${r.r.serial} · ${r.r.dgfeFree}% libero", r.client?.tech.orEmpty(), 1, "rc" + r.r.serial) { r.client?.let { nav.openClient(it.code) } }) }
+            a.dtrErrors.forEach { r -> add(Stop(r.client, "Errore DTR", Tone.Bad, r.r.serial, r.client?.tech.orEmpty(), 3, "d" + r.r.serial) { r.client?.let { nav.openClient(it.code) } }) }
         }.onEach { it.done = ticked[it.key] ?: a.routeDone(it.key) }
+            // one name per technician whatever the source writes ("BARTOLI", "Bartoli "): the round is split by person
+            .let { all -> val canon = all.map { it.tech.trim() }.filter { it.isNotBlank() && !it.all(Char::isDigit) }.groupBy { it.lowercase() }.mapValues { (_, v) -> v.groupingBy { it }.eachCount().maxBy { it.value }.key }
+                all.onEach { it.tech = canon[it.tech.trim().lowercase()].orEmpty() } }
     }
     val techs = remember(stops) { stops.map { it.tech }.filter { it.isNotBlank() }.distinct().sorted() }
+    val unassigned = remember(stops) { stops.count { it.tech.isBlank() } }
     // a technician opens the page on his own stops (name match), everyone else on the whole team
     val mine = remember(me, techs) { me?.takeIf { it.role == "tecnico" }?.name?.trim()?.lowercase()?.takeIf { it.length >= 3 }?.let { n -> techs.firstOrNull { t -> val x = t.trim().lowercase(); x.length >= 3 && (n.contains(x) || x.contains(n)) } } }
     var tech by rememberSaveable(mine) { mutableStateOf(mine ?: "Tutti") }
     var kind by rememberSaveable { mutableStateOf("Tutto") }
     var open by remember { mutableStateOf(setOf<String>()) }
-    val byTech = remember(stops, tech) { stops.filter { tech == "Tutti" || it.tech == tech } }
+    val byTech = remember(stops, tech) { stops.filter { tech == "Tutti" || it.tech == tech || (tech == NO_TECH && it.tech.isBlank()) } }
     val kinds = remember(byTech) { routeKinds.mapNotNull { (k, l) -> byTech.count { it.kind == k }.takeIf { it > 0 }?.let { Triple(k, l, it) } } }
     if (kind != "Tutto" && kinds.none { it.second == kind }) kind = "Tutto"
     val shown = remember(byTech, kind) { val k = kinds.firstOrNull { it.second == kind }?.first; byTech.filter { k == null || it.kind == k } }
@@ -340,7 +348,7 @@ private val routeKinds = listOf("Intervento" to "Interventi", "Verificazione" to
     Page(vm, "Giro di oggi", "${shown.size} tappe in ${groups.size} zone" + if (urgent > 0) " · " + urgentLabel(urgent) else "", onBack = { nav.popBackStack() }) {
         item(key = "pending") { PendingBanner(vm) }
         if (shown.isNotEmpty()) item(key = "progress") { RouteProgress(doneCount, shown.size) }
-        if (techs.isNotEmpty()) item(key = "tech") { ChoiceChips(listOf("Tutti") + techs, tech, { tech = it }, Modifier.padding(bottom = 6.dp)) }
+        if (techs.isNotEmpty()) item(key = "tech") { ChoiceChips(listOf("Tutti") + techs + if (unassigned > 0) listOf(NO_TECH) else emptyList(), tech, { tech = it }, Modifier.padding(bottom = 6.dp)) }
         if (kinds.size > 1) item(key = "kind") { ChoiceChips(listOf("Tutto") + kinds.map { it.second }, kind, { kind = it }, Modifier.padding(bottom = 10.dp)) }
         if (groups.isEmpty()) item(key = "none") { Empty(Icons.Rounded.Route, "Giornata libera", if (tech == "Tutti") "Nessun intervento aperto né verificazione imminente." else "Nessuna tappa per $tech.") }
         groups.forEach { (place, ss) ->
@@ -349,7 +357,7 @@ private val routeKinds = listOf("Intervento" to "Interventi", "Verificazione" to
                     Column(Modifier.weight(1f)) {
                         Text(place, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         val u = ss.count { it.rank == 0 && !it.done }; val d = ss.count { it.done }
-                        Text(if (d == ss.size) "Tutto fatto" else (if (ss.size == 1) "1 tappa" else "${ss.size} tappe") + (if (d > 0) " · $d fatte" else "") + if (u > 0) " · " + urgentLabel(u) else "", style = MaterialTheme.typography.bodySmall,
+                        Text(if (d == ss.size) "Tutto fatto" else (if (ss.size == 1) "1 tappa" else "${ss.size} tappe") + (if (d == 1) " · 1 fatta" else if (d > 0) " · $d fatte" else "") + if (u > 0) " · " + urgentLabel(u) else "", style = MaterialTheme.typography.bodySmall,
                             color = if (u > 0) LocalStatus.current.bad else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     // the route follows the order of the list: the most urgent addresses first (Maps takes up to 10)
@@ -372,10 +380,13 @@ private val routeKinds = listOf("Intervento" to "Interventi", "Verificazione" to
                             Text(s.c?.name ?: "Cliente da abbinare", style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(listOf(s.text, s.c?.fullAddress.orEmpty(), s.tech).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            // the kind under the text: the name keeps the whole width and every row lines up the same way
+                            Pill(if (s.done) "Fatto" else s.kind, if (s.done) Tone.Ok else s.tone, Modifier.padding(top = 6.dp))
                         }
-                        Pill(if (s.done) "Fatto" else s.kind, if (s.done) Tone.Ok else s.tone, Modifier.padding(start = 8.dp))
-                        s.c?.phone?.takeIf { it.isNotBlank() }?.let { tel -> IconButton({ runCatching { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + tel.replace(" ", "")))) } }) { Icon(Icons.Rounded.Call, "Chiama ${s.c.name}") } }
-                            ?: Spacer(Modifier.width(10.dp))
+                        // always in the same place, switched off when the customer has no number: the rows stay aligned
+                        val tel = s.c?.phone.orEmpty().trim()
+                        IconButton({ runCatching { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + tel.replace(" ", "")))) } }, enabled = tel.isNotEmpty()) {
+                            Icon(Icons.Rounded.Call, if (tel.isNotEmpty()) "Chiama ${s.c?.name}" else "Nessun numero di telefono", tint = if (tel.isNotEmpty()) LocalContentColor.current else MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)) }
                     }
                 }
             }
