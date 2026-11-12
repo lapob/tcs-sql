@@ -34,7 +34,7 @@ public sealed class PortalWindow : Window
   var hide=new Button{Content="Nascondi (resta collegato)",Margin=new Thickness(6,10,0,10),Padding=new Thickness(12,8,12,8)};hide.Click+=(_,_)=>Hide();DockPanel.SetDock(hide,Dock.Right);bar.Children.Add(hide);bar.Children.Add(status);layout.Children.Add(browser);Content=layout;
   Loaded+=Initialize;schedule.Tick+=async(_,_)=>{if(Authenticated&&!running)await StartSync(false);};keepAlive.Tick+=(_,_)=>{try{if(Authenticated&&!running&&(!IsVisible||WindowState==WindowState.Minimized)&&browser.CoreWebView2!=null)browser.CoreWebView2.Navigate(Home);}catch{}};keepAlive.Start();
   // closing only hides the window: the session stays signed in until the app itself exits
-  Closing+=(_,e)=>{if(!quitting){e.Cancel=true;Hide();}};Closed+=(_,_)=>{cancel?.Cancel();schedule.Stop();keepAlive.Stop();browser.Dispose();};
+  Closing+=(_,e)=>{if(!quitting){e.Cancel=true;Hide();}};Closed+=(_,_)=>{cancel?.Cancel();schedule.Stop();keepAlive.Stop();PortalKeep.Detach(browser.CoreWebView2);browser.Dispose();};
  }
  public void Quit(){quitting=true;cancel?.Cancel();keepAlive.Stop();schedule.Stop();try{Close();}catch{}}
  public void Reveal(){Show();if(WindowState==WindowState.Minimized)WindowState=WindowState.Normal;Activate();}
@@ -46,7 +46,7 @@ public sealed class PortalWindow : Window
    core.NavigationStarting+=(_,ev)=>{if(!Allowed(ev.Uri))ev.Cancel=true;};core.NewWindowRequested+=(_,ev)=>{ev.Handled=true;if(Allowed(ev.Uri))core.Navigate(ev.Uri);};
    core.NavigationCompleted+=(_,_)=>{Authenticated=Uri.TryCreate(core.Source,UriKind.Absolute,out var u)&&u.Host=="www.zucchetti.it"&&!u.AbsolutePath.Contains("login",StringComparison.OrdinalIgnoreCase);if(!running)SetStatus(Authenticated?"Sessione disponibile · aggiornamento ogni 6 ore dopo la prima sincronizzazione.":"Accedi al portale. La password non viene salvata dall'app.");};
    StateChanged+=(_,_)=>{try{core.MemoryUsageTargetLevel=WindowState==WindowState.Minimized&&!running?CoreWebView2MemoryUsageTargetLevel.Low:CoreWebView2MemoryUsageTargetLevel.Normal;}catch{}};
-   core.Navigate(Home);initialized=true;
+   PortalKeep.Attach(core);core.Navigate(Home);initialized=true;
   }catch(Exception ex){SetStatus(ex.Message);}
  }
  void SetStatus(string text){status.Text=text;Progress=text;ProgressChanged?.Invoke(text);_=target.Progress(running,Authenticated,text);}

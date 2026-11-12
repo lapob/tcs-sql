@@ -43,7 +43,7 @@ public sealed class RchWindow : Window
   // confirmed with a real (read-only) API call a moment after each page change, never from the address alone
   detect.Tick+=async(_,_)=>{detect.Stop();await Detect();};
  }
- public void Quit(){quitting=true;cancel?.Cancel();keepAlive.Stop();schedule.Stop();detect.Stop();try{Close();}catch{}browser.Dispose();}
+ public void Quit(){quitting=true;cancel?.Cancel();keepAlive.Stop();schedule.Stop();detect.Stop();try{Close();}catch{}PortalKeep.Detach(browser.CoreWebView2);browser.Dispose();}
  public void StartHidden(){hiddenStart=true;WindowStartupLocation=WindowStartupLocation.Manual;Left=-32000;Top=-32000;ShowInTaskbar=false;ShowActivated=false;Show();}
  public void Reveal()
  {
@@ -64,7 +64,7 @@ public sealed class RchWindow : Window
    core.NewWindowRequested+=(_,ev)=>{ev.Handled=true;if(Https(ev.Uri))core.Navigate(ev.Uri);};
    core.DownloadStarting+=(_,ev)=>ev.Cancel=true;
    core.SourceChanged+=(_,_)=>Later();core.HistoryChanged+=(_,_)=>Later();core.NavigationCompleted+=(_,_)=>Later();
-   core.Navigate(Dealer+"dashboard");keepAlive.Start();schedule.Start();
+   PortalKeep.Attach(core);core.Navigate(Dealer+"dashboard");keepAlive.Start();schedule.Start();
    if(hiddenStart)Hide();
   }
   catch(Exception ex){SetStatus("Browser non disponibile: "+ex.Message);}

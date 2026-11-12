@@ -385,3 +385,13 @@ fun Modifier.bleed(h: Dp): Modifier = this.layout { m, c ->
 /** Priority colours, the same on the website: Urgente red, Alta yellow, Bassa green, Normale none. */
 fun prioTone(p: String): Tone? = when (p) { "Urgente" -> Tone.Bad; "Alta" -> Tone.Due; "Bassa" -> Tone.Ok; else -> null }
 @Composable fun prioColor(p: String): Color? = prioTone(p)?.let { LocalStatus.current.of(it) }
+
+/** The author's signature: small and quiet, the name in the brand colours. */
+@Composable fun MadeBy(modifier: Modifier = Modifier) {
+    val cs = MaterialTheme.colorScheme
+    val name = androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.SemiBold,
+        brush = androidx.compose.ui.graphics.Brush.linearGradient(listOf(cs.primary, Color(0xFFA855F7))))
+    Text(androidx.compose.ui.text.buildAnnotatedString { append("by "); pushStyle(name); append("Lapo Bardi"); pop() },
+        modifier, style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant.copy(alpha = .8f),
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+}

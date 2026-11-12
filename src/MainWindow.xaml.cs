@@ -328,7 +328,7 @@ public partial class MainWindow : Window
   if(rch==null)
   {
    rch=new RchWindow(SyncTarget(),async()=>await Push()){Owner=this};
-   rch.SignInRequired=()=>Dispatcher.InvokeAsync(async()=>{rch?.Reveal();await Notify("RCH XDealer chiede di accedere di nuovo: ho aperto la finestra di accesso.");});
+   rch.SignInRequired=()=>Dispatcher.InvokeAsync(async()=>await SignInLost("RCH XDealer"));
    if(show)rch.Reveal();else rch.StartHidden();
   }
   else if(show)rch.Reveal();
@@ -339,7 +339,7 @@ public partial class MainWindow : Window
   if(ital==null)
   {
    ital=new ItalRetailWindow(SyncTarget(),async()=>await Push()){Owner=this};
-   ital.SignInRequired=()=>Dispatcher.InvokeAsync(async()=>{ital?.Reveal();await Notify("Ital Retail chiede di accedere di nuovo: ho aperto la finestra di accesso.");});
+   ital.SignInRequired=()=>Dispatcher.InvokeAsync(async()=>await SignInLost("Ital Retail"));
    if(show)ital.Reveal();else ital.StartHidden();
   }
   else if(show)ital.Reveal();
@@ -350,10 +350,26 @@ public partial class MainWindow : Window
   if(dtr==null)
   {
    dtr=new DtrWindow(SyncTarget(),async()=>await Push()){Owner=this};
-   dtr.SignInRequired=()=>Dispatcher.InvokeAsync(async()=>{dtr?.Reveal();await Notify("DTR-Service chiede di accedere di nuovo: ho aperto la finestra di accesso.");});
+   dtr.SignInRequired=()=>Dispatcher.InvokeAsync(async()=>await SignInLost("DTR-Service"));
    if(show)dtr.Reveal();else dtr.StartHidden();
   }
   else if(show)dtr.Reveal();
+ }
+ // A portal that asks to sign in again never pops up by itself (not at start, not later): a short notice, and the
+ // window opens only when the user chooses to reconnect (Sincronizzazione → Portali e accessi). One notice every 6 hours.
+ readonly Dictionary<string,DateTime> signInNoticed=[];
+ async Task SignInLost(string label)
+ {
+  if(signInNoticed.TryGetValue(label,out var t)&&DateTime.Now-t<TimeSpan.FromHours(6))return;
+  signInNoticed[label]=DateTime.Now;
+  await Notify($"{label} si è scollegato: quando vuoi, ricollegalo da Sincronizzazione → Portali e accessi.");
+ }
+ // the portals' sessions are written to disk one last time before Studio closes, so they are still there next time
+ bool sessionsSaved;
+ protected override async void OnClosing(System.ComponentModel.CancelEventArgs e)
+ {
+  if(!sessionsSaved){e.Cancel=true;sessionsSaved=true;try{await Task.WhenAny(PortalKeep.SaveAll(),Task.Delay(2500));}catch{}Close();return;}
+  base.OnClosing(e);
  }
  void OpenPortal(){if(portal==null){portal=new PortalWindow(SyncTarget(),async()=>await Push());portal.ProgressChanged=Progress;portal.Owner=this;portal.Closed+=(_,_)=>portal=null;portal.Show();}else portal.Reveal();}
  int Scan(bool log)

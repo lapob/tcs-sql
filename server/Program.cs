@@ -43,6 +43,7 @@ builder.WebHost.ConfigureKestrel(k=>
 {
  if(lanUrl.Host is "0.0.0.0")k.ListenAnyIP(lanUrl.Port);else k.Listen(System.Net.IPAddress.Parse(lanUrl.Host is "localhost"?"127.0.0.1":lanUrl.Host),lanUrl.Port);
  k.ListenLocalhost(tunnelPort);
+ k.AddServerHeader=false;// no product name to fingerprint
 });
 builder.Services.AddSingleton(store).AddSingleton(users).AddSingleton(hub).AddSingleton(devices);
 // the tunnel (cloudflared on this PC) forwards the real client IP and https: trusted only from loopback
@@ -119,7 +120,7 @@ app.Use(async(ctx,next)=>
 });
 app.Use(async(ctx,next)=>
 {
- var h=ctx.Response.Headers;h["X-Content-Type-Options"]="nosniff";h["Referrer-Policy"]="no-referrer";h["X-Frame-Options"]="DENY";h["Permissions-Policy"]="camera=(), microphone=(), geolocation=()";h["Content-Security-Policy"]="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self' blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";if(ctx.Request.IsHttps)h["Strict-Transport-Security"]="max-age=31536000";h["Cross-Origin-Opener-Policy"]="same-origin";h["Cross-Origin-Resource-Policy"]="same-origin";
+ var h=ctx.Response.Headers;h["X-Content-Type-Options"]="nosniff";h["Referrer-Policy"]="no-referrer";h["X-Frame-Options"]="DENY";h["Permissions-Policy"]="camera=(), microphone=(), geolocation=()";if(ctx.Request.IsHttps)h["Strict-Transport-Security"]="max-age=31536000";h["Content-Security-Policy"]="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self' blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";if(ctx.Request.IsHttps)h["Strict-Transport-Security"]="max-age=31536000";h["Cross-Origin-Opener-Policy"]="same-origin";h["Cross-Origin-Resource-Policy"]="same-origin";
  // CSRF guard: every state-changing API call must carry a custom header (cannot be sent cross-site without CORS).
  if(ctx.Request.Path.StartsWithSegments("/api")&&!HttpMethods.IsGet(ctx.Request.Method)&&!HttpMethods.IsHead(ctx.Request.Method)&&ctx.Request.Headers["X-Requested-With"]!="topcash")
  {ctx.Response.StatusCode=400;await ctx.Response.WriteAsync("Richiesta non valida.");return;}

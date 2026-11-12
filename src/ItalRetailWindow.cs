@@ -43,7 +43,7 @@ public sealed class ItalRetailWindow : Window
   keepAlive.Tick+=async(_,_)=>await KeepAlive();
   schedule.Tick+=async(_,_)=>{if(Authenticated&&!running)await StartSync();};
  }
- public void Quit(){quitting=true;cancel?.Cancel();keepAlive.Stop();schedule.Stop();try{Close();}catch{}browser.Dispose();}
+ public void Quit(){quitting=true;cancel?.Cancel();keepAlive.Stop();schedule.Stop();try{Close();}catch{}PortalKeep.Detach(browser.CoreWebView2);browser.Dispose();}
  /// Creates the browser without showing the window (used at startup when the session already exists).
  public void StartHidden(){hiddenStart=true;WindowStartupLocation=WindowStartupLocation.Manual;Left=-32000;Top=-32000;ShowInTaskbar=false;ShowActivated=false;Show();}
  /// Brings the window on screen (sign-in or manual check).
@@ -68,7 +68,7 @@ public sealed class ItalRetailWindow : Window
    core.NewWindowRequested+=(_,ev)=>{ev.Handled=true;if(Https(ev.Uri))core.Navigate(ev.Uri);};
    core.DownloadStarting+=(_,ev)=>ev.Cancel=true;
    core.SourceChanged+=(_,_)=>Detect();core.HistoryChanged+=(_,_)=>Detect();core.NavigationCompleted+=(_,_)=>Detect();
-   core.Navigate(Dealer+"dashboard");keepAlive.Start();schedule.Start();
+   PortalKeep.Attach(core);core.Navigate(Dealer+"dashboard");keepAlive.Start();schedule.Start();
    if(hiddenStart)Hide();
   }
   catch(Exception ex){SetStatus("Browser non disponibile: "+ex.Message);}

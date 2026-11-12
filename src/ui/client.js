@@ -44,7 +44,7 @@ function clientCard(c,fact){
  ];
  // who follows the customer, under which conditions, and the money (only for who sees the accounting)
  const strip=[
-  c.tech?`<span class="cs-item" data-tip="Dal${c.techFrom==='macchine'?'le macchine':c.techFrom==='anagrafica Mastro'?'l’anagrafica Mastro':'l’ultimo intervento'}${c.techs?.length>1?' · altri: '+esc(c.techs.filter(t=>t!==c.tech).join(', ')):''}">${icon('tool')}Tecnico <b>${esc(c.tech)}</b></span>`:`<span class="cs-item muted">${icon('tool')}Nessun tecnico assegnato</span>`,
+  c.tech?`<span class="cs-item" data-tip="Dal${c.techFrom==='macchine'?'le macchine':c.techFrom==='anagrafica Mastro'?'l’anagrafica Mastro':'l’ultimo intervento'}${c.techs?.length>1?' · altri: '+esc(c.techs.filter(t=>t!==c.tech).join(', ')):''}">${icon('tool')}<span>Tecnico <b>${esc(c.tech)}</b></span></span>`:`<span class="cs-item muted">${icon('tool')}Nessun tecnico assegnato</span>`,
   ...(c.kinds||[]).map(g=>svcChip(g)),
   c.pay?`<button class="cs-pay t-${c.pay.state}" data-ctab="acc">${icon('euro')}${esc(payPhrase(c.pay))}</button>`:'',
  ].filter(Boolean).join('');

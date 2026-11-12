@@ -12,9 +12,10 @@ let A=null;
 let aui={only:'open',year:''};
 const ACC_PAGE={receivables:'accRec',invoices:'accInv',payables:'accPay',clients:'accCli'};
 
+const _accD=new Map(); // dates repeat a lot (same due days): parsed once
 function deriveAccounting(){
  const today=new Date();today.setHours(0,0,0,0);
- const pd=s=>{if(!s)return null;const d=new Date(String(s).slice(0,10)+'T00:00:00');return isNaN(d)?null:d;};
+ const pd=s=>{if(!s)return null;const k=String(s).slice(0,10);let d=_accD.get(k);if(d!==undefined)return d;d=new Date(k+'T00:00:00');if(isNaN(d))d=null;_accD.set(k,d);return d;};
  // Mastro code → client of the app (a client can merge several Mastro codes)
  const byMastro=new Map();for(const c of D?.clients||[])for(const k of c.mastroCodes||(c.mastro?[c.mastro.code]:[]))if(k&&!byMastro.has(String(k).toUpperCase()))byMastro.set(String(k).toUpperCase(),c);
  const cl=code=>byMastro.get(String(code||'').toUpperCase())||null;

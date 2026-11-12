@@ -78,7 +78,7 @@ function openItal(serial){
  const m=document.createElement('div');m.className='modal';
  m.innerHTML=`<div class="modal-box wide dtr-card" role="dialog" aria-label="Dispositivo ${esc(r.serial)}">
   <div class="dtr-card-head"><div><span class="tag">Ital Retail · ${esc(r.type||'dispositivo')}</span><h3 class="mono">${esc(r.serial)}</h3><p>${esc(r.c?.name||r.label||'Nessun cliente indicato sul portale')}</p></div><button class="icon-btn" data-x aria-label="Chiudi">${icon('close')}</button></div>
-  <div>${itVia(r)} ${itFlags(r)||'<span class="badge ok">regolare</span>'}</div>
+  <div class="badge-row">${itVia(r)} ${itFlags(r)||'<span class="badge ok">regolare</span>'}</div>
   <div class="facts">
    ${fact('Cliente in Studio',r.c?esc(r.c.name):'')}${fact('Etichetta sul portale',esc(r.label))}
    ${fact('Abbonamento',r.noSub?'Non attivo':d.subFrom?`dal ${day(d.subFrom)} al ${day(d.subTo)}`:'Attivo',r.noSub?'bad':'')}${fact('Rinnovo',r.noSub?'':d.autoRenew?'Automatico (tacito)':d.subTo?`Scade ${rel(r.sub)}`:'',!r.noSub&&!d.autoRenew?tone(r.sub,IT_SUB_SOON):'')}

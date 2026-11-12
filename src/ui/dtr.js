@@ -114,7 +114,7 @@ function openDtr(serial){
  const m=document.createElement('div');m.className='modal';
  m.innerHTML=`<div class="modal-box wide dtr-card" role="dialog" aria-label="Registratore ${esc(r.serial)}">
   <div class="dtr-card-head"><div><span class="tag">Registratore telematico</span><h3 class="mono">${esc(r.serial)}</h3><p>${esc(d.holder||r.client)}${d.vat?` · P.IVA <span class="mono">${esc(d.vat)}</span>`:''}</p></div><button class="icon-btn" data-x aria-label="Chiudi">${icon('close')}</button></div>
-  <div>${r.tagList.map(t=>`<span class="badge">${esc(t)}</span>`).join(' ')} ${viaBadge(r)} ${flags(r)}</div>
+  <div class="badge-row">${r.tagList.map(t=>`<span class="badge">${esc(t)}</span>`).join(' ')} ${viaBadge(r)} ${flags(r)}</div>
   ${d.warning?`<div class="dtr-warn">${icon('alert')}<span>${esc(d.warning)}</span></div>`:''}
   <div class="facts">
    ${fact('Cliente in Studio',r.c?esc(r.c.name):'')}${fact('Indirizzo di installazione',esc((d.address||'').replace(/\s+IT$/,'')))}

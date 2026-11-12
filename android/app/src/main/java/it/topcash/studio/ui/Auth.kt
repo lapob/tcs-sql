@@ -136,6 +136,7 @@ import kotlinx.coroutines.launch
             if (busy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp, color = MaterialTheme.colorScheme.onPrimary) else Text("Accedi")
         }
         TextButton({ vm.changeServer() }, Modifier.padding(top = 12.dp)) { Text("Cambia server") }
+        MadeBy(Modifier.padding(top = 18.dp))
     }
 }
 

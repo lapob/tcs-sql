@@ -5,7 +5,8 @@
 // Edit (E.D.IT.), Ditron, Custom and their models are no longer followed: they are left out of the whole app (Mastro keeps them).
 // A model written with "RCH" stays: RCH sold some of the same names.
 const RT_DROP=/DITRON|\bCUSTOM\b|\bQ3X|\bX ?KUBE|\bKUBE\b|SWEDA|\bE\.?D\.?IT\b|\bEDIT\b|\bZERO ?(5|7|55|8|TOP|\+)|\bZERO5|\bZERO7|\bZERO55|^SPOT\b|SPOT ZERO|SMARTY|\bNINA\b|\bFLY\b|GLOBE|QUADR|FLEXY|\bZIP\b|SPEEDY|MIKROPOS|^DREAM\b|SEVENT?\b|BUFFETTI|^POINT$|^VELVET|^MASTER\b|\bFLEA\b|PULSAR|NESSO|SUPREMA|^ONE$|EDIT ONE/;
-const rtDropped=model=>{const s=String(model||'').toUpperCase().trim();return RT_DROP.test(s)&&!/\bRCH\b/.test(s);};
+const _rtD=new Map();
+const rtDropped=model=>{const k=String(model||'');let r=_rtD.get(k);if(r!==undefined)return r;const s=k.toUpperCase().trim();r=RT_DROP.test(s)&&!/\bRCH\b/.test(s);_rtD.set(k,r);return r;};
 // sections: the brands with a portal (DTR, Ital Retail) and Epson on their own, every other register together
 const RT_BRANDS=[
  {k:'dtr',l:'DTR',portal:'dtr',pl:'DTR-Service',hue:212,re:/\bDTR\b|\bDRT|DRT ?CASH|DRT ?PALM|DRT ?FRONT|^D(CASH|FLEX|PALM)\b/},
@@ -25,9 +26,12 @@ const RT_OWN=new Set(['dtr','ital','rch','epson']);
 const secOrd=k=>{const i=['dtr','ital','rch','epson','other'].indexOf(k);return i<0?9:i;};
 const RT_CATS={rt:'Registratori di cassa',cash:'Casse automatiche',soft:'Software e licenze',printer:'Stampanti',scale:'Bilance'};
 let RG=null;
-function rtBrand(model){const s=String(model||'').toUpperCase();return RT_BRANDS.find(b=>b.re.test(s))||RT_OTHER;}
+// a few hundred models for ten thousand machines: each answer is remembered
+const _rtB=new Map(),_rtM=new Map();
+function rtBrand(model){const k=String(model||'');let r=_rtB.get(k);if(r)return r;const s=k.toUpperCase();r=RT_BRANDS.find(b=>b.re.test(s))||RT_OTHER;_rtB.set(k,r);return r;}
 // "DTR DRTCASH" and "DRTCASH" are the same model: the brand words are dropped, spacing and punctuation normalised
-function rtModel(model,b){let s=String(model||'').toUpperCase().replace(/[^A-Z0-9+!]+/g,' ').trim();
+function rtModel(model,b){const key=String(model||'')+''+(b?.k||'');const hit=_rtM.get(key);if(hit!==undefined)return hit;const out=rtModelRaw(model,b);_rtM.set(key,out);return out;}
+function rtModelRaw(model,b){let s=String(model||'').toUpperCase().replace(/[^A-Z0-9+!]+/g,' ').trim();
  if(b.k==='dtr')s=s.replace(/^DTR\s+/,'');else if(b.k==='axon')s=s.replace(/^(AXON|MICRELEC)\s+/,'');else if(b.k==='ital')s=s.replace(/^ITAL ?RETAIL\s+/,'');else if(b.k!=='other'&&b.k!=='soft'&&b.k!=='printer'&&b.k!=='scale')s=s.replace(new RegExp('^'+b.l.toUpperCase()+'\\s*'),'').replace(/^RCH\s*-?\s*/,'');
  return s.replace(/\s+/g,' ').trim()||String(model||'').trim()||'Senza modello';}
 function deriveRegisters(){

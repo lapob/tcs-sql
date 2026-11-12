@@ -154,6 +154,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
                 MoreRow(Icons.Rounded.SystemUpdate, "Versione ${vm.appVersion}", "Tocca per controllare gli aggiornamenti", Modifier.appear(3)) { vm.checkUpdate(true) }
             }
         }
+        item(key = "madeby") { MadeBy(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 8.dp)) }
     }
 }
 
@@ -290,6 +291,6 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
                 }
             }
         }
-        item(key = "about") { Text("Top Cash Studio 2.0 per Android · Top Cash Service S.r.l.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 24.dp)) }
+        item(key = "about") { Column(Modifier.fillMaxWidth().padding(top = 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) { Text("Top Cash Studio ${vm.appVersion} per Android · Top Cash Service S.r.l.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant); MadeBy() } }
     }
 }

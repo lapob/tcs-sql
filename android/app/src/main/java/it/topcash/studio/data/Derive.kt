@@ -33,9 +33,24 @@ object Dates {
     fun iso(d: LocalDate) = d.toString()
 }
 
-fun norm(s: String?): String = Normalizer.normalize((s ?: "").lowercase(), Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
-private fun nameKey(s: String?) = norm(s).replace(Regex("[^a-z0-9]"), "")
-private fun idKey(s: String?) = (s ?: "").uppercase().removePrefix("IT").replace(Regex("[^0-9A-Z]"), "")
+private val marks = Regex("""\p{M}+""")
+private val normCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+/** Search text: lower case without accents. The same names come back at every rebuild, so each answer is kept;
+ *  plain ASCII (most of the archive) skips the accent pass. */
+fun norm(s: String?): String {
+    val k = s ?: return ""
+    normCache[k]?.let { return it }
+    val r = if (k.all { it.code < 128 }) k.lowercase() else Normalizer.normalize(k.lowercase(), Normalizer.Form.NFD).replace(marks, "")
+    if (normCache.size > 80_000) normCache.clear()
+    normCache[k] = r
+    return r
+}
+private val notAlnum = Regex("[^a-z0-9]")
+private val notAlnumUp = Regex("[^0-9A-Z]")
+private val offRe = Regex("dismess|disattiv|sostitu", RegexOption.IGNORE_CASE)
+private val rchWordRe = Regex("""\bRCH\b""")
+private fun nameKey(s: String?) = norm(s).replace(notAlnum, "")
+private fun idKey(s: String?) = (s ?: "").uppercase().removePrefix("IT").replace(notAlnumUp, "")
 
 enum class Tone { Ok, Due, Bad, Info, Accent, Neutral }
 
@@ -71,7 +86,7 @@ class URch(val r: RchDevice, val client: UClient?, val machine: UMachine?, val v
     val verNext = Dates.parse(r.lastVerification)?.plusYears(2); val verDays = Dates.daysFromToday(verNext)
     val certDue = Dates.parse(r.certDue); val certDays = Dates.daysFromToday(certDue)
     val zDate = Dates.parse(r.zDate); val zDays = Dates.daysFromToday(zDate)
-    val off = Regex("dismess|disattiv|sostitu", RegexOption.IGNORE_CASE).containsMatchIn(r.state)
+    val off = offRe.containsMatchIn(r.state)
     val lowDgfe = r.dgfeFree in 0..15
     val verSoon = !off && verDays != null && verDays <= 60
     val certSoon = !off && certDays != null && certDays <= 90
@@ -223,7 +238,7 @@ class Archive(val state: ArchiveState) {
             UMachine(m, c, c?.name ?: "Cliente Mastro ${m.clientCode}", ver, next, Dates.daysFromToday(next), end, Dates.daysFromToday(end), flag, m0.active).also { c?.machines?.add(it) }
         }
         // DTR-Service registers → Mastro machine by serial (a missing manufacturer prefix is tolerated when unambiguous), else VAT, else name
-        fun serKey(s: String?) = (s ?: "").uppercase().replace(Regex("[^A-Z0-9]"), "")
+        fun serKey(s: String?) = (s ?: "").uppercase().replace(notAlnumUp, "")
         val bySerial = HashMap<String, UMachine>(); val byTail = HashMap<String, MutableList<Pair<String, UMachine>>>()
         machines.sortedByDescending { it.m.active }.forEach { m ->
             setOf(serKey(m.m.fiscalSerial), serKey(m.m.serial)).filter { it.length >= 8 }.forEach { k -> bySerial.putIfAbsent(k, m); byTail.getOrPut(k.takeLast(8)) { mutableListOf() }.add(k to m) }
@@ -407,4 +422,4 @@ fun serviceKind(m: Machine): String? {
 
 /** Edit (E.D.IT.), Ditron and their models are no longer followed: left out of the app (Mastro keeps them). A model written with "RCH" stays. */
 private val rtDropRe = Regex("DITRON|\\bCUSTOM\\b|\\bQ3X|\\bX ?KUBE|\\bKUBE\\b|SWEDA|\\bE\\.?D\\.?IT\\b|\\bEDIT\\b|\\bZERO ?(5|7|55|8|TOP|\\+)|\\bZERO5|\\bZERO7|\\bZERO55|^SPOT\\b|SPOT ZERO|SMARTY|\\bNINA\\b|\\bFLY\\b|GLOBE|QUADR|FLEXY|\\bZIP\\b|SPEEDY|MIKROPOS|^DREAM\\b|SEVENT?\\b|BUFFETTI|^POINT$|^VELVET|^MASTER\\b|\\bFLEA\\b|PULSAR|NESSO|SUPREMA|^ONE$|EDIT ONE")
-fun rtDropped(model: String): Boolean { val s = model.uppercase().trim(); return rtDropRe.containsMatchIn(s) && !Regex("\\bRCH\\b").containsMatchIn(s) }
+fun rtDropped(model: String): Boolean { val s = model.uppercase().trim(); return rtDropRe.containsMatchIn(s) && !rchWordRe.containsMatchIn(s) }

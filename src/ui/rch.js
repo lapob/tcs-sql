@@ -81,7 +81,7 @@ function openRch(serial){
  const m=document.createElement('div');m.className='modal';
  m.innerHTML=`<div class="modal-box wide dtr-card" role="dialog" aria-label="Dispositivo ${esc(r.serial)}">
   <div class="dtr-card-head"><div><span class="tag">RCH XDealer · ${esc(r.type||'dispositivo')}</span><h3 class="mono">${esc(r.serial)}</h3><p>${esc(r.c?.name||r.label||'Nessun cliente indicato sul portale')}</p></div><button class="icon-btn" data-x aria-label="Chiudi">${icon('close')}</button></div>
-  <div>${rcVia(r)} ${rcFlags(r)||'<span class="badge ok">regolare</span>'}</div>
+  <div class="badge-row">${rcVia(r)} ${rcFlags(r)||'<span class="badge ok">regolare</span>'}</div>
   <div class="facts">
    ${fact('Cliente in Studio',r.c?esc(r.c.name):'')}${fact('Cliente sul portale',[esc(r.client),r.vat?'P.IVA '+esc(r.vat):'',esc([r.city,r.province].filter(Boolean).join(' '))].filter(Boolean).join(' · '))}
    ${fact('Stato sul portale',esc(r.state||''),r.off?'text-3':'')}${fact('Contratto di manutenzione',r.contract?'Attivo':'Non presente',r.contract?'ok':'')}
