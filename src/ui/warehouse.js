@@ -197,8 +197,8 @@ function openArticleEditor(a){
  const isNew=!a;a=a||{code:'',name:'',barcode:'',category:'',unit:'PZ',cost:0,price:0,vat:22,supplier:'',supplierCode:'',serialized:false,active:true,notes:'',source:'app',updated:''};
  const m=document.createElement('div');m.className='modal';
  m.innerHTML=`<form class="modal-box wide" id="ar-form"><h3>${isNew?'Nuovo articolo':'Modifica articolo'}</h3>
-  <div class="form-row"><label class="field">Codice<input class="input mono" name="code" value="${esc(a.code)}" ${isNew?'':'readonly'} required maxlength="40"></label><label class="field">Codice a barre (EAN)<input class="input mono" name="barcode" value="${esc(a.barcode)}" placeholder="scansiona…" maxlength="60"></label></div>
-  <label class="field">Descrizione<input class="input" name="name" value="${esc(a.name)}" required maxlength="200"></label>
+  <label class="field">Descrizione<input class="input" name="name" value="${esc(a.name)}" required maxlength="200" placeholder="es. Rotolo termico 57x40"></label>
+  <div class="form-row"><label class="field">Codice<input class="input mono" name="code" value="${esc(a.code)}" ${isNew?'':'readonly'} required maxlength="40" placeholder="proposto dalla descrizione"><small class="field-err" id="ar-taken" hidden>Codice già usato da un altro articolo</small></label><label class="field">Codice a barre (EAN)<input class="input mono" name="barcode" value="${esc(a.barcode)}" placeholder="scansiona…" maxlength="60"></label></div>
   <div class="form-row"><label class="field">Categoria<input class="input" name="category" list="ar-cats" value="${esc(a.category)}"></label><label class="field">Unità di misura<input class="input" name="unit" value="${esc(a.unit)}" maxlength="10"></label></div>
   <datalist id="ar-cats">${W.cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
   <div class="form-row"><label class="field">Costo €<input class="input mono" name="cost" inputmode="decimal" value="${a.cost||''}"></label><label class="field">Prezzo di vendita €<input class="input mono" name="price" inputmode="decimal" value="${a.price||''}"></label></div>
@@ -210,6 +210,11 @@ function openArticleEditor(a){
  document.body.append(m);
  const close=()=>{m.classList.add('out');setTimeout(()=>m.remove(),220);};
  m.addEventListener('click',e=>{if(e.target===m||e.target.closest('[data-m="0"]'))close();});
+ // new article: the code follows the description until it is typed by hand; a code already in use is said at once
+ if(isNew){const fm=m.querySelector('form'),cf=fm.code,nf=fm.name;let auto=true;const taken=()=>{const t=!!cf.value.trim()&&!!W.byCode?.get?.(cf.value.trim().toUpperCase());m.querySelector('#ar-taken').hidden=!t;cf.setCustomValidity(t?'Codice già usato':'');};
+  const make=v=>{const w=v.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').split(/[^A-Z0-9]+/).filter(Boolean);return w.map(x=>/\d/.test(x)?x:x.slice(0,w.length<=2?6:3)).join('').slice(0,16);};
+  nf.addEventListener('input',()=>{if(auto){cf.value=make(nf.value);taken();}});cf.addEventListener('input',()=>{auto=!cf.value;cf.value=cf.value.toUpperCase();taken();});
+  setTimeout(()=>nf.focus(),60);}
  m.querySelector('form').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target);const n=k=>+String(f.get(k)||'0').replace(',','.')||0;
   const item={...a,code:String(f.get('code')).trim(),name:String(f.get('name')).trim(),barcode:String(f.get('barcode')||'').trim(),category:String(f.get('category')||'').trim(),unit:String(f.get('unit')||'PZ').trim(),cost:n('cost'),price:n('price'),vat:n('vat'),supplier:String(f.get('supplier')||''),supplierCode:String(f.get('supplierCode')||''),serialized:f.get('serialized')==='on',active:f.get('active')==='on'};
   try{await wsave('articleSave',{item},'/api/warehouse/articles',item,'Articolo salvato');close();}catch{}});

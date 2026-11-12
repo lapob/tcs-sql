@@ -13,8 +13,8 @@ public interface ISyncTarget
 public sealed class LocalSyncTarget(Store store):ISyncTarget
 {
  public string Label=>"archivio locale";
- public Task<string> Apply(string kind,string product,string scope,List<string> headers,List<List<string>> rows,string capturedAt)=>Task.FromResult(store.ApplyPortalList(kind,product,scope,headers,rows,capturedAt,"Zucchetti · sessione locale"));
- public Task Log(string kind,string message){store.Log(kind,message);return Task.CompletedTask;}
+ public Task<string> Apply(string kind,string product,string scope,List<string> headers,List<List<string>> rows,string capturedAt)=>Task.Run(()=>store.ApplyPortalList(kind,product,scope,headers,rows,capturedAt,"Zucchetti · sessione locale"));// written away from the window: the app never freezes while a big list is saved
+ public Task Log(string kind,string message)=>Task.Run(()=>store.Log(kind,message));
  public Task Progress(bool running,bool connected,string text)=>Task.CompletedTask;
 }
 /// Sends each completed list to the shared server. Authenticated by the sync-station token (never a user password).

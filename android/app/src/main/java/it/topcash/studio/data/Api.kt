@@ -112,6 +112,7 @@ class Api(context: Context) {
     suspend fun saveIntervention(i: Intervention): Intervention = json.decodeFromString(post("/api/interventions", json.encodeToString(i)))
     suspend fun saveDueNote(id: String, status: String, note: String) { post("/api/accounting/due-note", json.encodeToString(DueNoteRequest(id, status, note))) }
     suspend fun saveMovements(m: List<Movement>) { post("/api/warehouse/movements", json.encodeToString(MovementsRequest(m))) }
+    suspend fun saveArticle(x: Article) { post("/api/warehouse/articles", json.encodeToString(x)) }
     private fun enc(id: String) = java.net.URLEncoder.encode(id, "UTF-8").replace("+", "%20")
     suspend fun signIntervention(id: String, r: SignRequest): Intervention = json.decodeFromString(post("/api/interventions/" + enc(id) + "/sign", json.encodeToString(r)))
     suspend fun unsignIntervention(id: String) { post("/api/interventions/" + enc(id) + "/unsign") }

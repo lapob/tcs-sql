@@ -174,6 +174,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // Live updates. While a portal sync runs the server changes every second: the phone rebuilds its archive at most every
+    // 8 s (one fresh picture, no constant work, no stutter); otherwise a short pause groups a burst of changes into one
+    // download. A change arriving while an update is running is never lost: one more update follows.
+    private var syncSeen = 0L; private var lastRefreshAt = 0L; private var livePending = false; private var againNow = false; private var liveJob: kotlinx.coroutines.Job? = null
+    private fun liveRefresh() {
+        if (refreshJob?.isActive == true) { livePending = true; return }
+        if (liveJob?.isActive == true) return
+        val now = System.currentTimeMillis()
+        val wait = if (now - syncSeen < 20_000) (lastRefreshAt + 8_000 - now).coerceAtLeast(400) else 400L
+        liveJob = viewModelScope.launch { delay(wait); refresh() }
+    }
+
     fun refresh(userInitiated: Boolean = false) {
         val running = refreshJob
         if (running?.isActive == true) {
@@ -183,10 +195,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _refreshing.value = true; val t0 = System.currentTimeMillis()
                 try { running.join() } finally { delay((MIN_SPIN - (System.currentTimeMillis() - t0)).coerceAtLeast(0)); _refreshing.value = false }
             }
+            againNow = true // asked while another update runs (e.g. right after saving): one more, straight after it
             return
         }
+        livePending = false; againNow = false
         refreshJob = viewModelScope.launch {
-            val t0 = System.currentTimeMillis()
+            val t0 = System.currentTimeMillis(); lastRefreshAt = t0
             if (userInitiated) _refreshing.value = true
             try {
                 val have = if (_archive.value == null) null else withContext(Dispatchers.IO) { hashFile.takeIf { it.exists() }?.readText()?.ifBlank { null } }
@@ -225,6 +239,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _refreshing.value = false
             }
         }
+        refreshJob?.invokeOnCompletion {
+            if (againNow) { againNow = false; livePending = false; viewModelScope.launch { refresh() } }
+            else if (livePending) { livePending = false; viewModelScope.launch { liveRefresh() } }
+        }
     }
     private companion object { const val MIN_SPIN = 650L }
     /** Safety net for live updates: a cheap ETag check every 2 minutes while the app is visible (304 = nothing to download). */
@@ -239,8 +257,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         stream = api.stream(
             onMessage = { m ->
                 when (m.type) {
-                    "changed", "hello" -> refresh()
-                    "progress" -> _progress.value = SyncProgress(m.running, m.text)
+                    "changed", "hello" -> liveRefresh()
+                    "progress" -> { if (m.running) syncSeen = System.currentTimeMillis(); _progress.value = SyncProgress(m.running, m.text) }
                 }
             },
             onOpen = { _online.value = true; backoff = 2_000L },
@@ -445,6 +463,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun saveMovements(m: List<Movement>, onDone: () -> Unit) = viewModelScope.launch {
         try { api.saveMovements(m); _messages.tryEmit(if (m.size == 1) "Movimento registrato" else "${m.size} movimenti registrati"); onDone(); refresh() }
         catch (e: ApiException) { _messages.tryEmit(e.message ?: "Movimento non registrato") }
+    }
+
+    fun saveArticle(x: Article, isNew: Boolean, onDone: () -> Unit) = viewModelScope.launch {
+        try { api.saveArticle(x); _messages.tryEmit(if (isNew) "Articolo creato" else "Articolo salvato"); onDone(); refresh() }
+        catch (e: ApiException) { _messages.tryEmit(e.message ?: "Articolo non salvato") }
     }
 
     fun signIntervention(id: String, signer: String, hours: String, png: ByteArray, close: Boolean, onDone: (Intervention) -> Unit) = viewModelScope.launch {

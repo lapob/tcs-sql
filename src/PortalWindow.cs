@@ -27,6 +27,7 @@ public sealed class PortalWindow : Window
  public string Progress {get;private set;}="";
  public PortalWindow(ISyncTarget target,Func<Task> changed)
  {
+  TitleBar.Attach(this);
   this.target=target;this.changed=changed;Title="Top Cash Studio · Collegamento Zucchetti";try{Icon=System.Windows.Media.Imaging.BitmapFrame.Create(new Uri("pack://application:,,,/topcash.ico"));}catch{}Width=1320;Height=900;WindowStartupLocation=WindowStartupLocation.CenterOwner;
   var layout=new DockPanel();var bar=new DockPanel{Background=System.Windows.Media.Brushes.White,MinHeight=62};DockPanel.SetDock(bar,Dock.Top);layout.Children.Add(bar);
   var sync=new Button{Content="Sincronizza tutto (sola lettura)",Margin=new Thickness(10),Padding=new Thickness(14,9,14,9)};sync.Click+=async(_,_)=>await StartSync();DockPanel.SetDock(sync,Dock.Right);bar.Children.Add(sync);

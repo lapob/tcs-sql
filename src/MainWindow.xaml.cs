@@ -49,7 +49,7 @@ public partial class MainWindow : Window
   // Fit any screen: 92% of the work area, never above the design size (small laptops get a usable window).
   var area=SystemParameters.WorkArea;Width=Math.Min(1480,area.Width*0.92);Height=Math.Min(960,area.Height*0.92);MinWidth=Math.Min(MinWidth,area.Width);MinHeight=Math.Min(MinHeight,area.Height);
   pushTimer.Tick+=async(_,_)=>{pushTimer.Stop();if(pushPending){pushPending=false;await PushNow();}};
-  Loaded+=Initialize;Closed+=(_,_)=>{timer.Stop();pushTimer.Stop();updateTimer.Stop();portal?.Quit();dtr?.Quit();ital?.Quit();rch?.Quit();if(!updateStarted&&Updater.ReadyVersion!=null)Updater.Apply(false,false);};
+  TitleBar.Attach(this);Loaded+=Initialize;Closed+=(_,_)=>{timer.Stop();pushTimer.Stop();updateTimer.Stop();portal?.Quit();dtr?.Quit();ital?.Quit();rch?.Quit();if(!updateStarted&&Updater.ReadyVersion!=null)Updater.Apply(false,false);};
   updateTimer.Tick+=async(_,_)=>await UpdateTick();
   StateChanged+=(_,_)=>{try{if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.MemoryUsageTargetLevel=WindowState==WindowState.Minimized?CoreWebView2MemoryUsageTargetLevel.Low:CoreWebView2MemoryUsageTargetLevel.Normal;}catch{}};
  }
@@ -98,7 +98,7 @@ public partial class MainWindow : Window
   finally{updateBusy=false;Post(UpdatePayload());}
  }
  void InstallUpdate(bool minimized){if(Updater.Apply(true,minimized||WindowState==WindowState.Minimized)){updateStarted=true;Close();}}
- readonly DispatcherTimer pushTimer=new(){Interval=TimeSpan.FromMilliseconds(1500)};bool pushPending;DateTime lastPush=DateTime.MinValue;
+ readonly DispatcherTimer pushTimer=new(){Interval=TimeSpan.FromMilliseconds(4000)};bool pushPending;DateTime lastPush=DateTime.MinValue;
  /// Uses the nearest "data" folder that already holds the database (e.g. D:\TopCashSQL\data when run from src\bin), else creates one next to the exe.
  static string FindDataFolder()
  {
@@ -233,6 +233,7 @@ public partial class MainWindow : Window
       Process.Start(new ProcessStartInfo(tmp){UseShellExecute=true});await Notify("PDF aperto: stampalo con Ctrl+P.");}break;
     case "interventionDelete":
      try{store.DeleteIntervention(root.GetProperty("id").GetString()??"");await Push();await Notify("Intervento eliminato.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
+    case "titleBar":TitleBar.Set(root.TryGetProperty("dark",out var tdk)&&tdk.ValueKind==JsonValueKind.True,(byte)root.GetProperty("r").GetInt32(),(byte)root.GetProperty("g").GetInt32(),(byte)root.GetProperty("b").GetInt32());break;
     case "hostInfo":Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,serverExternal,activeServer=Active,portalOpen=portal!=null,autostart=Autostart});Post(UpdatePayload());break;
     case "checkUpdate":await CheckUpdate(true);break;
     case "applyUpdate":await UpdateNow();break;
@@ -396,12 +397,25 @@ public partial class MainWindow : Window
  /// Full archive refresh. While a sync is running, refreshes are coalesced (max one every 1.5 s, trailing one guaranteed).
  public async Task Push()
  {
-  if((portal?.Running??false)&&(DateTime.UtcNow-lastPush).TotalMilliseconds<1500){pushPending=true;if(!pushTimer.IsEnabled)pushTimer.Start();return;}
+  if((portal?.Running??false)&&(DateTime.UtcNow-lastPush).TotalMilliseconds<4000){pushPending=true;if(!pushTimer.IsEnabled)pushTimer.Start();return;}
   await PushNow();
  }
- Task PushNow(){lastPush=DateTime.UtcNow;if(ServerMode)return Task.CompletedTask; // the shared server feeds the UI itself
-  var mv=store.Mastro();
-  if(Dashboard.CoreWebView2!=null)Dashboard.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="state",records=store.Licenses(),licenseEdits=store.LicenseEdits(),licenseCleanup=store.LicenseCleanup(),clientEdits=store.ClientEdits(),clients=store.Clients(),orders=store.Orders(),mastroClients=mv.Clients,machines=mv.Machines,interventions=mv.Interventions,brandRule=mv.Excluded,assets=store.Assets(),renewals=store.Renewals(),deviceLinks=store.DeviceLinks(),rt=store.RtInfos(),machineFlags=store.MachineFlags(),routeDone=store.RouteDone(),photos=store.Photos(),sites=store.Sites(),riba=store.RibaList(),warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),syncRunning=portal?.Running??false,syncProgress=portal?.Progress??"",sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),dtr=store.DtrRegisters(),dtrStatus=store.DtrState(),ital=store.ItalDevices(),italOrders=store.ItalOrders(),italStatus=store.ItalState(),rch=store.RchDevices(),rchStatus=store.RchState(),sourceFolder,dataFolder=store.Folder,autoImport=true,portalConnected=portal?.Authenticated??false},json));return Task.CompletedTask;}
+ /// The archive is read and turned into text away from the window (the interface never freezes on it); an identical
+ /// archive is not sent again, and two refreshes never overlap (the last one asked always arrives).
+ bool pushBusy;string lastJson="";
+ async Task PushNow(){lastPush=DateTime.UtcNow;if(ServerMode)return; // the shared server feeds the UI itself
+  if(pushBusy){pushPending=true;if(!pushTimer.IsEnabled)pushTimer.Start();return;}
+  pushBusy=true;
+  try{
+  bool running=portal?.Running??false,connected=portal?.Authenticated??false;string progress=portal?.Progress??"";
+  var text=await Task.Run(()=>{var mv=store.Mastro();
+ 
+  return JsonSerializer.Serialize(new{type="state",records=store.Licenses(),licenseEdits=store.LicenseEdits(),licenseCleanup=store.LicenseCleanup(),clientEdits=store.ClientEdits(),clients=store.Clients(),orders=store.Orders(),mastroClients=mv.Clients,machines=mv.Machines,interventions=mv.Interventions,brandRule=mv.Excluded,assets=store.Assets(),renewals=store.Renewals(),deviceLinks=store.DeviceLinks(),rt=store.RtInfos(),machineFlags=store.MachineFlags(),routeDone=store.RouteDone(),photos=store.Photos(),sites=store.Sites(),riba=store.RibaList(),warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),syncRunning=running,syncProgress=progress,sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),dtr=store.DtrRegisters(),dtrStatus=store.DtrState(),ital=store.ItalDevices(),italOrders=store.ItalOrders(),italStatus=store.ItalState(),rch=store.RchDevices(),rchStatus=store.RchState(),sourceFolder,dataFolder=store.Folder,autoImport=true,portalConnected=connected},json);});
+  if(text==lastJson)return;lastJson=text;
+  Dashboard.CoreWebView2?.PostWebMessageAsJson(text);
+  }catch(Exception ex){System.Diagnostics.Debug.WriteLine(ex);}
+  finally{pushBusy=false;}
+ }
  // In server mode the progress also reaches every browser through the server; locally it goes straight to the page.
  Task Notify(string message){Dashboard.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new{type="toast",message},json));return Task.CompletedTask;}
 }

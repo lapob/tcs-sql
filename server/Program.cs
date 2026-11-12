@@ -502,22 +502,22 @@ app.MapGet("/api/export/dues.csv",()=>Results.File(Utf8Bom(AccountingReports.Due
 
 // ───────────────────────── warehouse
 // warehouse management is reserved to administrators (spare parts used in interventions still unload the van automatically)
-bool CanManage(HttpContext ctx)=>ctx.User.IsInRole(Roles.Admin);
+bool CanManage(HttpContext ctx)=>ctx.User.IsInRole(Roles.Admin)||ctx.User.IsInRole(Roles.Office);// office and administrators run the warehouse; technicians move stock
 app.MapPost("/api/warehouse/movements",(HttpContext ctx,MovementsRequest r)=>
 {
  if(r?.Movements==null||r.Movements.Count==0)return Bad("Nessun movimento.");
  // technicians move stock (load, unload, transfer); corrections and stock counts are for office / admin
  if(!CanManage(ctx)&&r.Movements.Any(m=>m?.Type is "rettifica" or "inventario"))return Results.StatusCode(403);
  try{var saved=store.AddMovements(r.Movements,Who(ctx));hub.Changed();return Results.Ok(new{count=saved.Count});}catch(InvalidDataException ex){return Bad(ex.Message);}
-}).RequireAuthorization("admin");
+}).RequireAuthorization("read");
 app.MapPost("/api/warehouse/inventory",(HttpContext ctx,InventoryRequest r)=>
 {
  if(r==null||string.IsNullOrWhiteSpace(r.Warehouse)||r.Counted==null)return Bad("Inventario incompleto.");
  try{var n=store.RecordInventory(r.Warehouse,r.Counted,Who(ctx));hub.Changed();return Results.Ok(new{differences=n});}catch(InvalidDataException ex){return Bad(ex.Message);}
-}).RequireAuthorization("admin");
-app.MapPost("/api/warehouse/articles",(HttpContext ctx,Article a)=>{try{var r=store.SaveArticle(a,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin");
-app.MapPost("/api/warehouse/warehouses",(HttpContext ctx,Warehouse w)=>{try{var r=store.SaveWarehouse(w,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin");
-app.MapPost("/api/warehouse/levels",(HttpContext ctx,StockLevel l)=>{try{store.SaveStockLevel(l);hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin");
+}).RequireAuthorization("export");
+app.MapPost("/api/warehouse/articles",(HttpContext ctx,Article a)=>{try{var r=store.SaveArticle(a,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("export");
+app.MapPost("/api/warehouse/warehouses",(HttpContext ctx,Warehouse w)=>{try{var r=store.SaveWarehouse(w,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("export");
+app.MapPost("/api/warehouse/levels",(HttpContext ctx,StockLevel l)=>{try{store.SaveStockLevel(l);hub.Changed();return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("export");
 app.MapGet("/api/export/stock.csv",()=>Results.File(Utf8Bom(WarehouseReports.StockCsv(store)),"text/csv; charset=utf-8",$"TopCash-giacenze-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("admin");
 app.MapGet("/api/export/reorder.csv",()=>Results.File(Utf8Bom(WarehouseReports.ReorderCsv(store)),"text/csv; charset=utf-8",$"TopCash-proposta-ordine-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("admin");
 

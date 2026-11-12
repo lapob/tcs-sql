@@ -50,6 +50,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Switch
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import it.topcash.studio.data.Article
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -92,6 +98,9 @@ private val stockFilters = listOf("Tutti", "Disponibili", "Sotto scorta", "Esaur
     var q by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf("Tutti") }
     var scan by remember { mutableStateOf(false) }
+    // office and administrators create articles here too (also straight from a scanned code that is not in the archive yet)
+    val canManage = me?.role != "tecnico"
+    var newArticle by remember { mutableStateOf<String?>(null) }
     val list = remember(wh, loc, q, filter) {
         val n = norm(q.trim())
         wh.articles.filter { x ->
@@ -100,7 +109,10 @@ private val stockFilters = listOf("Tutti", "Disponibili", "Sotto scorta", "Esaur
         }
     }
     Page(vm, "Magazzino", "${eur(wh.value)} · ${wh.belowMin.size} sotto scorta",
-        actions = { IconButton({ scan = true }) { Icon(Icons.Rounded.QrCodeScanner, "Scansiona codice") } },
+        actions = {
+            if (canManage) IconButton({ newArticle = "" }) { Icon(Icons.Rounded.Add, "Nuovo articolo") }
+            IconButton({ scan = true }) { Icon(Icons.Rounded.QrCodeScanner, "Scansiona codice") }
+        },
         fab = { ExtendedFloatingActionButton(onClick = { onMovement(if (myVan != null) "scarico" else "carico", null) }, icon = { Icon(Icons.Rounded.SwapHoriz, null) }, text = { Text("Movimento") }) }) {
         item(key = "search") { SearchField(q, { q = it }, "Cerca o scansiona un articolo") }
         item(key = "locs") {
@@ -112,11 +124,15 @@ private val stockFilters = listOf("Tutti", "Disponibili", "Sotto scorta", "Esaur
             }
         }
         item(key = "filters") { ChoiceChips(stockFilters, filter, { filter = it }, Modifier.padding(vertical = 8.dp)) }
-        if (wh.articles.isEmpty()) item(key = "none") { Empty(Icons.Rounded.Inventory2, "Magazzino vuoto", "Crea gli articoli dall'app Windows o importali da MastroSQL.") }
+        if (wh.articles.isEmpty()) item(key = "none") { Empty(Icons.Rounded.Inventory2, "Magazzino vuoto", if (canManage) "Tocca + in alto per creare il primo articolo, oppure importali da MastroSQL." else "Gli articoli li crea l'ufficio.") }
         else if (list.isEmpty()) item(key = "empty") { Empty(Icons.Rounded.Inventory2, "Nessun articolo", if (loc != null) "Niente in ${wh.name(loc!!)} con questi filtri." else "Modifica la ricerca o i filtri.") }
+        if (canManage && q.isNotBlank() && list.isEmpty()) item(key = "create") {
+            FilledTonalButton({ newArticle = q.trim() }, Modifier.fillMaxWidth().padding(top = 4.dp)) { Icon(Icons.Rounded.Add, null, Modifier.size(18.dp)); Text("Crea «${q.trim().take(30)}» come nuovo articolo", Modifier.padding(start = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        }
         items(list.size.coerceAtMost(1500), key = { list[it].a.code }) { i -> ArticleRow(list[i], loc, Modifier.padding(bottom = 8.dp).animateItem()) { nav.navigate("article/" + android.net.Uri.encode(list[i].a.code)) } }
     }
-    if (scan) BarcodeScannerDialog(onResult = { code -> scan = false; val found = wh.find(code); if (found != null) nav.navigate("article/" + android.net.Uri.encode(found.a.code)) else q = code }, onDismiss = { scan = false })
+    if (scan) BarcodeScannerDialog(onResult = { code -> scan = false; val found = wh.find(code); if (found != null) nav.navigate("article/" + android.net.Uri.encode(found.a.code)) else { q = code; if (canManage) newArticle = code } }, onDismiss = { scan = false })
+    newArticle?.let { seed -> ArticleEditorSheet(vm, a, null, seed, onDismiss = { newArticle = null }, onSaved = { code -> newArticle = null; q = ""; nav.navigate("article/" + android.net.Uri.encode(code)) }) }
 }
 
 @Composable private fun ArticleRow(x: UArticle, loc: String?, modifier: Modifier, onClick: () -> Unit) {
@@ -144,7 +160,11 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
     val wh = a.wh; val x = wh.byCode[code.uppercase()]
     if (x == null) { LoadingArchive(); return }
     val recent = remember(wh, code) { wh.movements.filter { it.m.article.equals(code, true) }.take(15) }
-    Page(vm, x.a.name, null, onBack = { nav.popBackStack() }, compactTitle = true) {
+    val me by vm.me.collectAsStateWithLifecycle()
+    var edit by remember { mutableStateOf(false) }
+    if (edit) ArticleEditorSheet(vm, a, x.a, null, onDismiss = { edit = false }, onSaved = { edit = false })
+    Page(vm, x.a.name, null, onBack = { nav.popBackStack() }, compactTitle = true,
+        actions = { if (me?.role != "tecnico") IconButton({ edit = true }) { Icon(Icons.Rounded.Edit, "Modifica articolo") } }) {
         item(key = "head") {
             Column(Modifier.padding(top = 4.dp, bottom = 14.dp)) {
                 Text(x.a.name, style = MaterialTheme.typography.headlineSmall)
@@ -347,4 +367,78 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
         }
         if (scan) BarcodeScannerDialog(onResult = { code -> scan = false; wh.find(code)?.let(add) ?: run { query = code; menu = true } }, onDismiss = { scan = false })
     }
+}
+
+/** Create or change an article. A scanned barcode goes in the EAN field, any other text becomes the description;
+ *  the code is proposed from the description and can be changed until the first save. */
+@Composable fun ArticleEditorSheet(vm: AppViewModel, a: Archive, current: Article?, seed: String?, onDismiss: () -> Unit, onSaved: (String) -> Unit) {
+    val wh = a.wh; val isNew = current == null
+    val sheet = rememberSheet(); val scope = rememberCoroutineScope()
+    val seedIsCode = seed != null && seed.length >= 6 && seed.all { it.isDigit() }
+    var name by remember { mutableStateOf(current?.name ?: if (seedIsCode) "" else seed.orEmpty()) }
+    var code by remember { mutableStateOf(current?.code ?: if (seedIsCode) "" else autoCode(seed.orEmpty())) }
+    var codeTouched by remember { mutableStateOf(!isNew) }
+    var barcode by remember { mutableStateOf(current?.barcode ?: if (seedIsCode) seed.orEmpty() else "") }
+    var category by remember { mutableStateOf(current?.category.orEmpty()) }
+    var unit by remember { mutableStateOf(current?.unit ?: "PZ") }
+    fun num(d: Double?) = if (d == null || d == 0.0) "" else if (d % 1.0 == 0.0) d.toLong().toString() else d.toString().replace('.', ',')
+    var cost by remember { mutableStateOf(num(current?.cost)) }
+    var price by remember { mutableStateOf(num(current?.price)) }
+    var vat by remember { mutableStateOf(num(current?.vat ?: 22.0)) }
+    var supplier by remember { mutableStateOf(current?.supplier.orEmpty()) }
+    var serialized by remember { mutableStateOf(current?.serialized ?: false) }
+    var active by remember { mutableStateOf(current?.active ?: true) }
+    var scan by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    val taken = isNew && code.isNotBlank() && wh.byCode.containsKey(code.trim().uppercase())
+    val ok = code.isNotBlank() && name.isNotBlank() && !taken && !saving
+    fun d(s: String) = s.replace(',', '.').toDoubleOrNull() ?: 0.0
+    val cats = remember(wh) { wh.articles.map { it.a.category }.filter { it.isNotBlank() }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key }.take(8) }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(if (isNew) "Nuovo articolo" else "Modifica articolo", style = MaterialTheme.typography.headlineSmall)
+            OutlinedTextField(name, { name = it; if (!codeTouched) code = autoCode(it) }, Modifier.fillMaxWidth(), label = { Text("Descrizione") }, singleLine = true,
+                shape = MaterialTheme.shapes.medium, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+                OutlinedTextField(code, { code = it.uppercase().take(40); codeTouched = true }, Modifier.weight(1f), label = { Text("Codice") }, singleLine = true, readOnly = !isNew, isError = taken,
+                    supportingText = if (taken) { { Text("Codice già usato") } } else null, shape = MaterialTheme.shapes.medium,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, autoCorrectEnabled = false))
+                OutlinedTextField(unit, { unit = it.uppercase().take(10) }, Modifier.width(96.dp), label = { Text("Unità") }, singleLine = true, shape = MaterialTheme.shapes.medium)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(barcode, { barcode = it.trim() }, Modifier.weight(1f), label = { Text("Codice a barre (EAN)") }, singleLine = true, shape = MaterialTheme.shapes.medium,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                FilledTonalIconButton({ scan = true }, Modifier.padding(start = 8.dp).size(52.dp)) { Icon(Icons.Rounded.QrCodeScanner, "Scansiona") }
+            }
+            OutlinedTextField(category, { category = it }, Modifier.fillMaxWidth(), label = { Text("Categoria") }, singleLine = true, shape = MaterialTheme.shapes.medium)
+            if (cats.isNotEmpty() && category.isBlank()) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { cats.forEach { c -> FilterChip(false, { category = c }, label = { Text(c, maxLines = 1) }) } }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(cost, { cost = it }, Modifier.weight(1f), label = { Text("Costo €") }, singleLine = true, shape = MaterialTheme.shapes.medium, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                OutlinedTextField(price, { price = it }, Modifier.weight(1f), label = { Text("Prezzo €") }, singleLine = true, shape = MaterialTheme.shapes.medium, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                OutlinedTextField(vat, { vat = it }, Modifier.width(84.dp), label = { Text("IVA %") }, singleLine = true, shape = MaterialTheme.shapes.medium, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+            }
+            OutlinedTextField(supplier, { supplier = it }, Modifier.fillMaxWidth(), label = { Text("Fornitore") }, singleLine = true, shape = MaterialTheme.shapes.medium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) { Text("Gestito a matricola", style = MaterialTheme.typography.bodyLarge); Text("Ogni pezzo ha il suo numero di serie", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                Switch(serialized, { serialized = it })
+            }
+            if (!isNew) Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) { Text("Articolo attivo", style = MaterialTheme.typography.bodyLarge); Text("Spento, non compare più negli elenchi", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                Switch(active, { active = it })
+            }
+            Button({
+                saving = true
+                val item = (current ?: Article(source = "app")).copy(code = code.trim().uppercase(), name = name.trim(), barcode = barcode, category = category.trim(), unit = unit.ifBlank { "PZ" },
+                    cost = d(cost), price = d(price), vat = d(vat), supplier = supplier.trim(), serialized = serialized, active = active)
+                vm.saveArticle(item, isNew) { scope.launch { sheet.hide() }.invokeOnCompletion { onSaved(item.code) } }.invokeOnCompletion { saving = false }
+            }, Modifier.fillMaxWidth().height(52.dp), enabled = ok, shape = MaterialTheme.shapes.medium) { Text(if (saving) "Salvataggio…" else if (isNew) "Crea articolo" else "Salva") }
+        }
+    }
+    if (scan) BarcodeScannerDialog(onResult = { c -> scan = false; barcode = c }, onDismiss = { scan = false })
+}
+
+/** A short code proposed from the description: words shortened, numbers kept ("Rotolo termico 57x40" -> "ROTOLOTERMIC57X40"). */
+private fun autoCode(name: String): String {
+    val w = name.uppercase().split(Regex("[^A-Z0-9]+")).filter { it.isNotBlank() }
+    return w.joinToString("") { if (it.any(Char::isDigit)) it else it.take(if (w.size <= 2) 6 else 3) }.take(16)
 }

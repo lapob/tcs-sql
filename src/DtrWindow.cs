@@ -32,6 +32,7 @@ public sealed class DtrWindow : Window
 
  public DtrWindow(ISyncTarget target,Func<Task> changed)
  {
+  TitleBar.Attach(this);
   this.target=target;this.changed=changed;Title="Top Cash Studio · Collegamento DTR-Service";
   try{Icon=System.Windows.Media.Imaging.BitmapFrame.Create(new Uri("pack://application:,,,/topcash.ico"));}catch{}
   Width=1280;Height=860;WindowStartupLocation=WindowStartupLocation.CenterScreen;Background=System.Windows.Media.Brushes.White;
