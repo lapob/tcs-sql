@@ -231,7 +231,8 @@ public partial class MainWindow : Window
     case "interventionDelete":
      try{store.DeleteIntervention(root.GetProperty("id").GetString()??"");await Push();await Notify("Intervento eliminato.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;
     case "titleBar":TitleBar.Set(root.TryGetProperty("dark",out var tdk)&&tdk.ValueKind==JsonValueKind.True,(byte)root.GetProperty("r").GetInt32(),(byte)root.GetProperty("g").GetInt32(),(byte)root.GetProperty("b").GetInt32());break;
-    case "hostInfo":Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,serverExternal,activeServer=Active,portalOpen=portal!=null,autostart=Autostart});Post(UpdatePayload());break;
+    case "hostInfo":Post(new{type="host",syncStation=syncToken.Length>0,serverUrl,serverExternal,activeServer=Active,portalOpen=portal!=null,autostart=Autostart,perf=PerfInfo()});
+     if(!perfWatch){perfWatch=true;SystemEvents.PowerModeChanged+=(_,_)=>Dispatcher.BeginInvoke(()=>Post(new{type="host",perf=PerfInfo()}));SystemParameters.StaticPropertyChanged+=(_,e)=>{if(e.PropertyName is nameof(SystemParameters.ClientAreaAnimation) or nameof(SystemParameters.IsRemoteSession))Dispatcher.BeginInvoke(()=>Post(new{type="host",perf=PerfInfo()}));};}Post(UpdatePayload());break;
     case "checkUpdate":await CheckUpdate(true);break;
     case "applyUpdate":await UpdateNow();break;
     case "autostart":
@@ -312,6 +313,16 @@ public partial class MainWindow : Window
   _=Notify("La sincronizzazione con Zucchetti si avvia dalla postazione dell'ufficio. Un amministratore può attivarla da Impostazioni → Postazione di sincronizzazione.");return false;
  }
  static string S(JsonElement e,string k)=>e.TryGetProperty(k,out var v)&&v.ValueKind==JsonValueKind.String?v.GetString()??"":"";
+ // What the page needs to pick its graphics profile by itself: real memory, remote desktop, Windows animations, battery saver.
+ bool perfWatch;
+ [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)] struct PowerStatus{public byte AC,Battery,Percent,Saver;public int Life,Full;}
+ [System.Runtime.InteropServices.DllImport("kernel32.dll")] static extern bool GetSystemPowerStatus(out PowerStatus s);
+ static object PerfInfo()
+ {
+  bool saver=false;try{if(GetSystemPowerStatus(out var p))saver=p.Saver==1;}catch{}
+  double ram=0;try{ram=Math.Round(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes/1073741824.0,1);}catch{}
+  return new{ramGb=ram,remote=SystemParameters.IsRemoteSession,animations=SystemParameters.ClientAreaAnimation,saver,cores=Environment.ProcessorCount};
+ }
  void Post(object payload){try{Dashboard.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(payload,json));}catch{}}
  /// Start with Windows (current user only, HKCU "Run"): keeps the sync station working after a restart.
  const string RunKey=@"Software\Microsoft\Windows\CurrentVersion\Run",RunName="TopCashStudio";

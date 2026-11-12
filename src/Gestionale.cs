@@ -14,6 +14,8 @@ public sealed record Machine(string Id,string ClientCode,string Model,string Typ
 public sealed record Intervention(string Id,string ClientCode,string ClientName,string Date,string Machine,string Title,string Work,string Status,
  string Technician,string Priority,string Total,string Source,string Created,string CreatedBy,string Updated,string UpdatedBy,List<PartUse>? Parts=null,
  string Hours="",string Signer="",string SignedAt="",string ReportNo="",string SentTo="",string SentAt="",string Kind="");
+/// What an import left out because it is of no use (ceased registers, customers with none left and their history).
+public sealed record MastroPruned(int Read, int Clients, int Machines, int Interventions, int Rt);
 public sealed record MastroBatch(List<MastroClient> Clients,List<Machine> Machines,List<Intervention> Interventions,string CapturedAt,string Source,
  List<Invoice>? Invoices=null,List<Due>? Dues=null,List<Balance>? Balances=null,
  List<RtInfo>? Rt=null,List<Site>? Sites=null,List<Riba>? Riba=null,List<SaleRow>? Sales=null,List<LedgerRow>? Ledger=null,
@@ -60,7 +62,8 @@ public sealed partial class Store
  }
  /// Fingerprint of what a Mastro read contains (not when or by whom it was read).
  public static string MastroHash(MastroBatch b)=>Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(b with{CapturedAt="",Source=""})));
- public int MastroClientCount(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT COUNT(*) FROM mastro_clients";return Convert.ToInt32(q.ExecuteScalar());}
+ /// Customers the last import read from Mastro (before leaving out the ceased ones): the yardstick for a suspiciously short read.
+ public int MastroClientCount(){var p=MastroExtra<MastroPruned>("pruned").FirstOrDefault();if(p!=null)return p.Read;using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT COUNT(*) FROM mastro_clients";return Convert.ToInt32(q.ExecuteScalar());}
  public List<Site> Sites()=>MastroExtra<Site>("sites");
  public List<Riba> RibaList()=>MastroExtra<Riba>("riba");
  public List<SaleRow> Sales()=>MastroExtra<SaleRow>("sales");
@@ -79,6 +82,25 @@ public sealed partial class Store
   b=b with{Clients=b.Clients.Select(x=>x with{Phones=x.Phones??[],Emails=x.Emails??[],Extra=x.Extra??new(),Vat=x.Vat??"",TaxCode=x.TaxCode??"",Address=x.Address??"",Cap=x.Cap??"",City=x.City??"",Prov=x.Prov??"",Zone=x.Zone??"",Pec=x.Pec??"",Notes=x.Notes??""}).ToList(),
    Machines=(b.Machines??[]).Where(m=>m!=null&&!string.IsNullOrEmpty(m.Id)&&!string.IsNullOrEmpty(m.ClientCode)).ToList(),Interventions=(b.Interventions??[]).Where(x=>x!=null&&!string.IsNullOrEmpty(x.Id)&&!string.IsNullOrEmpty(x.ClientCode)).ToList()};
   if(b.Clients.Select(x=>x.Code).Distinct().Count()!=b.Clients.Count)throw new InvalidDataException("Codici cliente Mastro duplicati: importazione annullata.");
+  // keep only what is useful: active registers, the customers that still have one (or that Studio keeps) and their history.
+  // A read without any register is not trusted for this (nothing is left out). Mastro itself is never touched:
+  // a register that becomes active again comes back with the next import.
+  var read=b.Clients.Count;MastroPruned? pruned=null;
+  if(b.Machines.Count>0)
+  {
+   var active=b.Machines.Where(m=>m.Active).ToList();
+   var withActive=active.Select(m=>m.ClientCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
+   var appClients=new List<string>();
+   using(var c0=Open())using(var q=c0.CreateCommand()){q.CommandText="SELECT DISTINCT client FROM interventions WHERE source='app'";using var r=q.ExecuteReader();while(r.Read())appClients.Add(r.GetString(0));}
+   var kept=KeptMastro(appClients);
+   var clients=b.Clients.Where(x=>withActive.Contains(x.Code)||kept(x)).ToList();
+   var codes=clients.Select(x=>x.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
+   var ids=active.Select(m=>m.Id).ToHashSet();
+   var iv=b.Interventions.Where(i=>codes.Contains(i.ClientCode)).ToList();
+   var rt=b.Rt?.Where(r=>ids.Contains(r.MachineId)).ToList();
+   pruned=new(read,b.Clients.Count-clients.Count,b.Machines.Count-active.Count,b.Interventions.Count-iv.Count,(b.Rt?.Count??0)-(rt?.Count??0));
+   b=b with{Clients=clients,Machines=active,Interventions=iv,Rt=rt,Sites=b.Sites?.Where(s=>codes.Contains(s.ClientCode)).ToList()};
+  }
   using var c=Open();using var tx=c.BeginTransaction();
   void Exec(string sql){using var q=c.CreateCommand();q.Transaction=tx;q.CommandText=sql;q.ExecuteNonQuery();}
   Exec("DELETE FROM mastro_clients");Exec("DELETE FROM machines");Exec("DELETE FROM interventions WHERE source='mastro'");
@@ -89,8 +111,10 @@ public sealed partial class Store
   // optional datasets (older apps do not send them: what is already stored is kept)
   using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="CREATE TABLE IF NOT EXISTS mastro_extra(kind TEXT PRIMARY KEY,data TEXT NOT NULL)";q.ExecuteNonQuery();}
   void Extra(string kind,object? data){if(data==null)return;using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="INSERT INTO mastro_extra VALUES($k,$d) ON CONFLICT(kind) DO UPDATE SET data=$d";q.Parameters.AddWithValue("$k",kind);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(data));q.ExecuteNonQuery();}
+  Extra("pruned",new[]{pruned??new(read,0,0,0,0)});
   Extra("rt",b.Rt);Extra("sites",b.Sites);Extra("riba",b.Riba);Extra("sales",b.Sales);Extra("ledger",b.Ledger);Extra("unbilled",b.Unbilled);Extra("sdi",b.Sdi);
-  var msg=$"Importazione MastroSQL ({who}): {b.Clients.Count} clienti · {b.Machines?.Count??0} macchine · {b.Interventions?.Count??0} interventi storici"+(b.Rt!=null?$" · {b.Rt.Sum(r=>r.VerificationCount)} verifiche periodiche":"")+(b.Sites!=null?$" · {b.Sites.Count} sedi":"")+(b.Invoices!=null?$" · {acc[0]} fatture":"")+(b.Dues!=null?$" · {acc[1]} scadenze":"")+".";
+  var msg=$"Importazione MastroSQL ({who}): {b.Clients.Count} clienti · {b.Machines?.Count??0} macchine · {b.Interventions?.Count??0} interventi storici"+(b.Rt!=null?$" · {b.Rt.Sum(r=>r.VerificationCount)} verifiche periodiche":"")+(b.Sites!=null?$" · {b.Sites.Count} sedi":"")+(b.Invoices!=null?$" · {acc[0]} fatture":"")+(b.Dues!=null?$" · {acc[1]} scadenze":"")+"."
+   +(pruned is {Clients:>0}or{Machines:>0}?$" Lasciati fuori perché cessati: {pruned.Clients} clienti, {pruned.Machines} macchine, {pruned.Interventions} interventi.":"");
   using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="INSERT INTO events(time,kind,message) VALUES($t,'import',$m)";q.Parameters.AddWithValue("$t",DateTimeOffset.Now.ToString("O"));q.Parameters.AddWithValue("$m",msg);q.ExecuteNonQuery();}
   Extra("auto",new[]{new MastroSync(DateTimeOffset.Now.ToString("O"),MastroHash(b),msg,true,who)});
   tx.Commit();return msg;

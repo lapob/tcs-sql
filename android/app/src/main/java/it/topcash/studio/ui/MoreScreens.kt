@@ -127,19 +127,19 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
                 }
             }
         } else {
-            item(key = "reg") {
-                MoreGroup("Registratori di cassa") {
-                    MoreRow(Icons.Rounded.PointOfSale, "Registratori di cassa", "Tutti · ${a.machines.count { it.m.active }} attivi · ${a.verificationsDue.size} verificazioni entro 60 gg", Modifier.appear(0)) { nav.navigate("machines") }
-                    MoreRow(Icons.Rounded.Router, "Portale DTR", if (a.registers.isEmpty()) "Si collegano dall'app Windows dell'ufficio" else "${a.registers.size} casse · ${a.dtrErrors.size} con errori · ${a.dtrSilent.size} silenziose", Modifier.appear(0)) { nav.navigate("dtr") }
-                    MoreRow(Icons.Rounded.PointOfSale, "Portale Ital Retail", if (a.ital.isEmpty()) "Si collega dall'app Windows dell'ufficio" else "${a.ital.size} casse · ${a.italUpdate.size} da aggiornare · ${a.italNoSub.size} senza abbonamento", Modifier.appear(0)) { nav.navigate("ital") }
-                    MoreRow(Icons.Rounded.Print, "Portale RCH", if (a.rch.isEmpty()) "Si collega dall'app Windows dell'ufficio" else "${a.rchLive.size} registratori · ${a.rchVer.size} verificazioni · ${a.rchLow.size} DGFE quasi pieni", Modifier.appear(0)) { nav.navigate("rch") }
-                }
-            }
             item(key = "work") {
                 MoreGroup("Lavoro") {
-                    MoreRow(Icons.Rounded.Route, "Giro di oggi", "Interventi e verificazioni per località, con il percorso", Modifier.appear(1)) { nav.navigate("route") }
-                    MoreRow(Icons.Rounded.Call, "Rinnovi", "Chi chiamare, chi ha rinnovato, chi sollecitare", Modifier.appear(1)) { nav.navigate("renewals") }
-                    MoreRow(Icons.Rounded.CalendarMonth, "Scadenziario", "${a.deadlines(0, 120).size} scadenze nei prossimi 120 giorni", Modifier.appear(1)) { nav.navigate("deadlines") }
+                    MoreRow(Icons.Rounded.Route, "Giro di oggi", "Interventi e verificazioni per località, con il percorso", Modifier.appear(0)) { nav.navigate("route") }
+                    MoreRow(Icons.Rounded.Call, "Rinnovi", "Chi chiamare, chi ha rinnovato, chi sollecitare", Modifier.appear(0)) { nav.navigate("renewals") }
+                    MoreRow(Icons.Rounded.CalendarMonth, "Scadenziario", "${a.deadlines(0, 120).size} scadenze nei prossimi 120 giorni", Modifier.appear(0)) { nav.navigate("deadlines") }
+                }
+            }
+            item(key = "reg") {
+                MoreGroup("Registratori di cassa") {
+                    MoreRow(Icons.Rounded.PointOfSale, "Registratori di cassa", "Tutti · ${a.machines.count { it.m.active }} attivi · ${a.verificationsDue.size} verificazioni entro 60 gg", Modifier.appear(1)) { nav.navigate("machines") }
+                    MoreRow(Icons.Rounded.Router, "Portale DTR", if (a.registers.isEmpty()) "Si collegano dall'app Windows dell'ufficio" else "${a.registers.size} casse · ${a.dtrErrors.size} con errori · ${a.dtrSilent.size} silenziose", Modifier.appear(1)) { nav.navigate("dtr") }
+                    MoreRow(Icons.Rounded.PointOfSale, "Portale Ital Retail", if (a.ital.isEmpty()) "Si collega dall'app Windows dell'ufficio" else "${a.ital.size} casse · ${a.italUpdate.size} da aggiornare · ${a.italNoSub.size} senza abbonamento", Modifier.appear(1)) { nav.navigate("ital") }
+                    MoreRow(Icons.Rounded.Print, "Portale RCH", if (a.rch.isEmpty()) "Si collega dall'app Windows dell'ufficio" else "${a.rchLive.size} registratori · ${a.rchVer.size} verificazioni · ${a.rchLow.size} DGFE quasi pieni", Modifier.appear(1)) { nav.navigate("rch") }
                 }
             }
             item(key = "zuc") {

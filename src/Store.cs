@@ -334,6 +334,7 @@ public sealed partial class Store
   if(bv.Clients.Any(x=>x.Code=="A1")||!bv.Clients.Any(x=>x.Code=="B1")||bv.Machines.Any(x=>x.Id is "m2" or "m3")||!bv.Machines.Any(x=>x.Id=="m5")||bv.Excluded.Clients!=1||bv.Excluded.Machines!=1)throw new Exception("Marche escluse: regola EDIT");
   // ceased registers never enter, and neither does a customer left with only ceased registers
   if(bv.Clients.Any(x=>x.Code=="C1")||bv.Machines.Any(x=>x.Id=="m6")||bv.Excluded.CeasedClients!=1||bv.Excluded.CeasedMachines!=2)throw new Exception("Import pulito: macchine cessate");
+  if(store.MastroClients().Any(x=>x.Code=="C1")||store.Machines().Any(x=>x.Id is "m3" or "m6")||store.MastroClientCount()!=4)throw new Exception("Import pulito: dati cessati salvati");
   store.SaveHiddenBrands([],"test");if(store.Mastro().Machines.Count!=4||store.Mastro().Excluded.Clients!=0)throw new Exception("Marche escluse: ripristino");
   store.SaveHiddenBrands(["edit"],"test");if(!store.HiddenBrands().SequenceEqual(["EDIT"]))throw new Exception("Marche escluse: salvataggio");
   // IT inventory, renewals with history, manual device links, merged duplicates

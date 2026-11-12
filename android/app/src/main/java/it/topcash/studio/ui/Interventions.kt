@@ -82,7 +82,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
-private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "Storico Mastro", "Tutti", "Verifiche")
+private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "Tutti", "Verifiche")
 
 @Composable fun InterventionsScreen(vm: AppViewModel, a: Archive, onOpen: (String) -> Unit, onNew: () -> Unit) {
     var tab by rememberSaveable { mutableStateOf("Da fare") }
@@ -98,7 +98,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
         (if (tab == "Verifiche") a.verifications else a.interventions).filter { x ->
             when (tab) { "Da fare" -> x.i.status != "Chiuso"
                 "I miei" -> x.i.status != "Chiuso" && x.i.source == "app" && me != null && norm(x.i.technician) == norm(me!!.name)
-                "Oggi e in ritardo" -> x.i.status != "Chiuso" && x.date?.let { !it.isAfter(LocalDate.now()) } == true "Chiusi" -> x.i.status == "Chiuso" && x.i.source == "app"; "Storico Mastro" -> x.i.source == "mastro"; else -> true } &&
+                "Oggi e in ritardo" -> x.i.status != "Chiuso" && x.date?.let { !it.isAfter(LocalDate.now()) } == true "Chiusi" -> x.i.status == "Chiuso"; else -> true } &&
                 (n.isEmpty() || norm(x.clientName + " " + x.i.title + " " + x.i.work + " " + x.i.technician).contains(n)) && (tech.isEmpty() || x.i.technician == tech)
         }.let { l -> if (tab == "Da fare" || tab == "I miei" || tab == "Oggi e in ritardo") l.sortedWith(compareBy({ Catalog.priorities.indexOf(it.i.priority) * -1 }, { it.date ?: LocalDate.MAX })) else l }
     }
@@ -132,7 +132,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
                 }
                 if (showClient) Text(x.clientName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
                 Text(listOf(x.date?.let { Dates.short(it) + " · " + Dates.relative(Dates.daysFromToday(it)) }, x.i.technician.takeIf { it.isNotBlank() },
-                    if (x.i.source == "mastro") "storico Mastro" else null, x.i.reportNo.takeIf { x.i.signedAt.isNotBlank() }?.let { "firmato n. $it" }).filterNotNull().joinToString(" · "),
+                    x.i.reportNo.takeIf { x.i.signedAt.isNotBlank() }?.let { "firmato n. $it" }).filterNotNull().joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
                 if (vm != null && x.i.source == "app" && x.i.signedAt.isBlank() && x.i.status != "Chiuso") QuickActions(vm, x.i, onSign = onClick)
             }

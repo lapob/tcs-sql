@@ -156,6 +156,7 @@ private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay", "ac
     val areaSwitch: (@Composable () -> Unit)? = if (!seesAcc) null else ({ AreaSwitch(area) { a -> if (a != area) { area = a; nav.switchTab(lastOf[a] ?: if (a == "acc") "acc" else "home") } } })
 
     val haze = dev.chrisbanes.haze.rememberHazeState()
+    WatchLiteGraphics()
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {

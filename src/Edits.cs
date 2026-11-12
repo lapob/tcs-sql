@@ -197,6 +197,21 @@ public sealed partial class Store
  ///   or restored by an administrator stay, also when they are the same company under another code);
  /// - the set-aside brands are removed.
  /// Mastro itself is never touched: a register that becomes active again brings its customer back at the next import.
+ /// Mastro customers that stay also without an active register: created or restored in Studio (also the same company under
+ /// another code, matched by VAT number or tax code) or with interventions made in the app.
+ Func<MastroClient, bool> KeptMastro(IEnumerable<string> appClients)
+ {
+  var keepKeys = ClientEdits().Where(e => e.Value.Keep || e.Value.Created).Select(e => e.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+  static string Id(string? s) { var t = new string((s ?? "").ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray()); return t.StartsWith("IT") && t.Length > 11 ? t[2..] : t; }
+  var keepIds = new HashSet<string>();
+  if (keepKeys.Count > 0)
+  {
+   foreach (var r in All()) if (keepKeys.Contains(r.ClientCode) && Id(r.Vat).Length >= 11) keepIds.Add(Id(r.Vat));
+   foreach (var r in Clients()) if (keepKeys.Contains(r.Code) && Id(r.TaxCode).Length >= 11) keepIds.Add(Id(r.TaxCode));
+  }
+  keepKeys.UnionWith(appClients);
+  return c => keepKeys.Contains("M" + c.Code) || keepIds.Contains(Id(c.Vat)) || keepIds.Contains(Id(c.TaxCode));
+ }
  public MastroView Mastro()
  {
   var brands = HiddenBrands(); var cl = MastroClients(); var everything = Machines(); var iv = Interventions();
@@ -211,25 +226,20 @@ public sealed partial class Store
   (everything, iv) = SplitVerifications(everything, iv);
   var all = everything.Where(m => m.Active).ToList();
   var withActive = all.Select(m => m.ClientCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
-  var keepKeys = ClientEdits().Where(e => e.Value.Keep || e.Value.Created).Select(e => e.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
-  static string Id(string? s) { var t = new string((s ?? "").ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray()); return t.StartsWith("IT") && t.Length > 11 ? t[2..] : t; }
-  var keepIds = new HashSet<string>();
-  if (keepKeys.Count > 0)
-  {
-   foreach (var r in All()) if (keepKeys.Contains(r.ClientCode) && Id(r.Vat).Length >= 11) keepIds.Add(Id(r.Vat));
-   foreach (var r in Clients()) if (keepKeys.Contains(r.Code) && Id(r.TaxCode).Length >= 11) keepIds.Add(Id(r.TaxCode));
-  }
-  bool Kept(MastroClient c) => keepKeys.Contains("M" + c.Code) || keepIds.Contains(Id(c.Vat)) || keepIds.Contains(Id(c.TaxCode));
-  var ceased = cl.Where(c => !withActive.Contains(c.Code) && !Kept(c)).Select(c => c.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
+  var kept = KeptMastro(iv.Where(i => i.Source == "app").Select(i => i.ClientCode));
+  var ceased = cl.Where(c => !withActive.Contains(c.Code) && !kept(c)).Select(c => c.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
   if (ceased.Count > 0) { cl = cl.Where(c => !ceased.Contains(c.Code)).ToList(); iv = iv.Where(i => !(i.Source == "mastro" && ceased.Contains(i.ClientCode))).ToList(); }
-  int ceasedMachines = everything.Count - all.Count;
+  // what the import already left out (it stores only what is useful) still counts in the clean-up summary
+  var pruned = MastroExtra<MastroPruned>("pruned").FirstOrDefault();
+  int ceasedMachines = everything.Count - all.Count + (pruned?.Machines ?? 0);
+  int ceasedClients = ceased.Count + (pruned?.Clients ?? 0);
   var hiddenMachines = brands.Count == 0 ? [] : all.Where(m => IsBrand(m, brands)).ToList();
-  if (hiddenMachines.Count == 0) return new(cl, all, iv, new(brands, 0, 0, [], ceased.Count, ceasedMachines));
+  if (hiddenMachines.Count == 0) return new(cl, all, iv, new(brands, 0, 0, [], ceasedClients, ceasedMachines));
   // a customer goes only when the registers it still uses are all of those brands (an old EDIT replaced by another brand keeps it)
   var gone = all.GroupBy(m => m.ClientCode).Where(g => g.All(m => IsBrand(m, brands))).Select(g => g.Key).ToHashSet();
   var names = cl.Where(c => gone.Contains(c.Code)).Select(c => c.Name).OrderBy(n => n).ToList();
   return new(cl.Where(c => !gone.Contains(c.Code)).ToList(), all.Where(m => !IsBrand(m, brands)).ToList(),
    iv.Where(i => !(i.Source == "mastro" && gone.Contains(i.ClientCode))).ToList(),
-   new(brands, names.Count, hiddenMachines.Count, names.Take(300).ToList(), ceased.Count, ceasedMachines));
+   new(brands, names.Count, hiddenMachines.Count, names.Take(300).ToList(), ceasedClients, ceasedMachines));
  }
 }

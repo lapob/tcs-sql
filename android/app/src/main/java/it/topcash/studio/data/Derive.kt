@@ -121,7 +121,6 @@ class UClient(
     val assets = mutableListOf<UAsset>()
     val mergedFrom = mutableListOf<UClient>()
     var mastro: MastroClient? = null
-    var mastroOnly = false
     val mastroCodes = mutableListOf<String>()
     val machines = mutableListOf<UMachine>()
     val registers = mutableListOf<URegister>()
@@ -226,7 +225,7 @@ class Archive(val state: ArchiveState) {
             if (c == null) {
                 val code = "M" + m.code
                 c = UClient(code, m.name, m.vat, m.taxCode, "", "", mutableListOf(), mutableListOf(), mutableSetOf(), emptyList(), state.metadata[code] ?: ClientMeta(), state.notes[code].orEmpty(), false)
-                c.mastroOnly = true; map[code] = c
+                map[code] = c
             }
             // the same customer registered twice in Mastro stays one customer (first record is the main one)
             if (c.mastro == null) c.mastro = m; mastroTo[m.code] = c; c.mastroCodes += m.code

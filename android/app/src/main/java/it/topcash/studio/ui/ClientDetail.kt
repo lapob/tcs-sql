@@ -89,7 +89,7 @@ import java.time.ZoneOffset
                     Text(c.name, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.sharedBox("name-${c.code}"), maxLines = 3, overflow = TextOverflow.Ellipsis)
                     Text("Cod. ${c.code.trimStart('0')}${if (c.mastro != null) " · Mastro ${c.mastro!!.code}" else ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
                     Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Pill(c.status, Archive.toneOf(c.status)); if (c.mastroOnly) Pill("Mastro", Tone.Info); c.edit?.let { e -> Pill(if (e.created) "Creato a mano" else "Modificato", Tone.Accent) }
+                        Pill(c.status, Archive.toneOf(c.status)); c.edit?.let { e -> Pill(if (e.created) "Creato a mano" else "Modificato", Tone.Accent) }
                         if (c.dormant) Pill("Archiviato", Tone.Neutral)
                     }
                 }

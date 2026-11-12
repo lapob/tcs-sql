@@ -34,7 +34,7 @@ import it.topcash.studio.data.Catalog
 import it.topcash.studio.data.UClient
 import it.topcash.studio.data.norm
 
-private val filters = listOf("Attivi", "Preferiti", "In scadenza", "Con macchine", "Interventi aperti", "Solo Mastro", "Archiviati")
+private val filters = listOf("Attivi", "Preferiti", "In scadenza", "Con macchine", "Interventi aperti", "Archiviati")
 
 @Composable fun ClientsScreen(vm: AppViewModel, a: Archive, nav: NavHostController) {
     var q by rememberSaveable { mutableStateOf("") }
@@ -45,7 +45,7 @@ private val filters = listOf("Attivi", "Preferiti", "In scadenza", "Con macchine
             (n.isEmpty() || c.search.contains(n) || norm(c.tech).contains(n)) && (n.isNotEmpty() || filter == "Archiviati" || !c.dormant) && when (filter) {
                 "Archiviati" -> c.dormant
                 "Preferiti" -> c.meta.favorite; "In scadenza" -> c.status == "In scadenza"; "Con macchine" -> c.machines.isNotEmpty()
-                "Interventi aperti" -> c.interventions.any { it.i.status != "Chiuso" }; "Solo Mastro" -> c.mastroOnly; else -> true
+                "Interventi aperti" -> c.interventions.any { it.i.status != "Chiuso" }; else -> true
             }
         }
     }
