@@ -4,7 +4,9 @@
 # Nella Release vanno SOLO i programmi compilati: mai database, backup, chiavi o password (esclusi da .gitignore).
 param(
  [Parameter(Mandatory)][ValidatePattern('^\d+\.\d+\.\d+$')][string]$Versione,
- [string]$Note = ''
+ [string]$Note = '',
+ # cartella del programma Windows da impacchettare: .runtime\pub-app quando l'app installata è aperta
+ [string]$AppDir = 'app'
 )
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
@@ -33,8 +35,8 @@ New-Item -ItemType Directory $out | Out-Null
 $apk = Join-Path $root 'android\TopCash-Studio.apk'
 $files = @()
 if (Test-Path $apk) { Copy-Item $apk (Join-Path $out "TopCash-Studio-$Versione.apk"); $files += Join-Path $out "TopCash-Studio-$Versione.apk" }
-if (Test-Path (Join-Path $root 'app\TopCash.Licenze.exe')) {
- Compress-Archive -Path (Join-Path $root 'app\*') -DestinationPath (Join-Path $out "TopCash-Studio-Windows-$Versione.zip"); $files += Join-Path $out "TopCash-Studio-Windows-$Versione.zip" }
+if (Test-Path (Join-Path $root "$AppDir\TopCash.Licenze.exe")) {
+ Compress-Archive -Path (Join-Path $root "$AppDir\*") -DestinationPath (Join-Path $out "TopCash-Studio-Windows-$Versione.zip"); $files += Join-Path $out "TopCash-Studio-Windows-$Versione.zip" }
 if (Test-Path (Join-Path $root 'server-update\TopCash.Server.exe')) {
  Compress-Archive -Path (Join-Path $root 'server-update\*') -DestinationPath (Join-Path $out "TopCash-Server-$Versione.zip"); $files += Join-Path $out "TopCash-Server-$Versione.zip" }
 if (-not $files) { throw 'Nessun programma compilato da pubblicare.' }
