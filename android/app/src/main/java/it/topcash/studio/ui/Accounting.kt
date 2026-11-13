@@ -111,8 +111,9 @@ enum class AccView(val route: String, val title: String) { Home("acc", "Contabil
     }
     val go: (AccView, String) -> Unit = { v, f -> nav.openAccounting(v, f) }
     var moneyTab by rememberSaveable { mutableStateOf(moneyTabs[0]) }
+    var moneySort by rememberSaveable { mutableStateOf("Più recenti") }
     if (view == AccView.Money) {
-        Page(vm, view.title, subtitle, onBack = if (topLevel) null else ({ nav.popBackStack() })) { moneyRegister(vm, a, moneyTab, { moneyTab = it }, q, { q = it }) }
+        Page(vm, view.title, subtitle, onBack = if (topLevel) null else ({ nav.popBackStack() })) { moneyRegister(vm, a, moneyTab, { moneyTab = it }, q, { q = it }, moneySort, { moneySort = it }) }
         return
     }
     Page(vm, view.title, subtitle, onBack = if (topLevel) null else ({ nav.popBackStack() })) {
@@ -125,7 +126,7 @@ enum class AccView(val route: String, val title: String) { Home("acc", "Contabil
 private val moneyTabs = listOf("Da incassare", "Incassati", "Note di credito", "Tutti")
 /** Incassi e note: unpaid RiBa/RID, invoice balances, deposits and credit notes that Mastro records as interventions.
  *  The same records (a tap opens them), apart from the technicians' work and never closed automatically. */
-private fun LazyListScope.moneyRegister(vm: AppViewModel, a: Archive, tab: String, setTab: (String) -> Unit, q: String, setQ: (String) -> Unit) {
+private fun LazyListScope.moneyRegister(vm: AppViewModel, a: Archive, tab: String, setTab: (String) -> Unit, q: String, setQ: (String) -> Unit, sort: String, setSort: (String) -> Unit) {
     val coll = a.money.filter { it.i.kind == "Incasso" }
     val open = coll.filter { it.i.status != "Chiuso" }; val paid = coll.filter { it.i.status == "Chiuso" }; val credit = a.money.filter { it.i.kind == "Nota di credito" }
     val today = java.time.LocalDate.now()
@@ -133,6 +134,12 @@ private fun LazyListScope.moneyRegister(vm: AppViewModel, a: Archive, tab: Strin
     val n = norm(q.trim())
     val list = (when (tab) { "Incassati" -> paid; "Note di credito" -> credit; "Tutti" -> a.money; else -> open })
         .filter { n.isEmpty() || norm(listOf(it.clientName, it.i.title, it.i.work, it.i.technician).joinToString(" ")).contains(n) }
+        .let { l -> when (sort) {
+            "Meno recenti" -> l.sortedBy { it.date ?: java.time.LocalDate.MAX }
+            "Importo più alto" -> l.sortedByDescending { it.amount }
+            "Importo più basso" -> l.sortedBy { it.amount }
+            "Cliente A–Z" -> l.sortedBy { it.clientName.lowercase() }
+            else -> l.sortedByDescending { it.date ?: java.time.LocalDate.MIN } } }
     item(key = "m-kpi") {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             MoneyTile("Da incassare", open.sumOf { it.amount }, "${open.size} pratiche aperte", if (open.isEmpty()) Tone.Ok else Tone.Bad, Modifier.weight(1f).appear(0)) { setTab(moneyTabs[0]) }
@@ -145,6 +152,7 @@ private fun LazyListScope.moneyRegister(vm: AppViewModel, a: Archive, tab: Strin
     }
     item(key = "m-search") { SearchField(q, setQ, "Cerca cliente, fattura, importo", Modifier.padding(top = 10.dp)) }
     item(key = "m-tabs") { ChoiceChips(moneyTabs, tab, setTab, Modifier.padding(vertical = 8.dp)) }
+    item(key = "m-sort") { SortBar("${list.size} ${if (list.size == 1) "pratica" else "pratiche"}", listOf("Più recenti", "Meno recenti", "Importo più alto", "Importo più basso", "Cliente A–Z"), sort, setSort) }
     if (list.isEmpty()) item(key = "m-e") { Empty(Icons.Rounded.TaskAlt, if (tab == moneyTabs[0]) "Niente da incassare" else "Nessuna pratica",
         if (n.isNotEmpty()) "Prova a cambiare la ricerca." else if (tab == moneyTabs[0]) "Tutti gli incassi registrati risultano chiusi." else "Compaiono qui appena registrati in Mastro o spostati a mano.") }
     items(list.size.coerceAtMost(400), key = { "m" + list[it].i.id }) { k -> val x = list[k]

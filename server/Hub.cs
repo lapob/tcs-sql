@@ -24,7 +24,6 @@ public sealed class Hub(Store store)
  public ProgressMessage Progress {get;private set;}=new("progress",false,false,"");
  public DateTimeOffset LastStationContact {get;private set;}
 
- public void Changed(){Interlocked.Increment(ref version);Broadcast(new{type="changed",version=Version});}
  public void SetProgress(bool running,bool connected,string text){Progress=new("progress",running,connected,text);LastStationContact=DateTimeOffset.Now;Broadcast(Progress);}
  public void StationSeen()=>LastStationContact=DateTimeOffset.Now;
 
@@ -40,23 +39,117 @@ public sealed class Hub(Store store)
  List<Invoice> RecentInvoices(){var from=new DateTime(DateTime.Today.Year-1,1,1).ToString("yyyy-MM-dd");return store.Invoices().Where(i=>string.CompareOrdinal(i.Date,from)>=0).ToList();}
  /// Sales and ledger by month: the current year and the two before (enough for the trend and the year-on-year comparison).
  static string SinceMonth=>new DateTime(DateTime.Today.Year-2,1,1).ToString("yyyy-MM");
+ /// Sections read fresh at every build: cheap, and fed by things the archive counter does not follow
+ /// (portal statuses, history, users, backups, the server's own portals).
+ static readonly HashSet<string> Live=["sources","events","dtrStatus","italStatus","rchStatus","team","serverPortals","features","mastroSync"];
+ /// Section bytes reused while the tables they read and the day stay the same (Store.DataChanges): analysis, priorities,
+ /// balance sheet and invoices took 10-60 seconds at every change, even when only a note or a portal status had moved.
+ readonly Dictionary<string,(string Key,byte[] Json,string Hash)> reuse=[];
+ /// Sections that never read Store.LightTables (checked in their code): a note, a photo or a stock movement leaves them as they are.
+ static readonly HashSet<string> Heavy=["insights","analysis","bilancio","invoices","dues","balances","dueNotes","sales","ledger","riba","mastroClients","machines","interventions","moneyInterventions",
+  "brandRule","moneyRule","licenseRule","renewals","records","licenseEdits","licenseCleanup","clientEdits","clients","rt","dtr","ital","italOrders","rch"];
+ /// The snapshot is rebuilt in the background: whoever asks meanwhile gets the previous one at once (and a
+ /// "changed" event when the new one is ready), so a page or a phone never waits for the server to finish.
+ readonly Lock kickGate=new();
+ bool building;Task? buildTask;
+ /// The last version caused by a real change (Changed): a request waits a little only for that one, never for the
+ /// second pass of the analytics.
+ long wanted=1;
+ /// Analysis, priorities and balance sheet take seconds: after a change the new snapshot goes out first with their
+ /// previous result (interventions, clients, invoices are already fresh) and they follow a moment later.
+ static readonly HashSet<string> Slow=["insights","analysis","bilancio"];
+ bool slowDue;
+ /// Sections whose reader touches only these tables (checked in Contabilita/Gestionale): an intervention or a client
+ /// change leaves invoices, dues and balances as they are.
+ static readonly Dictionary<string,string[]> Reads=new(){["invoices"]=["invoices"],["dues"]=["dues"],["balances"]=["balances"],["dueNotes"]=["due_notes"],["sales"]=["mastro_extra"],["ledger"]=["mastro_extra"],
+  ["dtr"]=["dtr_registers","dtr_details"],["ital"]=["ital_devices","ital_details"],["italOrders"]=["ital_orders"],["rch"]=["rch_devices"],["rt"]=["mastro_extra","app_settings"],
+  ["clientEdits"]=["client_edits"],["licenseEdits"]=["license_edits"],["records"]=["licenses","license_edits","app_settings"],
+  ["clients"]=["clients"],["orders"]=["orders"],["notes"]=["notes"],["metadata"]=["client_meta"],["photos"]=["photos"],["routeDone"]=["route_done"],["machineFlags"]=["machine_flags"],
+  ["warehouses"]=["warehouses"],["articles"]=["articles"],["stockLevels"]=["stock_levels"],["movements"]=["movements"],["assets"]=["assets"]};
  Snap Current()
  {
+  var s=Volatile.Read(ref snap);
+  if(s!=null&&s.Version==Version)return s;
+  if(s==null){Build();return snap!;}
+  Kick();return s;
+ }
+ /// The version a request will be served (call it first, once per request): if a newer snapshot is being prepared it
+ /// waits for it a little (3 s at most), so whoever has just saved something sees it in the first download.
+ public long Ready()
+ {
+  var s=Volatile.Read(ref snap);
+  if(s!=null&&s.Version<Interlocked.Read(ref wanted))
+  {
+   Kick();var until=Environment.TickCount64+3000;
+   while(Environment.TickCount64<until&&Volatile.Read(ref snap)!.Version<Interlocked.Read(ref wanted))Thread.Sleep(20);
+  }
+  return Current().Version;
+ }
+ /// Prepares the first snapshot as soon as the server starts, so the first page does not wait for it.
+ public void Warm()=>Kick();
+ public void Changed(){var v=Interlocked.Increment(ref version);InterlockedMax(ref wanted,v);Broadcast(new{type="changed",version=v});Kick();}
+ static void InterlockedMax(ref long target,long v){long cur;while((cur=Interlocked.Read(ref target))<v&&Interlocked.CompareExchange(ref target,v,cur)!=cur){}}
+ Task? Kick()
+ {
+  lock(kickGate)
+  {
+   if(building)return buildTask;
+   building=true;
+   return buildTask=Task.Run(()=>
+   {
+    while(true)
+    {
+     try{Build();}catch(Exception ex){Console.Error.WriteLine("Snapshot: "+ex.Message);lock(kickGate)building=false;return;}
+     lock(kickGate){if(snap!=null&&snap.Version==Version){building=false;return;}}
+    }
+   });
+  }
+ }
+ void Build()
+ {
+  Snap built;
   lock(gate)
   {
-   if(snap!=null&&snap.Version==Version)return snap;
    var v=Version;
-   var mv=store.Mastro();
-   var parts=new (string,object)[]{("records",store.Licenses()),("licenseEdits",store.LicenseEdits()),("licenseCleanup",store.LicenseCleanup()),("clientEdits",store.ClientEdits()),("clients",store.Clients()),("orders",store.Orders()),
-    ("mastroClients",mv.Clients),("machines",mv.Machines),("interventions",mv.Interventions.Where(i=>!MoneyWork.IsMoney(i.Kind)).ToList()),("moneyInterventions",mv.Interventions.Where(i=>MoneyWork.IsMoney(i.Kind)).ToList()),("moneyRule",store.Money()),("brandRule",mv.Excluded),("assets",store.Assets()),("renewals",store.RenewalsView()),("licenseRule",store.LicenseRules()),("deviceLinks",store.DeviceLinks()),
-    ("warehouses",store.Warehouses()),("articles",store.Articles()),("stockLevels",store.StockLevels()),("stock",store.Stock()),("movements",store.Movements()),("invoices",RecentInvoices()),("dues",store.Dues()),("balances",store.Balances()),("dueNotes",store.DueNotes()),("sales",store.Sales().Where(x=>string.CompareOrdinal(x.Month,SinceMonth)>=0).ToList()),("ledger",store.Ledger().Where(x=>string.CompareOrdinal(x.Month,SinceMonth)>=0).ToList()),
-    ("sources",store.Sources()),("events",store.Events()),("notes",store.Notes()),("metadata",store.Metadata()),("dtr",store.DtrRegisters()),("dtrStatus",store.DtrState()),("ital",store.ItalDevices()),("italOrders",store.ItalOrders()),("italStatus",store.ItalState()),("rch",store.RchDevices()),("rchStatus",store.RchState()),
-    ("rt",store.RtInfos()),("machineFlags",store.MachineFlags()),("routeDone",store.RouteDone()),("photos",store.Photos()),("sites",store.Sites()),("riba",store.RibaList()),("team",Team?.Invoke()??[]),("serverPortals",ServerPortals?.Invoke()??[]),
-    ("features",new{mail=store.MailReady(),backupError=Backups.Status(store).Error}),("mastroSync",(object?)store.LastMastroSync()??new{}),("insights",store.Insights()),("analysis",store.Analysis()),("bilancio",store.Bilancio())};
+   if(snap!=null&&snap.Version==v)return;
+   var watch=System.Diagnostics.Stopwatch.StartNew();var slowParts=new List<string>();
+   var full=slowDue||snap==null;var deferred=false;
+   var changes=store.DataChanges().OrderBy(x=>x.Key,StringComparer.Ordinal).ToList();
+   var day=DateTime.Today.ToString("yyyyMMdd");
+   var allKey=day+"|"+string.Join(",",changes.Select(x=>x.Key+"="+x.Value));
+   var heavyKey=day+"|"+string.Join(",",changes.Where(x=>!Store.LightTables.Contains(x.Key)).Select(x=>x.Key+"="+x.Value));
+   var counters=changes.ToDictionary(x=>x.Key,x=>x.Value);
+   string KeyOf(string[] tables)=>day+"|"+string.Join(",",tables.Select(t=>t+"="+counters.GetValueOrDefault(t)));
+   var mvLazy=new Lazy<MastroView>(store.Mastro);
+   var parts=new (string,Func<object>)[]{("records",()=>store.Licenses()),("licenseEdits",()=>store.LicenseEdits()),("licenseCleanup",()=>store.LicenseCleanup()),("clientEdits",()=>store.ClientEdits()),("clients",()=>store.Clients()),("orders",()=>store.Orders()),
+    ("mastroClients",()=>mvLazy.Value.Clients),("machines",()=>mvLazy.Value.Machines),("interventions",()=>mvLazy.Value.Interventions.Where(i=>!MoneyWork.IsMoney(i.Kind)).ToList()),("moneyInterventions",()=>mvLazy.Value.Interventions.Where(i=>MoneyWork.IsMoney(i.Kind)).ToList()),("moneyRule",()=>store.Money()),("brandRule",()=>mvLazy.Value.Excluded),("assets",()=>store.Assets()),("renewals",()=>store.RenewalsView()),("licenseRule",()=>store.LicenseRules()),("deviceLinks",()=>store.DeviceLinks()),
+    ("warehouses",()=>store.Warehouses()),("articles",()=>store.Articles()),("stockLevels",()=>store.StockLevels()),("stock",()=>store.Stock()),("movements",()=>store.Movements()),("invoices",()=>RecentInvoices()),("dues",()=>store.Dues()),("balances",()=>store.Balances()),("dueNotes",()=>store.DueNotes()),("sales",()=>store.Sales().Where(x=>string.CompareOrdinal(x.Month,SinceMonth)>=0).ToList()),("ledger",()=>store.Ledger().Where(x=>string.CompareOrdinal(x.Month,SinceMonth)>=0).ToList()),
+    ("sources",()=>store.Sources()),("events",()=>store.Events()),("notes",()=>store.Notes()),("metadata",()=>store.Metadata()),("dtr",()=>store.DtrRegisters()),("dtrStatus",()=>store.DtrState()),("ital",()=>store.ItalDevices()),("italOrders",()=>store.ItalOrders()),("italStatus",()=>store.ItalState()),("rch",()=>store.RchDevices()),("rchStatus",()=>store.RchState()),
+    ("rt",()=>store.RtInfos()),("machineFlags",()=>store.MachineFlags()),("routeDone",()=>store.RouteDone()),("photos",()=>store.Photos()),("sites",()=>store.Sites()),("riba",()=>store.RibaList()),("team",()=>Team?.Invoke()??[]),("serverPortals",()=>ServerPortals?.Invoke()??[]),
+    ("features",()=>new{mail=store.MailReady(),backupError=Backups.Status(store).Error}),("mastroSync",()=>(object?)store.LastMastroSync()??new{}),("insights",()=>store.Insights()),("analysis",()=>store.Analysis()),("bilancio",()=>store.Bilancio())};
    var sections=new Dictionary<string,(byte[],string)>(parts.Length);
-   foreach(var(name,value) in parts){var b=JsonSerializer.SerializeToUtf8Bytes(value,value.GetType(),Json);sections[name]=(b,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(b),0,8));}
-   snap=new Snap(v,Compose(v,sections,null,true),Compose(v,sections,null,false),sections);encoded.Clear();return snap;
+   foreach(var(name,make) in parts)
+   {
+    var key=Live.Contains(name)?null:Reads.TryGetValue(name,out var tables)?KeyOf(tables):Heavy.Contains(name)?heavyKey:allKey;
+    if(key!=null&&reuse.TryGetValue(name,out var kept)&&kept.Key==key){sections[name]=(kept.Json,kept.Hash);continue;}
+    if(!full&&Slow.Contains(name)&&reuse.TryGetValue(name,out var before)){sections[name]=(before.Json,before.Hash);deferred=true;continue;}
+    var t0=watch.ElapsedMilliseconds;
+    var value=make();var b=JsonSerializer.SerializeToUtf8Bytes(value,value.GetType(),Json);
+    if(watch.ElapsedMilliseconds-t0>=400)slowParts.Add($"{name} {watch.ElapsedMilliseconds-t0} ms");
+    var hash=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(b),0,8);
+    sections[name]=(b,hash);
+    if(key!=null)reuse[name]=(key,b,hash);
+   }
+   var tc=watch.ElapsedMilliseconds;
+   built=new Snap(v,Compose(v,sections,null,true),Compose(v,sections,null,false),sections);
+   if(watch.ElapsedMilliseconds-tc>=400)slowParts.Add($"assemblaggio {watch.ElapsedMilliseconds-tc} ms");
+   encoded.Clear();Volatile.Write(ref snap,built);
+   // the analytics kept from before are recalculated right after (a new version, so devices download them)
+   slowDue=deferred;if(deferred)Interlocked.Increment(ref version);
+   if(watch.ElapsedMilliseconds>=2000)Console.WriteLine($"{DateTime.Now:HH:mm:ss} Dati pronti in {watch.ElapsedMilliseconds} ms{(slowParts.Count>0?": "+string.Join(", ",slowParts):"")}");
   }
+  // devices that were given the previous snapshot meanwhile come back for this one
+  Broadcast(new{type="changed",version=built.Version});
  }
  /// Writes {"section":…, …, "hashes":{…}, "version":n}; with [only] just those sections plus "partial":true.
  static byte[] Compose(long v,Dictionary<string,(byte[] Json,string Hash)> sections,HashSet<string>? only,bool accounting)

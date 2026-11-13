@@ -58,6 +58,24 @@ object LiteGraphics {
     }
 }
 
+/**
+ * Progressive blur band at the edge of a scrolling page (like the site and iOS): what scrolls toward the top bar or the
+ * bottom navigation gets gradually blurred, strongest right at the bar and sharp again [length] away, never a hard cut.
+ * [strongAtTop] true for the band under the top bar, false for the one above the bottom bar. Light graphics: nothing
+ * (the colour veil drawn next to it is enough).
+ */
+@Composable fun Modifier.edgeBlur(state: HazeState?, strongAtTop: Boolean): Modifier {
+    if (state == null || LiteGraphics.on.value) return this
+    val fallback = MaterialTheme.colorScheme.surfaceContainer
+    val style = androidx.compose.runtime.remember(strongAtTop, fallback) {
+        dev.chrisbanes.haze.blur.HazeBlurStyle.then {
+            blurRadius(androidx.compose.ui.unit.Dp(9f)); noiseFactor(0f); backgroundColor(fallback.copy(alpha = 0f))
+            progressive(dev.chrisbanes.haze.HazeProgressive.verticalGradient(startIntensity = if (strongAtTop) 1f else 0f, endIntensity = if (strongAtTop) 0f else 1f))
+        }
+    }
+    return this.hazeBlur(HazeInput.Sources(state), style = style, performanceMode = dev.chrisbanes.haze.HazePerformanceMode.Balanced)
+}
+
 @Composable fun Modifier.glass(state: HazeState?, strong: Boolean = false): Modifier {
     if (state == null) return this
     val c = MaterialTheme.colorScheme.surfaceContainer

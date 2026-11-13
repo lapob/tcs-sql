@@ -239,14 +239,19 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
     editing?.let { l -> LicenseEditSheet(vm, a, l) { editing = null } }
     var tab by rememberSaveable { mutableStateOf("Correnti") }
     var q by rememberSaveable { mutableStateOf("") }
-    val list = remember(a, tab, q) {
+    var sort by rememberSaveable { mutableStateOf("Scadenza più vicina") }
+    val list = remember(a, tab, q, sort) {
         val n = norm(q.trim())
         a.licenses.filter { (if (tab == "Correnti") it.current else if (tab == "Storico") !it.current else true) && (n.isEmpty() || norm(it.r.client + " " + it.r.serial + " " + it.r.vat).contains(n)) }
-            .sortedBy { it.expiry ?: java.time.LocalDate.MAX }
+            .let { l -> when (sort) {
+                "Scadenza più lontana" -> l.sortedByDescending { it.expiry ?: java.time.LocalDate.MIN }
+                "Cliente A–Z" -> l.sortedBy { it.r.client.lowercase() }
+                else -> l.sortedBy { it.expiry ?: java.time.LocalDate.MAX } } }
     }
     Page(null, "Licenze", "${list.size} licenze", onBack = { nav.popBackStack() }) {
         item(key = "tabs") { val tabs = listOf("Correnti", "Storico", "Tutte"); SegmentedPicker(tabs, tabs.indexOf(tab), { tab = tabs[it] }) }
         item(key = "search") { SearchField(q, { q = it }, "Cerca cliente, matricola, P.IVA", Modifier.padding(vertical = 10.dp)) }
+        item(key = "sort") { SortBar("${list.size} licenze", listOf("Scadenza più vicina", "Scadenza più lontana", "Cliente A–Z"), sort, { sort = it }) }
         a.state.licenseCleanup.let { k -> if (k.red + k.old + k.hidden > 0) item(key = "clean") { Text("Non compaiono ${listOfNotNull(k.red.takeIf { it > 0 }?.let { "$it licenze non valide sul portale" }, k.old.takeIf { it > 0 }?.let { "$it non rinnovate da oltre ${if (k.keepMonths == 1) "1 mese" else "${k.keepMonths} mesi"}" }, k.hidden.takeIf { it > 0 }?.let { "$it tolte a mano" }).joinToString(", ")}.${if (admin) " Tocca una licenza per correggerla." else ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 10.dp)) } }
         items(list.size.coerceAtMost(1500), key = { list[it].r.id }) { i ->
             val l = list[i]
@@ -337,7 +342,8 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
         }
         Text("Considera rinnovate fino a", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp))
         val opts = listOf("") + (0..2).map { now.minusMonths(it.toLong()).toString() } + listOfNotNull(r.renewedUntil.takeIf { it.isNotBlank() })
-        Row(Modifier.padding(top = 6.dp).horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        val untilRow = androidx.compose.foundation.rememberScrollState()
+        Row(Modifier.padding(top = 6.dp).fadeEdges(untilRow, vertical = false).horizontalScroll(untilRow), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             opts.distinct().forEach { o -> androidx.compose.material3.FilterChip(until == o, { until = o }, { Text(if (o.isBlank()) "Nessuno" else monthLabel(o)) }) }
         }
         Text(if (until.isBlank()) "Valgono solo i rinnovi segnati a mano." else "Le licenze in scadenza fino a ${monthLabel(until)} risultano rinnovate, tranne quelle segnate diversamente a mano.",

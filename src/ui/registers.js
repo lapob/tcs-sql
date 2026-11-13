@@ -175,7 +175,8 @@ function accessCard(onlyMissing){
  if(onlyMissing&&!missing.filter(p=>p.state!=='todo').length)return'';
  const nSrv=list.filter(p=>p.where==='server').length,nPc=list.length-nSrv;
  const head=[nSrv?`<b>${nSrv}</b> online sul server`:'',nPc?`<b>${nPc}</b> sul PC dell’ufficio`:'',missing.length?plur(missing.length,'accesso da rifare','accessi da rifare'):'tutti collegati'].filter(Boolean).join(' · ');
- const btn=p=>p.btnHtml!==undefined?p.btnHtml:p.state==='ok'?(WEB?'':`<button class="btn ghost sm" data-action="${p.act}">${icon('external')}Apri</button>`):!p.act?'':WEB?'<small class="muted">dalla postazione dell’ufficio</small>':`<button class="btn accent sm" data-action="${p.act}">${icon('external')}Accedi di nuovo</button>`;
+ const pcAsk=p=>WEB&&p.where==='pc'&&typeof pcSyncBtn==='function'&&typeof isAdmin==='function'&&isAdmin()?pcSyncBtn(PSV_ID[p.k]||p.k):null;
+ const btn=p=>p.btnHtml!==undefined?p.btnHtml:pcAsk(p)??p.state==='ok'?(WEB?'':`<button class="btn ghost sm" data-action="${p.act}">${icon('external')}Apri</button>`):!p.act?'':WEB?'<small class="muted">dalla postazione dell’ufficio</small>':`<button class="btn accent sm" data-action="${p.act}">${icon('external')}Accedi di nuovo</button>`;
  const note=owner?'Gli accessi si fanno da qui, anche da fuori.':WEB?((state.serverPortals||[]).length?'Gli accessi li gestisce il proprietario dal server.':'Gli accessi si rifanno dall’app Windows della postazione di sincronizzazione.'):'Accedi tu nella finestra del portale: Studio non salva le password e poi legge i dati in sola lettura.';
  return`<div class="card reveal access-card" style="--i:1"><div class="card-head"><div><h2>Portali e accessi</h2><p>${head}. ${note}</p></div></div>
  ${accessGroups(list,btn,owner)}</div>`;

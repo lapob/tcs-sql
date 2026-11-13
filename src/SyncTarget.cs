@@ -35,6 +35,15 @@ public sealed class RemoteSyncTarget:ISyncTarget
   try{var r=await h.GetAsync("api/sync/hosted");if(r.StatusCode==System.Net.HttpStatusCode.NotFound)return [];if(!r.IsSuccessStatusCode)return null;return await r.Content.ReadFromJsonAsync<List<string>>()??[];}
   catch{return null;}
  }
+ /// Portals the owner asked this office PC to read now ("Aggiorna" on the site); null when the server cannot be reached
+ /// or is older and does not know. The server forgets them once handed over.
+ public static async Task<List<string>?> Asks(string baseUrl,string token)
+ {
+  using var h=new HttpClient{BaseAddress=new Uri(baseUrl.TrimEnd('/')+"/"),Timeout=TimeSpan.FromSeconds(15)};
+  h.DefaultRequestHeaders.Add("X-Sync-Token",token);h.DefaultRequestHeaders.Add("X-Requested-With","topcash");
+  try{var r=await h.GetAsync("api/sync/asks");if(!r.IsSuccessStatusCode)return null;return await r.Content.ReadFromJsonAsync<List<string>>()??[];}
+  catch{return null;}
+ }
  public async Task<string> Apply(string kind,string product,string scope,List<string> headers,List<List<string>> rows,string capturedAt)
  {
   var res=await http.PostAsJsonAsync("api/sync/batch",new{kind,product,scope,headers,rows,capturedAt});

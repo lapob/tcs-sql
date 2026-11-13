@@ -162,11 +162,12 @@ import it.topcash.studio.data.AppViewModel
     androidx.compose.foundation.layout.Box {
         androidx.compose.foundation.layout.Box(Modifier.matchParentSize().graphicsLayer { alpha = g }.glass(haze))
         bar()
-        // no hard line under the glass: a short soft fade carries it into the page (like the site)
+        // no hard line under the glass: a progressive blur (strongest at the bar, sharp 26dp below) plus a light tint
+        // carries it into the page, like the site
         val veil = MaterialTheme.colorScheme.surfaceContainer
-        androidx.compose.foundation.layout.Box(Modifier.align(Alignment.BottomCenter).offset { androidx.compose.ui.unit.IntOffset(0, 14.dp.roundToPx()) }
-            .fillMaxWidth().height(14.dp).graphicsLayer { alpha = g }
-            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(veil.copy(alpha = 0.55f), veil.copy(alpha = 0f)))))
+        androidx.compose.foundation.layout.Box(Modifier.align(Alignment.BottomCenter).offset { androidx.compose.ui.unit.IntOffset(0, 26.dp.roundToPx()) }
+            .fillMaxWidth().height(26.dp).graphicsLayer { alpha = g }.edgeBlur(haze, strongAtTop = true)
+            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(veil.copy(alpha = 0.5f), veil.copy(alpha = 0f)))))
     }
 }
 

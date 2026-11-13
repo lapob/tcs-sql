@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -347,11 +348,11 @@ fun Modifier.bleed(h: Dp): Modifier = this.layout { m, c ->
  * The blur is a second, blurred copy of the content drawn only in the edge band with a gradient (Android 12+;
  * older phones keep the fade alone). Put it before verticalScroll / on the Lazy list, after bleed().
  */
-fun Modifier.fadeEdges(state: androidx.compose.foundation.gestures.ScrollableState, vertical: Boolean, length: Dp = 24.dp): Modifier = composed {
+fun Modifier.fadeEdges(state: androidx.compose.foundation.gestures.ScrollableState, vertical: Boolean, length: Dp = 28.dp): Modifier = composed {
     val start = animateFloatAsState(if (state.canScrollBackward) 1f else 0f, tween(220), label = "fadeStart")
     val end = animateFloatAsState(if (state.canScrollForward) 1f else 0f, tween(220), label = "fadeEnd")
     val blurred = if (android.os.Build.VERSION.SDK_INT >= 31) androidx.compose.ui.graphics.rememberGraphicsLayer() else null
-    val radius = with(androidx.compose.ui.platform.LocalDensity.current) { 3.5.dp.toPx() }
+    val radius = with(androidx.compose.ui.platform.LocalDensity.current) { 6.dp.toPx() }
     LaunchedEffect(blurred, radius) { blurred?.renderEffect = androidx.compose.ui.graphics.BlurEffect(radius, radius, androidx.compose.ui.graphics.TileMode.Clamp) }
     this.graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
         .drawWithContent {
@@ -452,4 +453,24 @@ fun prioTone(p: String): Tone? = when (p) { "Urgente" -> Tone.Bad; "Alta" -> Ton
     Text(androidx.compose.ui.text.buildAnnotatedString { append("by "); pushStyle(name); append("Lapo Bardi"); pop() },
         modifier, style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant.copy(alpha = .8f),
         textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+}
+
+/** "Ordina": how a list is sorted, in plain words (the same choices as on the website). [label] shows the count on the left. */
+@Composable fun SortBar(label: String, options: List<String>, selected: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
+    var open by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.foundation.layout.Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        androidx.compose.foundation.layout.Box {
+            androidx.compose.material3.TextButton({ open = true }) {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.AutoMirrored.Rounded.Sort, null, Modifier.size(18.dp))
+                androidx.compose.foundation.layout.Spacer(Modifier.size(6.dp)); Text(selected)
+            }
+            androidx.compose.material3.DropdownMenu(open, { open = false }) {
+                options.forEach { o ->
+                    androidx.compose.material3.DropdownMenuItem({ Text(o) }, { open = false; onSelect(o) },
+                        trailingIcon = if (o == selected) ({ androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.Check, null, Modifier.size(18.dp)) }) else null)
+                }
+            }
+        }
+    }
 }

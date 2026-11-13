@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TopCash.Server</RootNamespace>
     <AssemblyName>TopCash.Server</AssemblyName>
-    <Version>2.10.10</Version>
+    <Version>2.10.11</Version>
     <Product>Top Cash Studio Server</Product>
     <Company>Top Cash Service S.r.l.</Company>
     <ApplicationIcon>..\src\topcash.ico</ApplicationIcon>
@@ -19,6 +19,7 @@
     <!-- Same data layer as the Windows app: one source of truth for import rules and validation. -->
     <Compile Include="..\src\Models.cs" Link="Shared\Models.cs" />
     <Compile Include="..\src\Store.cs" Link="Shared\Store.cs" />
+    <Compile Include="..\src\DataGen.cs" Link="Shared\DataGen.cs" />
     <Compile Include="..\src\Imports.cs" Link="Shared\Imports.cs" />
     <Compile Include="..\src\Gestionale.cs" Link="Shared\Gestionale.cs" />
     <Compile Include="..\src\Paths.cs" Link="Shared\Paths.cs" />

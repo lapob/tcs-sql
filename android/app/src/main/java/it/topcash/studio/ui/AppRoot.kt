@@ -34,6 +34,11 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.Alignment
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -171,7 +176,13 @@ private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay", "ac
             // leaving a tab the glass bar fades away at once (before the next page slides under it); it comes back softly
             // once the tab page has arrived: pages never pass through the bar half-way
             AnimatedVisibility(topLevel, enter = fadeIn(tween(220, 230)) + slideInVertically(tween(320, 230, EmphasizedDecelerate)) { it / 3 }, exit = fadeOut(tween(90))) {
-                // frosted glass: the pages scroll underneath and show through blurred
+                // frosted glass: the pages scroll underneath and show through blurred; just above it a progressive blur
+                // band softens what is about to slide under the bar (no hard edge), taking no room
+                androidx.compose.foundation.layout.Box {
+                val veil = MaterialTheme.colorScheme.surfaceContainer
+                androidx.compose.foundation.layout.Box(Modifier.align(Alignment.TopCenter).offset { androidx.compose.ui.unit.IntOffset(0, -androidx.compose.ui.unit.Dp(22f).roundToPx()) }
+                    .fillMaxWidth().height(androidx.compose.ui.unit.Dp(22f)).edgeBlur(haze, strongAtTop = false)
+                    .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(veil.copy(alpha = 0f), veil.copy(alpha = 0.4f)))))
                 NavigationBar(Modifier.glass(haze, strong = true), containerColor = androidx.compose.ui.graphics.Color.Transparent, tonalElevation = androidx.compose.ui.unit.Dp(0f)) {
                     // changing area the items cross-fade in place (one movement), the bar itself stays still
                     androidx.compose.animation.AnimatedContent(tabs, Modifier.weight(1f), transitionSpec = { fadeIn(tween(220, 70, EmphasizedDecelerate)) togetherWith fadeOut(tween(90)) }, label = "area-tabs") { list ->
@@ -185,6 +196,7 @@ private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay", "ac
                             }
                         }
                     }
+                }
                 }
             }
         },

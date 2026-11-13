@@ -93,19 +93,30 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
     var tab by rememberSaveable { mutableStateOf("Da fare") }
     var q by rememberSaveable { mutableStateOf("") }
     var tech by rememberSaveable { mutableStateOf("") }
+    // "Automatico": the open lists put the most urgent first, the others the most recent
+    var sort by rememberSaveable { mutableStateOf("Automatico") }
     val state = rememberLazyListState()
     val expanded by remember { derivedStateOf { state.firstVisibleItemIndex < 2 } }
     val me by vm.me.collectAsStateWithLifecycle()
     var roleTab by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(me) { if (!roleTab && me?.role == "tecnico") { tab = "I miei"; roleTab = true } }
-    val list = remember(a, tab, q, tech, me) {
+    val list = remember(a, tab, q, tech, me, sort) {
         val n = norm(q.trim())
         (if (tab == "Verifiche") a.verifications else a.interventions).filter { x ->
             when (tab) { "Da fare" -> x.i.status != "Chiuso"
                 "I miei" -> x.i.status != "Chiuso" && x.i.source == "app" && me != null && norm(x.i.technician) == norm(me!!.techName)
                 "Oggi e in ritardo" -> x.i.status != "Chiuso" && x.date?.let { !it.isAfter(LocalDate.now()) } == true "Chiusi" -> x.i.status == "Chiuso"; else -> true } &&
                 (n.isEmpty() || norm(x.clientName + " " + x.i.title + " " + x.i.work + " " + x.i.technician).contains(n)) && (tech.isEmpty() || x.i.technician == tech)
-        }.let { l -> if (tab == "Da fare" || tab == "I miei" || tab == "Oggi e in ritardo") l.sortedWith(compareBy({ Catalog.priorities.indexOf(it.i.priority) * -1 }, { it.date ?: LocalDate.MAX })) else l }
+        }.let { l ->
+            val urgent = compareBy<it.topcash.studio.data.UIntervention>({ Catalog.priorities.indexOf(it.i.priority) * -1 }, { it.date ?: LocalDate.MAX })
+            when (sort) {
+                "Più recenti" -> l.sortedByDescending { it.date ?: LocalDate.MIN }
+                "Meno recenti" -> l.sortedBy { it.date ?: LocalDate.MAX }
+                "Priorità più alta" -> l.sortedWith(urgent)
+                "Cliente A–Z" -> l.sortedBy { it.clientName.lowercase() }
+                else -> if (tab == "Da fare" || tab == "I miei" || tab == "Oggi e in ritardo") l.sortedWith(urgent) else l.sortedByDescending { it.date ?: LocalDate.MIN }
+            }
+        }
     }
     Page(vm, "Interventi", "${a.openInterventions.size} da completare", state = state,
         fab = { ExtendedFloatingActionButton(onClick = onNew, expanded = expanded, icon = { Icon(Icons.Rounded.Add, null) }, text = { Text("Nuovo intervento") }) }) {
@@ -119,6 +130,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
                 items(a.technicians) { t -> FilterChip(tech == t, { tech = if (tech == t) "" else t }, label = { Text(t) }) }
             }
         }
+        item(key = "sort") { SortBar("${list.size} ${if (tab == "Verifiche") "verifiche" else if (list.size == 1) "intervento" else "interventi"}", listOf("Automatico", "Più recenti", "Meno recenti", "Priorità più alta", "Cliente A–Z"), sort, { sort = it }) }
         if (list.isEmpty()) item(key = "empty") { Empty(Icons.Rounded.Build, "Nessun intervento", if (tab == "Da fare") "Non ci sono interventi da fare. Ottimo!" else if (tab == "Verifiche") "Nessuna verifica periodica registrata." else "Modifica i filtri o crea un nuovo intervento.") }
         items(list.size.coerceAtMost(800), key = { list[it].i.id }) { i -> InterventionRow(list[i], a, Modifier.padding(bottom = 8.dp).animateItem(), vm = vm) { onOpen(list[i].i.id) } }
     }

@@ -21,10 +21,15 @@ New-Item -ItemType Directory -Force (Split-Path $log) | Out-Null
 function Log($t) { $l = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  $t"; if (-not $Auto) { Write-Host $t }
   for ($i = 0; $i -lt 5; $i++) { try { Add-Content -Path $log -Value $l -Encoding UTF8 -ErrorAction Stop; return } catch { Start-Sleep -Milliseconds 400 } } }
 # the service is really gone before its files are replaced (a process still closing keeps them locked)
+# only the installed server counts: other copies (a test server in another folder) are left alone
+function Mine { Get-Process TopCash.Server -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($dst, [StringComparison]::OrdinalIgnoreCase) } }
 function StopServer { Stop-Service TopCashStudio -Force -ErrorAction SilentlyContinue
-  for ($i = 0; $i -lt 30 -and (Get-Process TopCash.Server -ErrorAction SilentlyContinue); $i++) { Start-Sleep 1 }
-  Get-Process TopCash.Server -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep 1 }
-function CopyAll($from, $to) { for ($i = 0; $i -lt 3; $i++) { robocopy $from $to /MIR /NFL /NDL /NJH /NJS /R:5 /W:2 | Out-Null; if ($LASTEXITCODE -lt 8) { return $true }; Start-Sleep 3 }; return $false }
+  for ($i = 0; $i -lt 60 -and (Mine); $i++) { Start-Sleep 1 }
+  Mine | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep 2 }
+# a file held for a moment (antivirus scan, a slow PC) gets more time; if it still fails the log says which file and why
+function CopyAll($from, $to) { for ($i = 0; $i -lt 4; $i++) { $out = robocopy $from $to /MIR /NFL /NDL /NJH /NJS /R:10 /W:3; if ($LASTEXITCODE -lt 8) { return $true }
+  $why = ($out | Where-Object { $_ -match 'ERROR|ERRORE' } | Select-Object -First 2) -join ' / '; if ($why) { Log "Copia: $($why.Trim())" }
+  Start-Sleep 5; StopServer }; return $false }
 function Ver($dir) { $f = Join-Path $dir 'TopCash.Server.exe'; if (Test-Path $f) { try { [version]((Get-Item $f).VersionInfo.FileVersion) } catch { [version]'0.0' } } else { $null } }
 function Healthy { for ($i = 0; $i -lt 15; $i++) { try { Invoke-RestMethod http://127.0.0.1:8470/api/health -TimeoutSec 5 | Out-Null; return $true } catch { Start-Sleep 2 } }; return $false }
 
@@ -65,7 +70,7 @@ if ($copied) {
   Start-Service TopCashStudio -ErrorAction SilentlyContinue
   if (Healthy) { $now = Ver $dst; if ($now -eq $vNew) { Log "Server aggiornato a $vNew e in funzione."; exit 0 } }
   Log "Il server $vNew non risponde: rimetto la versione precedente ($vCur)."
-} else { Log "Copia non riuscita anche dopo 3 tentativi: rimetto la versione precedente ($vCur)." }
+} else { Log "Copia non riuscita anche dopo 4 tentativi: rimetto la versione precedente ($vCur)." }
 
 Set-Content -Path $bad -Value "$vNew" -Encoding UTF8
 if (Test-Path (Join-Path $bak 'TopCash.Server.exe')) {

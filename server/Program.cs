@@ -330,7 +330,7 @@ app.MapPost("/api/sync/token/revoke",(HttpContext ctx)=>{users.RevokeSyncToken()
 // ───────────────────────── archive
 app.MapGet("/api/state",(HttpContext ctx)=>
 {
- var etag=$"\"v{hub.Version}-{hub.Boot}\"";ctx.Response.Headers.ETag=etag;ctx.Response.Headers.CacheControl="no-cache";
+ var etag=$"\"v{hub.Ready()}-{hub.Boot}\"";ctx.Response.Headers.ETag=etag;ctx.Response.Headers.CacheControl="no-cache";
  if(ctx.Request.Headers.IfNoneMatch.ToString()==etag)return Results.StatusCode(304);
  var(body,enc)=hub.SnapshotFor(ctx.Request.Headers.AcceptEncoding.ToString(),SeesAccounting(ctx));
  if(enc!=null){ctx.Response.Headers.ContentEncoding=enc;ctx.Response.Headers.Vary="Accept-Encoding";}
@@ -339,7 +339,7 @@ app.MapGet("/api/state",(HttpContext ctx)=>
 // Partial update: the device sends the fingerprints of its sections (X-Have) and gets only what changed.
 app.MapGet("/api/state/delta",(HttpContext ctx)=>
 {
- var etag=$"\"v{hub.Version}-{hub.Boot}\"";ctx.Response.Headers.ETag=etag;ctx.Response.Headers.CacheControl="no-store";
+ var etag=$"\"v{hub.Ready()}-{hub.Boot}\"";ctx.Response.Headers.ETag=etag;ctx.Response.Headers.CacheControl="no-store";
  if(ctx.Request.Headers.IfNoneMatch.ToString()==etag)return Results.StatusCode(304);
  var have=ctx.Request.Headers["X-Have"].ToString();
  return Results.Bytes(have.Length is >0 and <8000?hub.Delta(have,SeesAccounting(ctx)):hub.Snapshot(SeesAccounting(ctx)),"application/json");
@@ -596,7 +596,28 @@ app.MapGet("/api/sync/hosted",(HttpContext ctx)=>Station(ctx)?Results.Ok(portals
 IResult PortalOwnerOnly()=>Results.Json(new{error="Solo il proprietario gestisce i portali sul server."},statusCode:403);
 // the office PC (Windows app as sync station) reads the portals the server cannot: when it last called, and whether it is on
 object StationView(){var at=hub.LastStationContact;var seen=at!=default;return new{lastContact=seen?at.ToString("O"):"",online=seen&&DateTimeOffset.Now-at<TimeSpan.FromMinutes(15)};}
-app.MapGet("/api/portals",(HttpContext ctx)=>ctx.User.IsInRole(Roles.Owner)?Results.Ok(new{portals=portals.Views(),browser=HeadlessBrowser.FindExecutable()!=null,station=StationView()}):PortalOwnerOnly()).RequireAuthorization("admin");
+// "Aggiorna" on a portal read by the office PC: the request waits here until the station's next check (every 20 s),
+// then the Windows app reads that portal at once. Requests older than 10 minutes are dropped (PC switched off meanwhile).
+var stationAsks=new System.Collections.Concurrent.ConcurrentDictionary<string,DateTimeOffset>();
+List<string> StationAsks(){foreach(var kv in stationAsks)if(DateTimeOffset.Now-kv.Value>TimeSpan.FromMinutes(10))stationAsks.TryRemove(kv.Key,out _);return [..stationAsks.Keys];}
+app.MapPost("/api/portals/{id}/station-sync",(HttpContext ctx,string id)=>
+{
+ var name=id switch{"zucchetti"=>"MY Zucchetti","dtr"=>"DTR-Service","ital"=>"Ital Retail","rch"=>"RCH XDealer",_=>""};
+ if(name.Length==0)return Bad("Portale sconosciuto.");
+ if(portals.Ready(id))return Bad(name+" lo legge il server: usa Aggiorna ora.");
+ var at=hub.LastStationContact;
+ if(at==default||DateTimeOffset.Now-at>TimeSpan.FromMinutes(15))return Bad("Il PC dell'ufficio non risponde: accendilo e apri Top Cash Studio, poi riprova.");
+ var fresh=!stationAsks.ContainsKey(id);stationAsks[id]=DateTimeOffset.Now;
+ if(fresh)store.Log("portal",$"{Who(ctx)} ha chiesto al PC dell'ufficio di aggiornare {name}.");
+ return Results.Ok(new{asked=StationAsks()});
+}).RequireAuthorization("admin");
+app.MapGet("/api/sync/asks",(HttpContext ctx)=>
+{
+ if(!Station(ctx))return Results.Unauthorized();
+ var ids=StationAsks();foreach(var id in ids)stationAsks.TryRemove(id,out _);
+ return Results.Ok(ids);
+}).RequireRateLimiting("sync").AllowAnonymous();
+app.MapGet("/api/portals",(HttpContext ctx)=>ctx.User.IsInRole(Roles.Owner)?Results.Ok(new{portals=portals.Views(),browser=HeadlessBrowser.FindExecutable()!=null,station=StationView(),asked=StationAsks()}):PortalOwnerOnly()).RequireAuthorization("admin");
 app.MapPost("/api/portals/{id}/enabled",async(HttpContext ctx,string id,PortalSwitch r)=>
 {
  if(!ctx.User.IsInRole(Roles.Owner))return PortalOwnerOnly();
@@ -708,6 +729,7 @@ var watchTimer=new Timer(_=>WatchDb(),null,TimeSpan.FromSeconds(2),TimeSpan.From
 app.Lifetime.ApplicationStopping.Register(()=>{watchTimer.Dispose();lock(watchGate)watchDb.Dispose();});
 
 store.Log("server","Server Top Cash avviato.");
+hub.Warm();
 portals.Begin();
 app.Lifetime.ApplicationStopping.Register(()=>{try{portals.StopAll().Wait(TimeSpan.FromSeconds(8));}catch{}});
 app.Run();

@@ -129,6 +129,7 @@ public partial class MainWindow : Window
    await ChooseServer();Navigate();
    await Task.Yield();if(!ServerMode&&Scan(false)>0)await Push();
    timer.Tick+=async(_,_)=>{if(!busy&&!ServerMode){var count=Scan(false);if(count>0)await Push();}if(DateTime.Now>=nextHostedCheck)await CheckHosted();};timer.Start();updateTimer.Start();
+   askTimer.Tick+=async(_,_)=>await CheckAsks();askTimer.Start();
    // the portals the server now reads itself are left to it (two sessions on the same account log each other out)
    await CheckHosted();
    // DTR-Service: once connected on this PC the session is resumed in the background at every start
@@ -325,6 +326,28 @@ public partial class MainWindow : Window
     switch(id){case "dtr" when DtrWindow.Configured:OpenDtr(false);break;case "ital" when ItalRetailWindow.Configured:OpenItal(false);break;case "rch" when RchWindow.Configured:OpenRch(false);break;}
   }catch{}
  }
+ // ───────── "Aggiorna" pressed on the site for a portal this PC reads: asked every 20 seconds, read at once
+ readonly DispatcherTimer askTimer=new(){Interval=TimeSpan.FromSeconds(20)};bool askBusy;
+ async Task CheckAsks()
+ {
+  if(askBusy||!ServerMode||syncToken.Length==0)return;askBusy=true;
+  try{
+   var ids=await RemoteSyncTarget.Asks(serverUrl,syncToken);if(ids==null)return;
+   foreach(var id in ids.Where(i=>!ServerHosts(i)))
+   {
+    // a window opened just now reads by itself once its page is loaded; one already open starts at once
+    switch(id)
+    {
+     case "ital":var hadI=ital!=null;OpenItal(false);if(hadI)_=ital!.StartSync();else LaterSync(()=>ital?.StartSync());break;
+     case "rch":var hadR=rch!=null;OpenRch(false);if(hadR)_=rch!.StartSync();else LaterSync(()=>rch?.StartSync());break;
+     case "dtr":var hadD=dtr!=null;OpenDtr(false);if(hadD)_=dtr!.StartSync();else LaterSync(()=>dtr?.StartSync());break;
+     case "zucchetti":if(portal!=null)_=portal.StartSync(false);else{OpenPortal();LaterSync(()=>portal?.StartSync(false));}break;
+    }
+   }
+  }catch{}finally{askBusy=false;}
+ }
+ /// A second try once the portal's browser has had time to load (StartSync does nothing if a read is already running).
+ void LaterSync(Func<Task?> start)=>_=Dispatcher.InvokeAsync(async()=>{await Task.Delay(25000);try{var t=start();if(t!=null)await t;}catch{}});
  /// Closes this PC's window for a portal the server now reads (its saved session stays on disk, harmless).
  void Release(string id)
  {

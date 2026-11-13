@@ -96,7 +96,8 @@ import kotlinx.coroutines.launch
             items(online.size, key = { online[it].id }) { i -> val p = online[i]
                 PortalCard(p, Modifier.padding(bottom = 10.dp).appear(order.indexOf(p)),
                     onEnable = { ask = "on" to p }, onSync = { vm.portalAction(p.id, "sync", "Lettura avviata sul server") }, onOpen = { viewing = p },
-                    onStop = { vm.portalAction(p.id, "stop", "Lettura interrotta: dati precedenti conservati") }, onOff = { ask = "off" to p }, onForget = { ask = "forget" to p }) }
+                    onStop = { vm.portalAction(p.id, "stop", "Lettura interrotta: dati precedenti conservati") }, onOff = { ask = "off" to p }, onForget = { ask = "forget" to p },
+                    asked = p.id in l.asked, pcOn = l.station?.online, onPcSync = { vm.portalAction(p.id, "station-sync", "Richiesta inviata al PC dell’ufficio: la lettura parte entro 20 secondi") }) }
         }
         if (pc.isNotEmpty()) {
             item(key = "g-pc") {
@@ -107,7 +108,8 @@ import kotlinx.coroutines.launch
             items(pc.size, key = { pc[it].id }) { i -> val p = pc[i]
                 PortalCard(p, Modifier.padding(bottom = 10.dp).appear(order.indexOf(p)),
                     onEnable = { ask = "on" to p }, onSync = { vm.portalAction(p.id, "sync", "Lettura avviata sul server") }, onOpen = { viewing = p },
-                    onStop = { vm.portalAction(p.id, "stop", "Lettura interrotta: dati precedenti conservati") }, onOff = { ask = "off" to p }, onForget = { ask = "forget" to p }) }
+                    onStop = { vm.portalAction(p.id, "stop", "Lettura interrotta: dati precedenti conservati") }, onOff = { ask = "off" to p }, onForget = { ask = "forget" to p },
+                    asked = p.id in l.asked, pcOn = l.station?.online, onPcSync = { vm.portalAction(p.id, "station-sync", "Richiesta inviata al PC dell’ufficio: la lettura parte entro 20 secondi") }) }
         }
     }
     ask?.let { (k, p) ->
@@ -153,7 +155,8 @@ private fun agoText(iso: String, bare: Boolean = false): String = runCatching {
     if (bare || m < 1) t else "$t fa"
 }.getOrDefault("")
 
-@Composable private fun PortalCard(p: PortalView, modifier: Modifier, onEnable: () -> Unit, onSync: () -> Unit, onOpen: () -> Unit, onStop: () -> Unit, onOff: () -> Unit, onForget: () -> Unit) {
+@Composable private fun PortalCard(p: PortalView, modifier: Modifier, onEnable: () -> Unit, onSync: () -> Unit, onOpen: () -> Unit, onStop: () -> Unit, onOff: () -> Unit, onForget: () -> Unit,
+                                    asked: Boolean = false, pcOn: Boolean? = null, onPcSync: () -> Unit = {}) {
     val (tone, state) = when {
         !p.enabled || p.blocked -> Tone.Neutral to (if (p.lastSync.isNotBlank()) "Aggiornato dal PC " + whenText(p.lastSync) else "Ancora nessuna lettura dal PC") + (if (p.blocked) " · verifica Cloudflare" else "")
         p.running -> Tone.Info to p.status.ifBlank { "Lettura in corso…" }
@@ -171,17 +174,21 @@ private fun agoText(iso: String, bare: Boolean = false): String = runCatching {
         }
         Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             when {
-                !p.enabled -> FilledTonalButton(onEnable) { Icon(Icons.Rounded.Cloud, null, Modifier.size(18.dp)); Spacer(Modifier.size(6.dp)); Text("Sposta sul server") }
-                p.blocked -> OutlinedButton(onOpen) { Icon(Icons.Rounded.Sync, null, Modifier.size(18.dp)); Spacer(Modifier.size(6.dp)); Text("Riprova sul server") }
+                // read by the office PC: "Aggiorna" asks the Windows app to read it now (it takes the request within 20 s)
+                !p.enabled || p.blocked -> OutlinedButton(onPcSync, enabled = !asked && pcOn != false) {
+                    Icon(Icons.Rounded.Sync, null, Modifier.size(18.dp)); Spacer(Modifier.size(6.dp))
+                    Text(when { asked -> "Chiesto al PC…"; pcOn == false -> "PC spento"; else -> "Aggiorna sul PC" }) }
                 p.connected -> OutlinedButton(onSync, enabled = !p.running) { Icon(Icons.Rounded.Sync, null, Modifier.size(18.dp)); Spacer(Modifier.size(6.dp)); Text(if (p.running) "In lettura" else "Aggiorna ora") }
                 else -> Button(onOpen) { Icon(Icons.Rounded.Lock, null, Modifier.size(18.dp)); Spacer(Modifier.size(6.dp)); Text("Accedi") }
             }
             Spacer(Modifier.weight(1f))
+            // the server's browser can read Zucchetti and DTR; Ital Retail and RCH stop it with Cloudflare, so no button for them
+            if (!p.enabled && p.id in listOf("zucchetti", "dtr")) IconButton(onEnable) { Icon(Icons.Rounded.Cloud, "Sposta sul server") }
             if (p.enabled) Box {
                 IconButton({ menu = true }) { Icon(Icons.Rounded.MoreVert, "Altre azioni") }
                 DropdownMenu(menu, { menu = false }) {
-                    DropdownMenuItem({ Text("Apri il portale") }, { menu = false; onOpen() })
-                    if (p.running) DropdownMenuItem({ Text("Interrompi la lettura") }, { menu = false; onStop() })
+                    if (!p.blocked) DropdownMenuItem({ Text("Apri il portale") }, { menu = false; onOpen() })
+                    if (p.running && !p.blocked) DropdownMenuItem({ Text("Interrompi la lettura") }, { menu = false; onStop() })
                     DropdownMenuItem({ Text("Togli dal server") }, { menu = false; onOff() })
                     DropdownMenuItem({ Text("Scollega", color = LocalStatus.current.of(Tone.Bad)) }, { menu = false; onForget() })
                 }

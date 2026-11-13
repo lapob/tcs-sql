@@ -68,7 +68,7 @@ import kotlinx.serialization.Serializable
     val blocked: Boolean = false)
 /** The office PC (Windows app as sync station): when it last called the server and whether it is on now. */
 @Serializable data class StationState(val lastContact: String = "", val online: Boolean = false)
-@Serializable data class PortalList(val portals: List<PortalView> = emptyList(), val browser: Boolean = false, val station: StationState? = null)
+@Serializable data class PortalList(val portals: List<PortalView> = emptyList(), val browser: Boolean = false, val station: StationState? = null, val asked: List<String> = emptyList())
 @Serializable data class PortalSwitch(val enabled: Boolean)
 @Serializable data class PortalInput(val kind: String, val x: Double = 0.0, val y: Double = 0.0, val dy: Double = 0.0, val text: String? = null)
 /** Income statement and balance sheet from Mastro's general ledger (computed by the server, same as the site). */

@@ -31,6 +31,7 @@ public sealed partial class Store
   InitDtr(c);
   InitItal(c);InitRch(c);
   InitEdits(c);InitWork(c);InitNovita(c);
+  InitDataGen(c);
  }
  public List<ClientRecord> Clients(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM clients";using var r=q.ExecuteReader();var list=new List<ClientRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<ClientRecord>(r.GetString(0))!);return list;}
  public List<OrderRecord> Orders(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM orders";using var r=q.ExecuteReader();var list=new List<OrderRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<OrderRecord>(r.GetString(0))!);return list;}

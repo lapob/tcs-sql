@@ -14,13 +14,23 @@ async function loadPortals(force){
  catch{}finally{PSV_BUSY=false;}
 }
 function psvOf(k){return PSV?.portals?.find(p=>p.id===(PSV_ID[k]||k))||null;}
+/* "Aggiorna sul PC": for a portal the office PC reads. The server hands the request to the Windows app at its next check
+   (within 20 seconds); while it waits the button says so. With the PC off it says that instead of a button that does nothing. */
+function pcSyncBtn(id){
+ const st=PSV?.station;
+ if((PSV?.asked||[]).includes(id))return`<button class="btn ghost sm" disabled>${icon('sync')}Chiesto al PC…</button>`;
+ if(st&&!st.online)return`<button class="btn ghost sm" disabled data-tip="Il PC dell’ufficio è spento o l’app è chiusa">${icon('sync')}PC spento</button>`;
+ return`<button class="btn ghost sm" data-pc-sync="${id}">${icon('sync')}Aggiorna sul PC</button>`;
+}
+// moving to the server only makes sense where the server's browser can read the portal (Ital Retail and RCH stop it with Cloudflare)
+const PSV_CAN_HOST=['zucchetti','dtr'];
 /* state text and buttons for one row of "Portali e accessi" when the owner looks at it */
 function psvRow(p){
  const s=psvOf(p.k);if(!s)return null;
- if(!s.enabled)return{where:'pc',state:p.state,text:p.text,btn:`<button class="btn sm" data-psv-on="${s.id}">${icon('cloud')}Sposta sul server</button>`};
+ if(!s.enabled)return{where:'pc',state:p.state,text:p.text,btn:pcSyncBtn(s.id)+(PSV_CAN_HOST.includes(s.id)?`<button class="btn ghost sm icon-only" data-psv-on="${s.id}" aria-label="Sposta sul server" data-tip="Sposta sul server: lo legge anche a PC spento">${icon('cloud')}</button>`:'')};
  // the portal's Cloudflare robot check stops the server's browser: the office station keeps reading it, its state is shown
  if(s.blocked)return{where:'pc',blocked:true,state:p.state,text:p.text,
-  btn:`<button class="btn ghost sm icon-only" data-psv-open="${s.id}" aria-label="Riprova sul server" data-tip="Riprova sul server (lo fa da solo una volta al giorno)">${icon('sync')}</button><button class="btn ghost sm icon-only" data-psv-menu="${s.id}" aria-label="Altre azioni" data-tip="Altre azioni">${icon('more')}</button>`};
+  btn:pcSyncBtn(s.id)+`<button class="btn ghost sm icon-only" data-psv-menu="${s.id}" aria-label="Altre azioni" data-tip="Altre azioni">${icon('more')}</button>`};
  const state=s.running?'ok':s.connected?'ok':'bad';
  const text=s.running?(s.status||'Lettura in corso…'):s.connected?`Sul server · ${s.lastSync?'aggiornato '+dTime(s.lastSync):'prima lettura in arrivo'} · ${s.every}`:(s.error||'Sul server · serve il tuo accesso');
  const btn=s.connected?`<button class="btn ghost sm" data-psv-sync="${s.id}"${s.running?' disabled':''}>${icon('sync')}${s.running?'In lettura':'Aggiorna ora'}</button><button class="btn ghost sm icon-only" data-psv-menu="${s.id}" aria-label="Altre azioni" data-tip="Altre azioni">${icon('more')}</button>`
@@ -28,10 +38,16 @@ function psvRow(p){
  return{where:'server',state,text,btn};
 }
 document.addEventListener('click',async e=>{
- const on=e.target.closest('[data-psv-on]'),sy=e.target.closest('[data-psv-sync]'),op=e.target.closest('[data-psv-open]'),mn=e.target.closest('[data-psv-menu]');
- if(!on&&!sy&&!op&&!mn)return;
+ const on=e.target.closest('[data-psv-on]'),sy=e.target.closest('[data-psv-sync]'),op=e.target.closest('[data-psv-open]'),mn=e.target.closest('[data-psv-menu]'),pc=e.target.closest('[data-pc-sync]');
+ if(!on&&!sy&&!op&&!mn&&!pc)return;
  e.preventDefault();e.stopPropagation();
  const fail=x=>toast(x.message,'alert');
+ if(pc){pc.disabled=true;
+  try{const r=await api(`/api/portals/${pc.dataset.pcSync}/station-sync`,{method:'POST'});if(PSV)PSV={...PSV,asked:r.asked||[]};
+   toast('Richiesta inviata al PC dell’ufficio: la lettura parte entro 20 secondi','sync');render(false);
+   // follow it: the button comes back when the PC has taken the request, the time of the last reading changes when it is done
+   [25e3,60e3,120e3].forEach(t=>setTimeout(()=>loadPortals(true),t));}
+  catch(x){pc.disabled=false;fail(x);}return;}
  if(on){const p=psvOf(on.dataset.psvOn);
   if(!await ask({title:`Spostare ${p.name} sul server?`,text:'Il server apre il portale con un browser tutto suo e lo legge da solo, anche con il PC dell’ufficio spento o l’app disinstallata. Serve un tuo accesso, una volta sola: la password la scrivi tu nel portale e non viene salvata.',ok:'Sposta sul server'}))return;
   try{PSV=await api(`/api/portals/${p.id}/enabled`,{method:'POST',body:JSON.stringify({enabled:true})}).then(v=>({...PSV,portals:v}));render(false);openPortalView(p.id);}catch(x){fail(x);}return;}
@@ -49,7 +65,7 @@ function psvMenu(p){return new Promise(res=>{
  const m=document.createElement('div');m.className='modal';
  const item=(k,ic,t,s,danger)=>`<button class="list-row psv-item${danger?' danger':''}" data-k="${k}">${icon(ic)}<div class="grow"><strong>${t}</strong><small>${s}</small></div></button>`;
  m.innerHTML=`<div class="modal-box" role="dialog" aria-modal="true" aria-label="${esc(p.name)}"><h3>${esc(p.name)}</h3><p class="sub">${esc(p.status||'')}</p>
-  <div class="psv-items">${item('open','external','Apri il portale','Guarda la pagina o rifai l’accesso')}${p.running?item('stop','close','Interrompi la lettura','I dati già salvati restano'):''}${item('off','cloud','Togli dal server','L’accesso resta salvato')}${item('forget','logout','Scollega','Cancella la sessione: servirà un nuovo accesso',true)}</div>
+  <div class="psv-items">${p.blocked?'':item('open','external','Apri il portale','Guarda la pagina o rifai l’accesso')}${p.running&&!p.blocked?item('stop','close','Interrompi la lettura','I dati già salvati restano'):''}${item('off','cloud','Togli dal server','L’accesso resta salvato')}${item('forget','logout','Scollega','Cancella la sessione: servirà un nuovo accesso',true)}</div>
   <div class="btn-row"><button class="btn ghost" data-k="">Chiudi</button></div></div>`;
  document.body.append(m);
  const close=v=>{m.classList.add('out');setTimeout(()=>m.remove(),220);document.removeEventListener('keydown',key,true);res(v);};
