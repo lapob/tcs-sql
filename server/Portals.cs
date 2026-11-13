@@ -205,7 +205,6 @@ public abstract class PortalRunner
                 if (first) { Log("portal", Name + ": " + BlockedText); hub.Changed(); }
                 return;
             }
-            else if (Blocked) { blockedAt = DateTime.MinValue; hub.Changed(); }
             if (now == authenticated) { if (!now) status = "Accesso richiesto: apri il portale e accedi"; return; }
             authenticated = now;
             if (now)
@@ -247,6 +246,7 @@ public abstract class PortalRunner
         {
             var msg = await Read(ct);
             LastSyncSave(DateTimeOffset.Now.ToString("O"));
+            if (!ServerRead) store.SetSetting("portals." + Id + ".serverRead", true);
             SetStatus(msg + " · prossima lettura " + View(true).Every);
             try { await page!.KeepSession(ct); } catch { }
             return msg;
@@ -276,9 +276,13 @@ public abstract class PortalRunner
     protected string Apply(string kind, string scope, List<string> headers, List<List<string>> rows) =>
         store.ApplyPortalList(kind, Product, scope, headers, rows, DateTimeOffset.Now.ToString("O"), Name + " · server");
     (bool C, string M, int T) lastBeat; DateTime lastBeatAt;
+    /// The server has completed at least one read of this portal (saved): only from then on it is the one that reads it.
+    bool ServerRead => store.Setting<bool?>("portals." + Id + ".serverRead") == true;
     protected void Heartbeat(bool connected, string message, int total = 0)
     {
         if (StatusKind == null) return;
+        // a portal the server never managed to read is still the office PC's: its "signed out" would cover the PC's real state
+        if (!connected && !ServerRead) return;
         // the same status again within the hour changes nothing on screen: no write, no update sent to the pages
         if (lastBeat == (connected, message, total) && DateTime.Now - lastBeatAt < TimeSpan.FromHours(1)) return;
         lastBeat = (connected, message, total); lastBeatAt = DateTime.Now;
