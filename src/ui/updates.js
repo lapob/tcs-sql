@@ -1,11 +1,12 @@
 'use strict';
 // ───────────────────────── app updates over the network
 // A release (or the administrator's upload) reaches every PC and phone: each one shows the new version and updates with one tap.
-let UPD={info:null,host:null,busy:'',loaded:false,serverVersion:''};
+let UPD={info:null,host:null,busy:'',loaded:false,serverVersion:'',self:null};
 function updLoad(force){
  if(!WEB||(UPD.loaded&&!force))return;UPD.loaded=true;
  fetch('api/update/info',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{UPD.info=j;if(page==='settings'||page==='apps')render(false);}).catch(()=>{});
  fetch('api/health',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{UPD.serverVersion=j?.server||'';if(page==='settings')render(false);}).catch(()=>{});
+ if(isAdmin())fetch('api/server/selfupdate',{cache:'no-store',headers:{'X-Requested-With':'topcash'}}).then(r=>r.ok?r.json():null).then(j=>{UPD.self=j;if(page==='settings')render(false);}).catch(()=>{});
 }
 const updSize=n=>n>1048576?(n/1048576).toFixed(1).replace('.',',')+' MB':Math.round(n/1024)+' KB';
 function updBuildLine(label,b,kind){
@@ -22,7 +23,15 @@ function updateCard(i){
  if(!WEB&&!host)return'';
  return`<div class="card reveal" style="--i:${i}"><h2>Aggiornamenti dell'app</h2><p class="sub">${isAdmin()&&WEB?'Carica qui il file della nuova versione: ogni PC e ogni telefono la mostra e si aggiorna con un tocco (la postazione di sincronizzazione da sola, di notte).':'Quando esce una nuova versione compare qui e in basso a sinistra: un tocco la scarica e riavvia Studio.'}</p>
   ${hostPart}${WEB?`<div class="upd-list">${updBuildLine('Studio per Windows',inf.windows,'windows')}${updBuildLine('App Android',inf.android,'android')}</div>`:''}
-  ${UPD.serverVersion?`<small class="muted">Server versione ${esc(UPD.serverVersion)}</small>`:''}</div>`;
+  ${serverUpdLine()}</div>`;
+}
+// the server takes new versions by itself: the owner sees that it is on, and when it last looked
+function serverUpdLine(){
+ const v=UPD.serverVersion,s=UPD.self;if(!v&&!s)return'';
+ const hm=t=>{const d=new Date(String(t).replace(' ','T'));return isNaN(d)?'':d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});};
+ if(!s)return`<small class="muted">Server versione ${esc(v)}</small>`;
+ const state=s.waiting?`sta passando alla <b>${esc(s.waiting)}</b>`:s.active?`si aggiorna da solo · ultimo controllo alle ${esc(hm(s.lastCheck))}`:'<span class="danger-text">aggiornamento automatico fermo</span>';
+ return`<div class="upd-row"><span class="orb sm">${icon('sync')}</span><div class="grow"><strong>Server dell'ufficio</strong><small class="muted">Versione <b>${esc(s.version||v)}</b> · ${state}</small></div></div>`;
 }
 async function updUpload(kind,file){
  const m=file.name.match(/(\d+\.\d+\.\d+)/);

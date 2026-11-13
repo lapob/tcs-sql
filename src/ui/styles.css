@@ -1633,3 +1633,4 @@ button.bil-row svg{width:15px;height:15px;flex:none;color:var(--text-3);transiti
 .bil-acc{padding-left:25px;animation:rowin .3s var(--ease) both}
 .bil-row.sub{font-size:12.5px;color:var(--text-3);padding:7px 6px}
 @media (max-width:640px){.bil-row .num{min-width:78px}.bil-row small.num{min-width:70px}.bil-acc{padding-left:12px}}
+span.danger-text{color:var(--bad)}

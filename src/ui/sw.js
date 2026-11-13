@@ -5,7 +5,7 @@
    Everything else under /api is never cached.
    "Server down" counts as offline too: when the office PC or the tunnel is off, the proxy in front answers
    502/503/504 or 52x/530 instead of failing the connection, and the saved copy must be used all the same. */
-const SHELL='tcs-shell-v69',API='tcs-api';
+const SHELL='tcs-shell-v70',API='tcs-api';
 const SHELL_FILES=['./','index.html','app.js','warehouse.js','accounting.js','sales.js','insights.js','analisi.js','gestures.js','edges.js','portals.js','report.js','dtr.js','ital.js','rch.js','admin.js','updates.js','work.js','registers.js','client.js','styles.css','theme.css','manifest.webmanifest','assets/tcs-app.png','assets/tcs-app@2x.png','assets/tcs-logo.png','assets/favicon-32.png','assets/favicon-64.png','assets/tcs-touch.png','offline.html','offline.js'];
 const down=s=>s===502||s===503||s===504||(s>=520&&s<=530);
 // code is asked to the server every time (cache:'no-cache' skips a stale copy the browser may keep for hours behind a proxy)

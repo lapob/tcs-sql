@@ -644,6 +644,11 @@ app.MapGet("/api/lan",(HttpContext ctx)=>{
  return Results.Ok(new{host,port,urls,publicUrl=PublicUrl()});
 }).RequireAuthorization();
 app.MapGet("/api/health",()=>Results.Ok(new{ok=true,version=hub.Version,server=typeof(Hub).Assembly.GetName().Version?.ToString(3)})).AllowAnonymous();
+// ───────────────────────── the server updates itself: as soon as a newer build lands in ..\server-update it asks the
+// "Top Cash Studio - Aggiornamento server" task (SYSTEM) to swap it in, instead of waiting for the task's 10-minute round.
+var selfUpd=new SelfUpdate(AppContext.BaseDirectory);
+_=Task.Run(async()=>{await Task.Delay(TimeSpan.FromMinutes(1));while(true){selfUpd.Tick();await Task.Delay(TimeSpan.FromSeconds(45));}});
+app.MapGet("/api/server/selfupdate",(HttpContext ctx)=>{ctx.Response.Headers.CacheControl="no-store";return Results.Ok(selfUpd.Status());}).RequireAuthorization();
 
 // ───────────────────────── app updates over the network: the administrator uploads a build once, every PC and phone picks it up.
 // Downloads are open (same files as the public GitHub release, no data inside); only an administrator can upload.
