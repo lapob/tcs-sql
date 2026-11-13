@@ -406,7 +406,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         try { api.portalEnabled(id, on); _portals.value = api.portals(); then() } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Impossibile salvare") } }
     fun portalAction(id: String, action: String, done: String) = viewModelScope.launch {
         try { api.portalAction(id, action); _messages.tryEmit(done); kotlinx.coroutines.delay(1500); _portals.value = api.portals() } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Operazione non riuscita") } }
-    suspend fun portalView(id: String) = api.portalView(id)
+    suspend fun portalView(id: String, w: Int = 0, h: Int = 0) = api.portalView(id, w, h)
     fun portalDone(id: String) = viewModelScope.launch {
         if (portalInput(id, PortalInput("done")).isSuccess) _messages.tryEmit("Controllo l’accesso: se è riuscito la lettura parte da sola")
         delay(1500); runCatching { _portals.value = api.portals() } }

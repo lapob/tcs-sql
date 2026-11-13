@@ -161,6 +161,8 @@ public abstract class PortalRunner
         if (!enabled) return;
         await Ensure(ct);
         if (running || Watching) return;
+        // the owner closed the live view: back to the desktop size the readings expect
+        if (page != null && page.ViewWidth != PortalPage.Width) { try { await page.SetViewport(PortalPage.Width, PortalPage.Height, ct); } catch { } }
         if (DateTime.Now - lastKeep > TimeSpan.FromMinutes(15))
         {
             lastKeep = DateTime.Now;
@@ -210,6 +212,7 @@ public abstract class PortalRunner
         await Ensure(CancellationToken.None);
         if (!authenticated) { await Detect(CancellationToken.None); if (!authenticated) throw new InvalidOperationException("Prima accedi al portale."); }
         running = true; lastSyncTry = DateTime.Now; sync = new CancellationTokenSource(TimeSpan.FromHours(2)); var ct = sync.Token;
+        try { await page!.SetViewport(PortalPage.Width, PortalPage.Height, ct); } catch { }
         SetStatus("Lettura in corso…");
         try
         {
@@ -243,27 +246,34 @@ public abstract class PortalRunner
     protected void Log(string kind, string message) { store.Log(kind, message.Length > 2000 ? message[..2000] : message); hub.Changed(); }
     protected string Apply(string kind, string scope, List<string> headers, List<List<string>> rows) =>
         store.ApplyPortalList(kind, Product, scope, headers, rows, DateTimeOffset.Now.ToString("O"), Name + " · server");
+    (bool C, string M, int T) lastBeat; DateTime lastBeatAt;
     protected void Heartbeat(bool connected, string message, int total = 0)
     {
         if (StatusKind == null) return;
+        // the same status again within the hour changes nothing on screen: no write, no update sent to the pages
+        if (lastBeat == (connected, message, total) && DateTime.Now - lastBeatAt < TimeSpan.FromHours(1)) return;
+        lastBeat = (connected, message, total); lastBeatAt = DateTime.Now;
         try { store.ApplyPortalList(StatusKind, Product, "Stato " + Name, [connected ? "1" : "0", message, total.ToString()], [], DateTimeOffset.Now.ToString("O"), Name + " · server"); hub.Changed(); } catch { }
     }
     protected void Expired(string message) => throw new UnauthorizedAccessException(message);
 
     // ── live picture and input for the owner's sign-in
-    public async Task<(byte[] Jpeg, string Url)> Picture()
+    public async Task<(byte[] Jpeg, string Url)> Picture(int w = 0, int h = 0)
     {
         lastView = DateTime.Now;
         if (!enabled) throw new InvalidOperationException(Name + " non è attivo sul server.");
         await Ensure(CancellationToken.None);
+        // from a phone the portal is drawn at phone size (its own mobile page), so it is readable and easy to tap
+        if (!running) await page!.SetViewport(w > 0 ? w : PortalPage.Width, h > 0 ? h : PortalPage.Height);
         return (await page!.Picture(), page.Url);
     }
     public async Task Input(PortalInput i)
     {
         lastView = DateTime.Now;
         if (!enabled || page == null) throw new InvalidOperationException(Name + " non è attivo sul server.");
-        static double X(double v) => Math.Clamp(v, 0, 1) * PortalPage.Width;
-        static double Y(double v) => Math.Clamp(v, 0, 1) * PortalPage.Height;
+        var pw = page.ViewWidth; var ph = page.ViewHeight;
+        double X(double v) => Math.Clamp(v, 0, 1) * pw;
+        double Y(double v) => Math.Clamp(v, 0, 1) * ph;
         switch (i.Kind)
         {
             case "click": await page.Click(X(i.X), Y(i.Y)); break;

@@ -49,9 +49,9 @@ public static class Backups
    if (!exists || refresh)
    {
     var tmp = local + ".new";   // the old copy stays until the new one is verified
-    try { s.Backup(tmp); SqliteConnection.ClearAllPools(); Check(tmp); File.Move(tmp, local, true); }
-    finally { if (File.Exists(tmp)) File.Delete(tmp); }
-    foreach (var old in new DirectoryInfo(dir).GetFiles("TopCash-*.sqlite").OrderByDescending(f => f.Name).Skip(Math.Max(7, cfg.KeepLocal))) old.Delete();
+    try { s.Backup(tmp); SqliteConnection.ClearAllPools(); Check(tmp); Retry(() => File.Move(tmp, local, true)); }
+    finally { if (File.Exists(tmp)) try { File.Delete(tmp); } catch { } }
+    foreach (var old in new DirectoryInfo(dir).GetFiles("TopCash-*.sqlite").OrderByDescending(f => f.Name).Skip(Math.Max(7, cfg.KeepLocal))) try { old.Delete(); } catch { } // in use: next time
     st = st with { LastLocal = DateTimeOffset.Now.ToString("O") };
     if (!refresh) s.Log("backup", now ? $"Backup creato da {who}." : "Backup automatico giornaliero creato.");
    }
@@ -68,8 +68,8 @@ public static class Backups
       var tmp = target + ".part";
       File.Copy(local, tmp, true);
       if (new FileInfo(tmp).Length != new FileInfo(local).Length) throw new IOException("copia incompleta");
-      File.Move(tmp, target, true);
-      foreach (var old in new DirectoryInfo(cfg.External).GetFiles("TopCash-*.sqlite").OrderByDescending(f => f.Name).Skip(Math.Max(7, cfg.KeepExternal))) old.Delete();
+      Retry(() => File.Move(tmp, target, true));
+      foreach (var old in new DirectoryInfo(cfg.External).GetFiles("TopCash-*.sqlite").OrderByDescending(f => f.Name).Skip(Math.Max(7, cfg.KeepExternal))) try { old.Delete(); } catch { }
       var hadError = st.Error.Length > 0;
       st = st with { LastExternal = DateTimeOffset.Now.ToString("O"), LastExternalFile = target, Error = "", ErrorAt = "" };
       if (hadError || !refresh) s.Log("backup", hadError ? $"Copia esterna dei backup di nuovo riuscita ({cfg.External})." : $"Backup copiato in {cfg.External}.");
@@ -89,6 +89,16 @@ public static class Backups
    return st;
   }
   finally { Gate.Release(); }
+ }
+
+ /// A file held for a moment (antivirus scan, indexer, a copy being read) is not an error: wait and try again.
+ static void Retry(Action a)
+ {
+  for (var i = 0; ; i++)
+  {
+   try { a(); return; }
+   catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && i < 5) { Thread.Sleep(800 * (i + 1)); }
+  }
  }
 
  static (string Db, DateTime At) lastStamp;

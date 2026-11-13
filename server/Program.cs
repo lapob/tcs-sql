@@ -620,7 +620,7 @@ app.MapGet("/api/portals/{id}/view",async(HttpContext ctx,string id)=>
 {
  if(!ctx.User.IsInRole(Roles.Owner))return PortalOwnerOnly();
  var p=portals.Get(id);if(p==null)return Results.NotFound();
- try{var (jpeg,url)=await p.Picture();ctx.Response.Headers.CacheControl="no-store";ctx.Response.Headers["X-Portal-Url"]=Uri.TryCreate(url,UriKind.Absolute,out var u)?u.Host+u.AbsolutePath:"";return Results.File(jpeg,"image/jpeg");}
+ try{int.TryParse(ctx.Request.Query["w"],out var vw);int.TryParse(ctx.Request.Query["h"],out var vh);var (jpeg,url)=await p.Picture(vw,vh);ctx.Response.Headers.CacheControl="no-store";ctx.Response.Headers["X-Portal-Url"]=Uri.TryCreate(url,UriKind.Absolute,out var u)?u.Host+u.AbsolutePath:"";return Results.File(jpeg,"image/jpeg");}
  catch(Exception ex){return Results.Json(new{error=ex.Message},statusCode:503);}
 }).RequireAuthorization("admin");
 app.MapPost("/api/portals/{id}/input",async(HttpContext ctx,string id,PortalInput i)=>

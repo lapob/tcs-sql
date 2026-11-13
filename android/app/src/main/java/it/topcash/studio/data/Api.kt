@@ -106,8 +106,8 @@ class Api(context: Context) {
     suspend fun portalEnabled(id: String, on: Boolean) { post("/api/portals/$id/enabled", json.encodeToString(PortalSwitch(on))) }
     suspend fun portalAction(id: String, action: String) { post("/api/portals/$id/$action") }
     suspend fun portalInput(id: String, i: PortalInput) { post("/api/portals/$id/input", json.encodeToString(i)) }
-    suspend fun portalView(id: String): Pair<ByteArray, String> = withContext(Dispatchers.IO) {
-        http.newCall(Request.Builder().url(url("/api/portals/$id/view")).header("Cache-Control", "no-store").get().build()).execute().use { r ->
+    suspend fun portalView(id: String, w: Int = 0, h: Int = 0): Pair<ByteArray, String> = withContext(Dispatchers.IO) {
+        http.newCall(Request.Builder().url(url("/api/portals/$id/view" + if (w > 0) "?w=$w&h=$h" else "")).header("Cache-Control", "no-store").get().build()).execute().use { r ->
             if (!r.isSuccessful) throw r.error(); r.body.bytes() to (r.header("X-Portal-Url") ?: "") }
     }
     private suspend fun post(path: String, body: String = "{}") = call { Request.Builder().url(url(path)).post(body.toRequestBody(jsonType)).build() }

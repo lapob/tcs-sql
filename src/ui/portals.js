@@ -61,7 +61,7 @@ function openPortalView(id){
  m.innerHTML=`<div class="modal-box wide pv-box" role="dialog" aria-modal="true" aria-label="Accedi a ${esc(p.name)}">
   <div class="pv-head"><div class="grow"><h3>${esc(p.name)}</h3><small class="pv-url" id="pv-url">Apertura del portale…</small></div><button class="btn ghost sm icon-only" data-pv="close" aria-label="Chiudi">${icon('close')}</button></div>
   <div class="pv-screen" id="pv-screen" tabindex="0" aria-label="Pagina del portale: tocca per cliccare"><img id="pv-img" alt="" draggable="false"><div class="pv-wait" id="pv-wait"><span class="spinner"></span></div></div>
-  <div class="pv-type"><input id="pv-input" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Tocca un campo nella pagina, poi scrivi qui" aria-label="Testo da scrivere nel portale">
+  <div class="pv-type"><input id="pv-input" class="input" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Tocca un campo nella pagina, poi scrivi qui" aria-label="Testo da scrivere nel portale">
    <button class="btn ghost sm icon-only" data-pv="eye" aria-label="Mostra o nascondi il testo" data-tip="Mostra il testo">${icon('eye')}</button></div>
   <div class="pv-keys"><button class="btn ghost sm" data-pv-key="Backspace">⌫ Cancella</button><button class="btn ghost sm" data-pv-key="Tab">Tab</button><button class="btn ghost sm" data-pv-key="Enter">Invio</button><span class="grow"></span><button class="btn ghost sm" data-pv="back">${icon('back')}Indietro</button><button class="btn ghost sm" data-pv="reload">${icon('sync')}Ricarica</button></div>
   <p class="sub pv-note">${icon('lock')} Quello che scrivi va direttamente nel portale: il server non salva password né codici.</p>
@@ -69,12 +69,16 @@ function openPortalView(id){
  document.body.append(m);
  const img=m.querySelector('#pv-img'),scr=m.querySelector('#pv-screen'),inp=m.querySelector('#pv-input'),url=m.querySelector('#pv-url'),wait=m.querySelector('#pv-wait');
  let open=true,fast=0,last='',objUrl='',timer=0;
+ // on a phone the portal is drawn at phone size by the server: its mobile page, readable and easy to tap
+ const phone=innerWidth<760,vw=phone?Math.round(Math.min(430,innerWidth-32)):0,vh=phone?Math.round(Math.max(520,Math.min(900,innerHeight*.92-250))):0;
+ if(phone){scr.style.aspectRatio=vw+'/'+vh;scr.style.width='100%';}
+ const viewUrl=`/api/portals/${id}/view`+(phone?`?w=${vw}&h=${vh}`:'');
  const send=b=>api(`/api/portals/${id}/input`,{method:'POST',body:JSON.stringify(b)}).catch(x=>toast(x.message,'alert'));
  const nudge=()=>{fast=Date.now()+2500;clearTimeout(timer);timer=setTimeout(pull,120);};
  async function pull(){
   if(!open)return;
   try{
-   const r=await fetch(`/api/portals/${id}/view`,{credentials:'same-origin',headers:{'X-Requested-With':'topcash'},cache:'no-store'});
+   const r=await fetch(viewUrl,{credentials:'same-origin',headers:{'X-Requested-With':'topcash'},cache:'no-store'});
    if(r.ok){const b=await r.blob();const u=URL.createObjectURL(b);img.src=u;if(objUrl)URL.revokeObjectURL(objUrl);objUrl=u;wait.hidden=true;url.textContent=r.headers.get('X-Portal-Url')||'';}
    else{const d=await r.json().catch(()=>({}));url.textContent=d.error||'Portale non disponibile';}
   }catch{url.textContent='Server non raggiungibile';}

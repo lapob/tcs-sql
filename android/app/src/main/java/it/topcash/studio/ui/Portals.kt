@@ -162,9 +162,12 @@ private fun whenText(iso: String): String = runCatching {
     var show by remember { mutableStateOf(false) }
     var size by remember { mutableStateOf(IntSize.Zero) }
     fun send(i: PortalInput) = scope.launch { vm.portalInput(p.id, i); fastUntil = System.currentTimeMillis() + 2500 }
+    // the server draws the portal at this phone's size (its mobile page): readable and easy to tap
+    val conf = androidx.compose.ui.platform.LocalConfiguration.current
+    val vw = conf.screenWidthDp.coerceIn(320, 600) - 24; val vh = (conf.screenHeightDp - 300).coerceIn(480, 900)
     LaunchedEffect(p.id) {
         while (true) {
-            try { val (bytes, u) = vm.portalView(p.id); BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { img = it.asImageBitmap() }; url = u.ifBlank { url } }
+            try { val (bytes, u) = vm.portalView(p.id, vw, vh); BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { img = it.asImageBitmap() }; url = u.ifBlank { url } }
             catch (e: Exception) { url = e.message ?: "Portale non disponibile" }
             delay(if (System.currentTimeMillis() < fastUntil) 250 else 900)
         }

@@ -169,6 +169,18 @@ public sealed class PortalPage
     public Action? UrlChanged { get; set; }
     TaskCompletionSource<bool>? load;
     public const int Width = 1280, Height = 860;
+    /// Size the page is drawn at now: the desktop size, or a phone size while the owner signs in from a phone.
+    public int ViewWidth { get; private set; } = Width;
+    public int ViewHeight { get; private set; } = Height;
+    public async Task SetViewport(int w, int h, CancellationToken ct = default)
+    {
+        w = Math.Clamp(w, 320, Width); h = Math.Clamp(h, 480, 1000);
+        if (w == ViewWidth && h == ViewHeight) return;
+        var mobile = w < 760;
+        await Cmd("Emulation.setDeviceMetricsOverride", new { width = w, height = h, deviceScaleFactor = mobile ? 2 : 1, mobile }, ct);
+        await Cmd("Emulation.setTouchEmulationEnabled", new { enabled = mobile, maxTouchPoints = mobile ? 5 : 0 }, ct);
+        ViewWidth = w; ViewHeight = h;
+    }
 
     PortalPage(HeadlessBrowser b, Func<string, bool> allowed) { this.b = b; this.allowed = allowed; }
 
@@ -256,7 +268,7 @@ public sealed class PortalPage
 
     public async Task<byte[]> Picture(CancellationToken ct = default)
     {
-        var r = await Cmd("Page.captureScreenshot", new { format = "jpeg", quality = 62, captureBeyondViewport = false }, ct);
+        var r = await Cmd("Page.captureScreenshot", new { format = "jpeg", quality = ViewWidth < 760 ? 70 : 62, captureBeyondViewport = false }, ct);
         return Convert.FromBase64String(r.GetProperty("data").GetString() ?? "");
     }
 
