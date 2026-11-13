@@ -41,8 +41,9 @@ public sealed partial class Store
   try
   {
    using var c = Open(); using var q = c.CreateCommand();
-   q.CommandText = "SELECT json_extract(data,'$.Technician') FROM interventions WHERE source<>'deleted'";
-   using var rd = q.ExecuteReader(); while (rd.Read()) if (!rd.IsDBNull(0)) Seen(rd.GetString(0));
+   // counted by the database, one row per spelling: the names are cleaned once each, not once per intervention
+   q.CommandText = "SELECT json_extract(data,'$.Technician') t, count(*) FROM interventions WHERE source<>'deleted' GROUP BY t";
+   using var rd = q.ExecuteReader(); while (rd.Read()) if (!rd.IsDBNull(0)) Seen(rd.GetString(0), rd.GetInt32(1));
   }
   catch (SqliteException) { }
   var people = jobs.Select(kv => new RosterPerson(kv.Key, HiddenTech(kv.Key, r), agents.Contains(kv.Key), account.GetValueOrDefault(kv.Key, ""), kv.Value, IsGroup(kv.Key)))
