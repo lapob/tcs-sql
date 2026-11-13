@@ -112,6 +112,7 @@ import kotlinx.coroutines.launch
 @Composable private fun PortalCard(p: PortalView, modifier: Modifier, onEnable: () -> Unit, onSync: () -> Unit, onOpen: () -> Unit, onStop: () -> Unit, onOff: () -> Unit, onForget: () -> Unit) {
     val (tone, state) = when {
         !p.enabled -> Tone.Neutral to "Lo legge la postazione dell’ufficio"
+        p.blocked -> Tone.Due to "Lo legge la postazione dell’ufficio: il portale chiede la verifica anti-robot di Cloudflare, che il server non può superare"
         p.running -> Tone.Info to p.status.ifBlank { "Lettura in corso…" }
         p.connected -> Tone.Ok to "Sul server · ${if (p.lastSync.isNotBlank()) "aggiornato " + whenText(p.lastSync) else "prima lettura in arrivo"} · ${p.every}"
         else -> Tone.Bad to p.error.ifBlank { "Sul server · serve il tuo accesso" }
@@ -123,11 +124,12 @@ import kotlinx.coroutines.launch
                 Text(p.name, style = MaterialTheme.typography.titleMedium)
                 Text(state, style = MaterialTheme.typography.bodySmall, color = if (tone == Tone.Bad) LocalStatus.current.of(Tone.Bad) else MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Pill(when { !p.enabled -> "Postazione"; p.running -> "In lettura"; p.connected -> "Collegato"; else -> "Da collegare" }, tone)
+            Pill(when { !p.enabled -> "Postazione"; p.blocked -> "Postazione"; p.running -> "In lettura"; p.connected -> "Collegato"; else -> "Da collegare" }, tone)
         }
         Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             when {
                 !p.enabled -> FilledTonalButton(onEnable) { Icon(Icons.Rounded.Cloud, null, Modifier.size(18.dp)); Spacer(Modifier.size(6.dp)); Text("Sposta sul server") }
+                p.blocked -> OutlinedButton(onOpen) { Icon(Icons.Rounded.Sync, null, Modifier.size(18.dp)); Spacer(Modifier.size(6.dp)); Text("Riprova sul server") }
                 p.connected -> OutlinedButton(onSync, enabled = !p.running) { Icon(Icons.Rounded.Sync, null, Modifier.size(18.dp)); Spacer(Modifier.size(6.dp)); Text(if (p.running) "In lettura" else "Aggiorna ora") }
                 else -> Button(onOpen) { Icon(Icons.Rounded.Lock, null, Modifier.size(18.dp)); Spacer(Modifier.size(6.dp)); Text("Accedi") }
             }

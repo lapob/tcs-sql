@@ -8,7 +8,7 @@ public sealed record PortalServerConfig(List<string> Enabled, string UpdatedAt =
 
 /// What the owner sees for each portal kept by the server.
 public sealed record PortalView(string Id, string Name, bool Enabled, bool Browser, bool Connected, bool Running, string Status,
-    string LastSync, string Error, string Url, string Every);
+    string LastSync, string Error, string Url, string Every, bool Blocked = false);
 
 /// The portals kept by the server: MY Zucchetti (licences, customers, web orders), DTR-Service, Ital Retail and RCH XDealer.
 /// Each one runs in its own headless browser with its own private profile; the owner signs in once through the live
@@ -79,13 +79,18 @@ public abstract class PortalRunner
     readonly SemaphoreSlim life = new(1, 1);
     CancellationTokenSource? loop, sync;
     bool enabled, running, authenticated, everAuthenticated, noSandbox;
+    /// The portal put a Cloudflare robot check in front of its sign-in: a browser without a screen never passes it, so the
+    /// server stops trying (one new look a day, in case the portal drops it) and the office station keeps reading this portal.
+    DateTime blockedAt = DateTime.MinValue;
+    public bool Blocked => blockedAt != DateTime.MinValue;
+    const string BlockedText = "Il portale chiede la verifica anti-robot di Cloudflare, che il server non può superare: lo legge la postazione in ufficio.";
     string status = "", error = "";
     DateTime lastKeep = DateTime.MinValue, lastView = DateTime.MinValue, lastStartFail = DateTime.MinValue, lastSyncTry = DateTime.MinValue;
     int startFails;
 
     public bool Connected => enabled && authenticated;
     public PortalView View(bool hostedFlag) => new(Id, Name, hostedFlag, browser?.Alive == true, authenticated, running,
-        status, LastSyncStored(), error, browser?.Alive == true ? Host(page?.Url) : "", Every.TotalHours >= 1 ? $"ogni {Every.TotalHours:0} ore" : $"ogni {Every.TotalMinutes:0} minuti");
+        status, LastSyncStored(), error, browser?.Alive == true ? Host(page?.Url) : "", Every.TotalHours >= 1 ? $"ogni {Every.TotalHours:0} ore" : $"ogni {Every.TotalMinutes:0} minuti", Blocked && !authenticated);
     static string Host(string? url) => Uri.TryCreate(url, UriKind.Absolute, out var u) ? u.Host : "";
 
     public void Enable()
@@ -159,6 +164,12 @@ public abstract class PortalRunner
     async Task Tick(CancellationToken ct)
     {
         if (!enabled) return;
+        // blocked by the robot check: the browser stays closed, one new look a day (or when the owner opens the page)
+        if (Blocked && !Watching)
+        {
+            if (DateTime.Now - blockedAt < TimeSpan.FromHours(24)) { if (browser != null) { await life.WaitAsync(ct); try { await CloseBrowser(); } finally { life.Release(); } } return; }
+            blockedAt = DateTime.MinValue;
+        }
         await Ensure(ct);
         if (running || Watching) return;
         // the owner closed the live view: back to the desktop size the readings expect
@@ -185,6 +196,16 @@ public abstract class PortalRunner
         {
             bool now;
             try { now = await SignedIn(ct); } catch { return; }
+            if (now) { if (Blocked) { blockedAt = DateTime.MinValue; hub.Changed(); } }
+            else if (await CloudflareWall(ct))
+            {
+                var first = !Blocked;
+                blockedAt = DateTime.Now; authenticated = false; status = BlockedText;
+                // no status written: the office station is the one reading this portal, its state stays on screen
+                if (first) { Log("portal", Name + ": " + BlockedText); hub.Changed(); }
+                return;
+            }
+            else if (Blocked) { blockedAt = DateTime.MinValue; hub.Changed(); }
             if (now == authenticated) { if (!now) status = "Accesso richiesto: apri il portale e accedi"; return; }
             authenticated = now;
             if (now)
@@ -197,11 +218,19 @@ public abstract class PortalRunner
             else
             {
                 status = "Accesso richiesto: apri il portale e accedi";
-                if (everAuthenticated || StatusKind != null) Heartbeat(false, "Accesso richiesto");
+                // only a session the server had and lost is reported: before its first sign-in the station's state is the true one
+                if (everAuthenticated) Heartbeat(false, "Accesso richiesto");
             }
             hub.Changed();
         }
         finally { detectGate.Release(); }
+    }
+
+    /// A Cloudflare challenge (Turnstile box or the "just a moment" page) on the page shown: read only, nothing is clicked.
+    async Task<bool> CloudflareWall(CancellationToken ct)
+    {
+        const string js = "(()=>{const q=s=>document.querySelector(s);return !!(q('iframe[src*=\"challenges.cloudflare.com\"]')||q('script[src*=\"challenges.cloudflare.com\"]')||q('.cf-turnstile')||q('input[name=\"cf-turnstile-response\"]')||q('#challenge-form')||q('#cf-challenge-running')||/^(just a moment|un momento)/i.test(document.title))})()";
+        try { return (await Js(js, ct)).Trim() == "true"; } catch { return false; }
     }
 
     /// Reads the portal now (owner's "Aggiorna ora", or the schedule). Never two reads at once.

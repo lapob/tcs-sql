@@ -63,7 +63,9 @@ import kotlinx.serialization.Serializable
 /** Last read of Mastro (the server does it by itself every hour). */
 /** Analisi: computed by the server from Mastro at every read, the same figures the site shows. */
 @Serializable data class PortalView(val id: String = "", val name: String = "", val enabled: Boolean = false, val browser: Boolean = false, val connected: Boolean = false, val running: Boolean = false,
-    val status: String = "", val lastSync: String = "", val error: String = "", val url: String = "", val every: String = "")
+    val status: String = "", val lastSync: String = "", val error: String = "", val url: String = "", val every: String = "",
+    /** the portal asks for Cloudflare's robot check: the server cannot pass it, the office station keeps reading it */
+    val blocked: Boolean = false)
 @Serializable data class PortalList(val portals: List<PortalView> = emptyList(), val browser: Boolean = false)
 @Serializable data class PortalSwitch(val enabled: Boolean)
 @Serializable data class PortalInput(val kind: String, val x: Double = 0.0, val y: Double = 0.0, val dy: Double = 0.0, val text: String? = null)
