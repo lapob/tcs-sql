@@ -258,7 +258,14 @@ app.MapPost("/api/devices/{id}/{action}",(HttpContext ctx,string id,string actio
 }).RequireAuthorization("admin");
 // requests waiting for approval (outside the office): the administrators see a counter on Utenti
 app.MapGet("/api/devices/pending",()=>Results.Ok(new{count=devices.List().Count(d=>d.Status==Devices.Pending)})).RequireAuthorization("admin");
-app.MapGet("/api/users",(HttpContext ctx)=>Results.Ok(new{security=store.SecurityEvents(),devices=devices.List(),thisDevice=(ctx.Items["device"] as DeviceInfo)?.Id??"",tunnelPort,users=users.List().Select(u=>new{u.Username,u.Name,u.Role,roleLabel=Roles.Label(u.Role),u.Disabled,u.Created,u.LastLogin}),syncTokenCreated=users.SyncTokenCreated(),stationLastContact=hub.LastStationContact==default?"":hub.LastStationContact.ToString("O"),connected=hub.Connected})).RequireAuthorization("admin");
+app.MapGet("/api/users",(HttpContext ctx)=>Results.Ok(new{roster=store.RosterView(),security=store.SecurityEvents(),devices=devices.List(),thisDevice=(ctx.Items["device"] as DeviceInfo)?.Id??"",tunnelPort,users=users.List().Select(u=>new{u.Username,u.Name,u.Role,roleLabel=Roles.Label(u.Role),u.Disabled,u.Created,u.LastLogin}),syncTokenCreated=users.SyncTokenCreated(),stationLastContact=hub.LastStationContact==default?"":hub.LastStationContact.ToString("O"),connected=hub.Connected})).RequireAuthorization("admin");
+// the team list: who is hidden everywhere and who is also an agent (by surname)
+app.MapPost("/api/team/roster",(HttpContext ctx,RosterSave r)=>
+{
+ store.SaveRoster(r?.Hidden,r?.Agents,Who(ctx));
+ store.Log("users",$"{Who(ctx)} ha aggiornato tecnici e agenti: agenti {string.Join(", ",Store.AgentSet(store.Roster()))}.");hub.Changed();
+ return Results.Ok(store.RosterView());
+}).RequireAuthorization("admin");
 // only an owner can create, change or remove an owner (and nobody else can lock the owner out)
 IResult? OwnerOnly(HttpContext ctx,string? targetUser,string? newRole)
 {
@@ -494,6 +501,24 @@ app.MapPost("/api/settings/weekly/send",async(HttpContext ctx,WeeklyRequest r)=>
 
 // ───────────────────────── settings: e-mail for reports, external backups (administrators)
 app.MapGet("/api/settings/mail",()=>Results.Ok(store.MailView())).RequireAuthorization("admin");
+// how often the server reads Mastro by itself: only the owner sees and changes it
+app.MapGet("/api/settings/mastro-auto",(HttpContext ctx)=>ctx.User.IsInRole(Roles.Owner)?Results.Ok(store.MastroAutoRule()):Results.Json(new{error="Solo il proprietario."},statusCode:403)).RequireAuthorization("admin");
+app.MapPost("/api/settings/mastro-auto",(HttpContext ctx,MastroAutoSave r)=>
+{
+ if(!ctx.User.IsInRole(Roles.Owner))return Results.Json(new{error="Solo il proprietario può cambiare la lettura automatica di Mastro."},statusCode:403);
+ MastroSchedule rule;try{rule=store.SaveMastroAuto(r?.Enabled??true,r?.Minutes??30,r?.From??6,r?.To??22,Who(ctx));}catch(InvalidDataException ex){return Bad(ex.Message);}
+ store.Log("mastro",$"{Who(ctx)}: lettura automatica di Mastro {(rule.Enabled?$"ogni {rule.Minutes} minuti dalle {rule.From} alle {rule.To}":"disattivata")}.");hub.Changed();
+ return Results.Ok(rule);
+}).RequireAuthorization("admin");
+// open interventions that close by themselves after N days (the office decides: on/off and how many days)
+app.MapGet("/api/settings/interventions",()=>Results.Ok(store.AutoClose())).RequireAuthorization("export");
+app.MapPost("/api/settings/interventions",(HttpContext ctx,AutoCloseSave r)=>
+{
+ AutoCloseRule rule;try{rule=store.SaveAutoClose(r?.Enabled??true,r?.Days??30,Who(ctx));}catch(InvalidDataException ex){return Bad(ex.Message);}
+ store.Log("interventions",$"{Who(ctx)}: chiusura automatica {(rule.Enabled?$"attiva, dopo {rule.Days} giorni":"disattivata")}.");
+ var closed=store.CloseOldInterventions();hub.Changed();
+ return Results.Ok(new{rule.Enabled,rule.Days,rule.UpdatedAt,rule.UpdatedBy,closed});
+}).RequireAuthorization("export");
 app.MapPost("/api/settings/mail",(HttpContext ctx,MailConfigInput i)=>{try{var v=store.SaveMail(i,Who(ctx));hub.Changed();return Results.Ok(v);}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin");
 app.MapPost("/api/settings/mail/test",async(HttpContext ctx,SendReportRequest r)=>{try{await Mailer.SendTest(store,r?.To??"",Who(ctx));return Results.Ok();}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin").RequireRateLimiting("mail");
 object BackupInfo(BackupStatus? st=null)=>new{config=Backups.Config(store),status=st??Backups.Status(store),local=Path.GetFullPath(Path.Combine(dataDir,"backups"))};
@@ -587,8 +612,11 @@ app.Lifetime.ApplicationStopping.Register(()=>backupTimer.Dispose());
 var weeklyTimer=new Timer(_=>{WeeklyReport.Tick(store,DateTime.Now).ContinueWith(t=>{if(t.Exception!=null)store.Log("error","Riepilogo settimanale: "+t.Exception.GetBaseException().Message);});},null,TimeSpan.FromMinutes(2),TimeSpan.FromMinutes(30));
 app.Lifetime.ApplicationStopping.Register(()=>weeklyTimer.Dispose());
 // Mastro read by itself (strictly read-only, same RETE.ini as the Windows app): every hour from 6 to 22, a few minutes after start.
-var mastroTimer=new Timer(_=>{MastroAuto.Tick(store,hub).ContinueWith(t=>{if(t.Exception!=null)store.Log("error","Lettura automatica Mastro: "+t.Exception.GetBaseException().Message);});},null,TimeSpan.FromMinutes(3),TimeSpan.FromMinutes(15));
+var mastroTimer=new Timer(_=>{MastroAuto.Tick(store,hub).ContinueWith(t=>{if(t.Exception!=null)store.Log("error","Lettura automatica Mastro: "+t.Exception.GetBaseException().Message);});},null,TimeSpan.FromMinutes(3),TimeSpan.FromMinutes(5));
 app.Lifetime.ApplicationStopping.Register(()=>mastroTimer.Dispose());
+// open interventions older than the chosen days close by themselves (checked every hour, also right after start)
+var autoCloseTimer=new Timer(_=>{try{if(store.CloseOldInterventions()>0)hub.Changed();}catch(Exception ex){store.Log("error","Chiusura automatica interventi: "+ex.Message);}},null,TimeSpan.FromMinutes(2),TimeSpan.FromHours(1));
+app.Lifetime.ApplicationStopping.Register(()=>autoCloseTimer.Dispose());
 // The Windows app (Mastro import, portals on this PC) and other tools write the same archive directly, without going through
 // this server: SQLite's data_version (on one connection kept open) changes whenever another connection commits, so every
 // device gets the new data within a few seconds instead of waiting for the next change made here.
@@ -635,6 +663,9 @@ record ClientDeleteRequest(string? Code,bool Deleted);
 record LicenseSaveRequest(string? Id,LicenseEdit? Edit);
 record UserUpdate(string? Role,bool? Disabled,string? Name,string? Password);
 record UserRename(string? Username);
+record RosterSave(List<string>? Hidden,List<string>? Agents);
+record AutoCloseSave(bool? Enabled,int? Days);
+record MastroAutoSave(bool? Enabled,int? Minutes,int? From,int? To);
 record CrashReport(string? Platform,string? Version,string? Text);
 record NoteRequest(string Code,string? Note);
 record MetaRequest(string Code,ClientMeta Meta);

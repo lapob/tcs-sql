@@ -1,5 +1,6 @@
 package it.topcash.studio.ui
 
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
@@ -138,9 +139,11 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
     var menu by rememberSaveable(x.i.id) { mutableStateOf(false) }
     val card: @Composable () -> Unit = {
         CardBox(Modifier, onClick = onClick, padding = PaddingValues(0.dp), onLongClick = if (canClose || canPrint) ({ haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress); menu = !menu }) else null) {
-            Row(Modifier.heightIn(min = 72.dp).height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
-                Box(Modifier.width(5.dp).fillMaxHeight().background(stripe.copy(alpha = if (x.i.status == "Chiuso") 0.25f else 0.9f)))
-                Column(Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 12.dp)) {
+            // the status stripe is drawn behind the row (not measured): the row's height follows the menu animation frame by frame,
+            // so the card below never overlaps it while the actions open or close
+            val stripeColor = stripe.copy(alpha = if (x.i.status == "Chiuso") 0.25f else 0.9f)
+            Row(Modifier.heightIn(min = 72.dp).drawBehind { drawRect(stripeColor, size = androidx.compose.ui.geometry.Size(5.dp.toPx(), size.height)) }) {
+                Column(Modifier.weight(1f).padding(start = 19.dp, end = 14.dp, top = 12.dp, bottom = 12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(x.i.title.ifBlank { "Intervento" }, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                         prioTone(x.i.priority)?.let { Pill(x.i.priority, it, Modifier.padding(start = 8.dp, end = 6.dp)) }
@@ -151,8 +154,8 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
                         x.i.reportNo.takeIf { x.i.signedAt.isNotBlank() }?.let { "firmato n. $it" }).filterNotNull().joinToString(" · "),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
                     androidx.compose.animation.AnimatedVisibility(menu && vm != null && (canClose || canPrint),
-                        enter = androidx.compose.animation.expandVertically(androidx.compose.animation.core.spring(dampingRatio = 0.85f, stiffness = 500f)) + androidx.compose.animation.fadeIn(),
-                        exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut()) {
+                        enter = androidx.compose.animation.expandVertically(androidx.compose.animation.core.spring(dampingRatio = 0.9f, stiffness = 500f)) + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(180, delayMillis = 60)),
+                        exit = androidx.compose.animation.shrinkVertically(androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 600f)) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(110))) {
                         if (vm != null) QuickActions(vm, x.i, canClose, canPrint, onSign = onClick, onDone = { menu = false })
                     }
                 }

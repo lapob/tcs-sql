@@ -68,8 +68,8 @@ import kotlinx.serialization.Serializable
 @Serializable data class AnaWeek(val start: String = "", val `in`: Double = 0.0, val inSure: Double = 0.0, val out: Double = 0.0, val net: Double = 0.0, val cumulative: Double = 0.0)
 @Serializable data class AnaAbc(val clientCode: String = "", val name: String = "", val `class`: String = "", val revenue: Double = 0.0, val prev: Double = 0.0, val share: Double = 0.0, val rank: Int = 0)
 @Serializable data class AnaAbcClass(val `class`: String = "", val clients: Int = 0, val revenue: Double = 0.0, val share: Double = 0.0)
-@Serializable data class AnaAgent(val code: String = "", val name: String = "", val revenue: Double = 0.0, val prev: Double = 0.0, val margin: Double = 0.0, val marginPct: Double = 0.0, val clients: Int = 0, val topFamily: String = "", val discounts: Double = 0.0)
-@Serializable data class AnaTech(val name: String = "", val jobs: Int = 0, val verifications: Int = 0, val amount: Double = 0.0, val hours: Double = 0.0, val clients: Int = 0, val open: Int = 0)
+@Serializable data class AnaAgent(val code: String = "", val name: String = "", val revenue: Double = 0.0, val prev: Double = 0.0, val margin: Double = 0.0, val marginPct: Double = 0.0, val clients: Int = 0, val topFamily: String = "", val discounts: Double = 0.0, val agent: Boolean = false)
+@Serializable data class AnaTech(val name: String = "", val jobs: Int = 0, val verifications: Int = 0, val amount: Double = 0.0, val hours: Double = 0.0, val clients: Int = 0, val open: Int = 0, val agent: Boolean = false)
 @Serializable data class AnaMachine(val id: String = "", val clientCode: String = "", val name: String = "", val model: String = "", val serial: String = "", val contract: Double = 0.0, val interventions: Double = 0.0, val verification: Double = 0.0, val total: Double = 0.0)
 @Serializable data class AnaModel(val model: String = "", val machines: Int = 0, val total: Double = 0.0, val average: Double = 0.0)
 @Serializable data class AnaDiscount(val key: String = "", val name: String = "", val sub: String = "", val given: Double = 0.0, val revenue: Double = 0.0, val lines: Int = 0)
@@ -197,9 +197,17 @@ object Catalog {
 @Serializable data class SavedCode(val code: String = "")
 @Serializable data class UserRow(val username: String = "", val name: String = "", val role: String = "", val roleLabel: String = "", val disabled: Boolean = false,
     val created: String = "", val lastLogin: String = "")
-@Serializable data class UsersResponse(val users: List<UserRow> = emptyList())
+@Serializable data class UsersResponse(val users: List<UserRow> = emptyList(), val roster: RosterView? = null)
+/** The team by surname: agent (also sells, stays a technician) and hidden (never shown anywhere). */
+@Serializable data class RosterPerson(val name: String = "", val hidden: Boolean = false, val agent: Boolean = false, val username: String = "", val jobs: Int = 0, val group: Boolean = false)
+@Serializable data class RosterView(val people: List<RosterPerson> = emptyList(), val updatedAt: String = "", val updatedBy: String = "")
+/** Open interventions that close by themselves after [days] days (same setting on website, Windows and Android). */
+@Serializable data class AutoCloseRule(val enabled: Boolean = true, val days: Int = 30, val updatedAt: String = "", val updatedBy: String = "", val closed: Int = 0)
+@Serializable data class AutoCloseSave(val enabled: Boolean, val days: Int)
+@Serializable data class RosterSave(val hidden: List<String>, val agents: List<String>)
 @Serializable data class UserCreate(val username: String, val name: String, val role: String, val password: String)
 @Serializable data class UserPatch(val role: String? = null, val disabled: Boolean? = null, val name: String? = null, val password: String? = null)
+@Serializable data class UserRename(val username: String)
 @Serializable data class PasswordChange(val current: String, val password: String)
 
 // ── 2.9.0: machines to check, round of the day, photos, notices

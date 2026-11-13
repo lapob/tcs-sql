@@ -69,7 +69,7 @@ const kShort=v=>{const a=Math.abs(v);return a>=1e6?(a/1e6).toFixed(1).replace('.
 /** when Mastro was last read (the server does it by itself every hour) */
 function salesSynced(){const at=state.mastroSync?.at?new Date(state.mastroSync.at):null;if(!at||isNaN(at))return'';
  const today=at.toDateString()===new Date().toDateString();
- return ` <span class="sal-sync"><i></i>Aggiornato da Mastro ${today?'alle '+at.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'il '+at.toLocaleDateString('it-IT',{day:'numeric',month:'short'})} · in automatico ogni ora</span>`;}
+ return ` <span class="sal-sync"><i></i>Aggiornato da Mastro ${today?'alle '+at.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'il '+at.toLocaleDateString('it-IT',{day:'numeric',month:'short'})} · in automatico ogni mezz’ora</span>`;}
 function salesPage(){
  const S=deriveSales(),c=S.cur,p=S.cmp,rg=S.rg;
  const margin=c.cRev-c.cost,mPct=c.cRev>0?margin/c.cRev*100:null,pMargin=p.cRev-p.cost;
@@ -80,7 +80,7 @@ function salesPage(){
  const periods=[['ytd','Quest’anno'],['12m','12 mesi'],...S.years.filter(y=>y<String(new Date().getFullYear())).slice(0,4).map(y=>[y,y])];
  return`${hero('Vendite e <span class="grad">margini</span>.',`Cosa hai venduto, cosa hai comprato e quanto ti resta: righe delle fatture e conti di Mastro, ${esc(rg.label)}, confrontati con ${esc(rg.cmpLabel)}.${salesSynced()}`)}
  <div class="sal-period reveal" style="--i:1"><div class="seg" role="tablist" aria-label="Periodo">${periods.map(([k,l])=>`<button role="tab" class="${sui.p===k?'active':''}" aria-selected="${sui.p===k}" data-sal-p="${k}">${l}</button>`).join('')}</div></div>
- ${c.has||p.has?'':`<div class="card reveal" style="--i:2">${empty('chart','Le vendite stanno arrivando','Il server legge MastroSQL da solo ogni ora (sola lettura): righe delle fatture e conti compaiono qui alla prossima lettura. Per averle subito: Impostazioni → Importa da MastroSQL.')}</div>`}
+ ${c.has||p.has?'':`<div class="card reveal" style="--i:2">${empty('chart','Le vendite stanno arrivando','Il server legge MastroSQL da solo ogni mezz’ora (sola lettura): righe delle fatture e conti compaiono qui alla prossima lettura. Per averle subito: Impostazioni → Importa da MastroSQL.')}</div>`}
  <div class="kpis sal-kpis">
   <div class="card kpi t-info reveal" style="--i:2" data-tip="Imponibile delle righe di fattura (quantità × prezzo), note di credito escluse"><div class="kpi-top"><span>Emesso</span><span class="kpi-icon">${icon('upload')}</span></div><div class="kpi-value acc-v">${DFE0.format(c.rev)}</div><div class="kpi-note">${delta(c.rev,p.rev)} ${c.nc?`− ${DFE0.format(c.nc)} di note di credito`:'fatture ai clienti'}</div></div>
   <div class="card kpi reveal" style="--i:3" data-tip="Fatture dei fornitori registrate in Mastro, per conto di contropartita"><div class="kpi-top"><span>Acquisti</span><span class="kpi-icon">${icon('download')}</span></div><div class="kpi-value acc-v">${DFE0.format(c.F)}</div><div class="kpi-note">${delta(c.F,p.F,true)} ${plur([...c.bySup.keys()].length,'fornitore','fornitori')}</div></div>

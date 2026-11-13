@@ -12,6 +12,8 @@ public sealed record Machine(string Id,string ClientCode,string Model,string Typ
  string Service="",string Technician="",string WarrantyEnd="",string Months="",string ContractUntil="");
 /// Technical intervention / ticket. Source "mastro" = history imported from Mastro, "app" = created or edited in Top Cash Studio.
 /// Origin "mastro" = imported from Mastro and then edited here: it keeps Mastro's id, and later imports never overwrite it.
+public sealed record MastroSchedule(bool Enabled, int Minutes, int From, int To, string UpdatedAt = "", string UpdatedBy = "");
+public sealed record AutoCloseRule(bool Enabled, int Days, string UpdatedAt = "", string UpdatedBy = "");
 public sealed record Intervention(string Id,string ClientCode,string ClientName,string Date,string Machine,string Title,string Work,string Status,
  string Technician,string Priority,string Total,string Source,string Created,string CreatedBy,string Updated,string UpdatedBy,List<PartUse>? Parts=null,
  string Hours="",string Signer="",string SignedAt="",string ReportNo="",string SentTo="",string SentAt="",string Kind="",string Origin="");
@@ -163,6 +165,50 @@ public sealed partial class Store
   SyncInterventionParts(c,tx,rec,who);
   tx.Commit();
   return rec;
+ }
+ /// Open interventions older than N days close by themselves (setting, on by default with 30 days, changeable from every app).
+ /// Closed, not deleted: they stay in the client's history; one imported from Mastro becomes the app's own copy, so the next read does not reopen it.
+ public static readonly AutoCloseRule DefaultAutoClose = new(true, 30);
+ /// How often the server reads Mastro by itself (owner's setting): every [Minutes] between [From] and [To] o'clock.
+ public MastroSchedule MastroAutoRule() => Setting<MastroSchedule>("mastro.auto") ?? new(true, 30, 6, 22);
+ public MastroSchedule SaveMastroAuto(bool enabled, int minutes, int from, int to, string who)
+ {
+  if (minutes is < 10 or > 1440) throw new InvalidDataException("Ogni quanti minuti: da 10 a 1440.");
+  if (from is < 0 or > 23 || to is < 1 or > 24 || to <= from) throw new InvalidDataException("Orari non validi.");
+  var r = new MastroSchedule(enabled, minutes, from, to, DateTimeOffset.Now.ToString("O"), who); SetSetting("mastro.auto", r); return r;
+ }
+ public AutoCloseRule AutoClose() => Setting<AutoCloseRule>("interventions.autoclose") ?? DefaultAutoClose;
+ public AutoCloseRule SaveAutoClose(bool enabled, int days, string who)
+ {
+  if (days is < 1 or > 3650) throw new InvalidDataException("Giorni non validi (da 1 a 3650).");
+  var r = new AutoCloseRule(enabled, days, DateTimeOffset.Now.ToString("O"), who);
+  SetSetting("interventions.autoclose", r); return r;
+ }
+ /// Closes the open, unsigned interventions dated more than [days] days ago. Returns how many were closed.
+ public int CloseOldInterventions(DateTime? today = null)
+ {
+  var rule = AutoClose(); if (!rule.Enabled) return 0;
+  var limit = (today ?? DateTime.Today).AddDays(-rule.Days);
+  var now = DateTimeOffset.Now.ToString("O"); var n = 0;
+  using var c = Open(); using var tx = c.BeginTransaction();
+  var rows = new List<(string Id, string Source, Intervention I)>();
+  using (var q = c.CreateCommand())
+  {
+   q.Transaction = tx; q.CommandText = "SELECT id,source,data FROM interventions WHERE source<>'deleted'";
+   using var rd = q.ExecuteReader();
+   while (rd.Read()) { var i = JsonSerializer.Deserialize<Intervention>(rd.GetString(2)); if (i != null) rows.Add((rd.GetString(0), rd.GetString(1), i)); }
+  }
+  foreach (var (id, src, i) in rows)
+  {
+   if (i.Status == "Chiuso" || !string.IsNullOrEmpty(i.SignedAt)) continue;
+   if (!DateTime.TryParseExact((i.Date ?? "").Length >= 10 ? i.Date![..10] : "", "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d) || d >= limit) continue;
+   var rec = i with { Status = "Chiuso", Source = "app", Origin = src == "mastro" ? "mastro" : i.Origin ?? "", Updated = now, UpdatedBy = $"Chiusura automatica (oltre {rule.Days} giorni)" };
+   using var u = c.CreateCommand(); u.Transaction = tx; u.CommandText = "UPDATE interventions SET source='app',data=$d WHERE id=$i";
+   u.Parameters.AddWithValue("$d", JsonSerializer.Serialize(rec)); u.Parameters.AddWithValue("$i", id); n += u.ExecuteNonQuery();
+  }
+  tx.Commit();
+  if (n > 0) Log("interventions", $"Chiusi in automatico {n} interventi aperti da oltre {rule.Days} giorni (Impostazioni → Interventi per cambiare i giorni o disattivare).");
+  return n;
  }
  public void DeleteIntervention(string id)
  {

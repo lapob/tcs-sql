@@ -116,7 +116,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
             val ac = a.acc
             item(key = "acc") {
                 MoreGroup("Contabilità") {
-                    if (!ac.hasData) MoreRow(Icons.Rounded.Euro, "Nessun dato contabile", "Fatture, incassi e pagamenti arrivano da MastroSQL da soli, ogni ora", Modifier.appear(0)) { nav.switchTab("acc") }
+                    if (!ac.hasData) MoreRow(Icons.Rounded.Euro, "Nessun dato contabile", "Fatture, incassi e pagamenti arrivano da MastroSQL da soli, ogni mezz’ora", Modifier.appear(0)) { nav.switchTab("acc") }
                     else {
                         a.state.insights?.let { ins ->
                             MoreRow(Icons.Rounded.AutoAwesome, "Priorità", "${ins.unbilled.size} da fatturare · ${ins.payers.size} pagano tardi · ${ins.opps.size} da vendere", Modifier.appear(0)) { nav.navigate("accOpp") { launchSingleTop = true } }
@@ -159,7 +159,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
         item(key = "account") {
             MoreGroup("Account") {
                 if (me?.isAdmin == true) MoreRow(Icons.Rounded.AccountCircle, "Utenti", "Crea, modifica ed elimina gli accessi, compreso il tuo", Modifier.appear(3)) { nav.navigate("users") }
-                MoreRow(Icons.Rounded.AccountCircle, "Account e impostazioni", "Tema, server, uscita", Modifier.appear(3)) { nav.navigate("account") }
+                MoreRow(Icons.Rounded.AccountCircle, "Account e impostazioni", if (me?.canEdit == true) "Tema, chiusura automatica interventi, server, uscita" else "Tema, server, uscita", Modifier.appear(3)) { nav.navigate("account") }
                 MoreRow(Icons.Rounded.SystemUpdate, "Versione ${vm.appVersion}", "Tocca per controllare gli aggiornamenti", Modifier.appear(3)) { vm.checkUpdate(true) }
             }
         }
@@ -272,6 +272,32 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
     }
 }
 
+/** Open interventions that close by themselves after some days: on/off and how many days. Same card as in the website's Settings. */
+@Composable private fun AutoCloseCard(vm: AppViewModel) {
+    val rule by vm.autoClose.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(Unit) { vm.loadAutoClose() }
+    val r = rule ?: return
+    var on by androidx.compose.runtime.saveable.rememberSaveable(r.updatedAt) { androidx.compose.runtime.mutableStateOf(r.enabled) }
+    var days by androidx.compose.runtime.saveable.rememberSaveable(r.updatedAt) { androidx.compose.runtime.mutableStateOf(r.days.toString()) }
+    SectionTitle("Interventi")
+    CardBox(Modifier.appear(2)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Chiudi in automatico gli interventi aperti", style = MaterialTheme.typography.titleSmall)
+                Text("Si chiudono da soli dopo i giorni scelti, senza essere cancellati; quelli firmati non si toccano. Vale anche per sito e app Windows.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            androidx.compose.material3.Switch(on, { on = it }, Modifier.padding(start = 12.dp))
+        }
+        Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            androidx.compose.material3.OutlinedTextField(days, { v -> days = v.filter { it.isDigit() }.take(4) }, Modifier.weight(1f), enabled = on, singleLine = true, label = { Text("Dopo quanti giorni") },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number))
+            androidx.compose.material3.Button({ val d = days.toIntOrNull(); if (d == null || d !in 1..3650) vm.notify("Giorni non validi (da 1 a 3650)") else vm.saveAutoClose(on, d) },
+                enabled = on != r.enabled || days != r.days.toString()) { Text("Salva") }
+        }
+        if (r.updatedBy.isNotBlank()) Text("Ultima modifica: ${r.updatedBy}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+    }
+}
+
 @Composable fun AccountScreen(vm: AppViewModel, nav: NavHostController) {
     val me by vm.me.collectAsStateWithLifecycle()
     val theme by vm.theme.collectAsStateWithLifecycle()
@@ -290,6 +316,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
             val themes = listOf("system" to "Automatico", "light" to "Chiaro", "dark" to "Scuro")
             SegmentedPicker(themes.map { it.second }, themes.indexOfFirst { it.first == theme }, { vm.setTheme(themes[it].first) }, Modifier.appear(1))
         }
+        if (me?.canEdit == true) item(key = "autoclose") { AutoCloseCard(vm) }
         item(key = "server") {
             SectionTitle("Server")
             CardBox(Modifier.appear(2)) {

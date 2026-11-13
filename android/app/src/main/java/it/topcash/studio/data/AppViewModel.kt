@@ -382,12 +382,40 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun resetClient(code: String) = act("Modifiche annullate") { api.resetClient(code) }
     fun saveLicense(id: String, e: LicenseEdit) = act(if (e.hidden) "Licenza tolta dall'elenco" else "Licenza aggiornata") { api.saveLicense(id, e) }
     private val _users = MutableStateFlow<List<UserRow>?>(null); val users = _users.asStateFlow()
-    fun loadUsers() = viewModelScope.launch { try { _users.value = api.users() } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Utenti non disponibili") } }
+    private val _roster = MutableStateFlow<RosterView?>(null); val roster = _roster.asStateFlow()
+    private val _autoClose = MutableStateFlow<AutoCloseRule?>(null); val autoClose = _autoClose.asStateFlow()
+    fun loadAutoClose() = viewModelScope.launch { try { _autoClose.value = api.autoClose() } catch (_: ApiException) { } }
+    fun saveAutoClose(enabled: Boolean, days: Int) = viewModelScope.launch {
+        try { val r = api.saveAutoClose(AutoCloseSave(enabled, days)); _autoClose.value = r
+            _messages.tryEmit(if (!r.enabled) "Chiusura automatica disattivata" else if (r.closed > 0) "Salvato: chiusi ${r.closed} interventi aperti da oltre ${r.days} giorni" else "Salvato: chiusura dopo ${r.days} giorni")
+            refresh(true)
+        } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Operazione non riuscita") }
+    }
+    fun loadUsers() = viewModelScope.launch { try { val r = api.usersFull(); _users.value = r.users; _roster.value = r.roster } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Utenti non disponibili") } }
+    /** Agent on/off or hidden on/off for one person: shown at once, then confirmed by the server (undone if it refuses). */
+    fun toggleRoster(name: String, agent: Boolean) = viewModelScope.launch {
+        val before = _roster.value ?: return@launch
+        val people = before.people.map { p -> if (p.name != name) p else if (agent) p.copy(agent = !p.agent) else p.copy(hidden = !p.hidden, agent = false) }
+        _roster.value = before.copy(people = people)
+        try {
+            _roster.value = api.saveRoster(RosterSave(people.filter { it.hidden }.map { it.name }, people.filter { it.agent && !it.hidden }.map { it.name }))
+            val p = people.first { it.name == name }
+            _messages.tryEmit(if (agent) (if (p.agent) "$name è anche agente" else "$name non è più agente") else (if (p.hidden) "$name nascosto ovunque" else "$name di nuovo visibile"))
+            refresh(true)
+        } catch (x: ApiException) { _roster.value = before; _messages.tryEmit(x.message ?: "Operazione non riuscita") }
+    }
     private fun userAct(success: String, block: suspend () -> Unit) = viewModelScope.launch {
         try { block(); _messages.tryEmit(success); _users.value = api.users() } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Operazione non riuscita") }
     }
     fun createUser(u: UserCreate) = userAct("Utente ${u.name} creato") { api.createUser(u) }
     fun updateUser(username: String, p: UserPatch, success: String) = userAct(success) { api.updateUser(username, p) }
+    /** Changes the sign-in name (capitals kept, as typed). Renaming yourself ends your session: sign in again with the new name, same password. */
+    fun renameUser(username: String, newName: String, self: Boolean) = viewModelScope.launch {
+        try { api.renameUser(username, newName)
+            if (self) { _messages.tryEmit("Da ora accedi con «$newName» (stessa password)"); logout() }
+            else { _messages.tryEmit("Da ora accede con «$newName» (stessa password)"); _users.value = api.users() }
+        } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Operazione non riuscita") }
+    }
     fun deleteUser(username: String) = userAct("Utente eliminato") { api.deleteUser(username) }
     fun renameMe(name: String) = userAct("Nome aggiornato") { api.updateMe(name); _me.value = _me.value?.copy(name = name) }
     fun changePassword(current: String, password: String, onDone: (Boolean) -> Unit) = viewModelScope.launch {

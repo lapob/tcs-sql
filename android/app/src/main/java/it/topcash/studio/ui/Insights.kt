@@ -76,7 +76,7 @@ private class InsLine(val key: String, val code: String, val name: String, val t
     var opp by rememberSaveable { mutableStateOf("Contratto") }
     var q by rememberSaveable { mutableStateOf("") }
     Page(vm, "Priorità", "Cosa sistemare e cosa vendere", onBack = { nav.popBackStack() }) {
-        if (ins == null) { item(key = "none") { Empty(Icons.Rounded.AutoAwesome, "Le priorità stanno arrivando", "Il server legge Mastro da solo ogni ora: gli elenchi compaiono alla prossima lettura.") }; return@Page }
+        if (ins == null) { item(key = "none") { Empty(Icons.Rounded.AutoAwesome, "Le priorità stanno arrivando", "Il server legge Mastro da solo ogni mezz’ora: gli elenchi compaiono alla prossima lettura.") }; return@Page }
         val tabs = tabsOf(ins)
         item(key = "tiles") {
             LazyRow(Modifier.padding(top = 4.dp, bottom = 12.dp).bleed(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {

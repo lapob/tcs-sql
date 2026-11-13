@@ -67,8 +67,8 @@ function accountingPage(){
  const maxM=Math.max(1,...A.months.map(m=>Math.abs(m.v)));
  return`${hero('La <span class="grad">contabilità</span>.','Fatture, incassi e pagamenti letti da MastroSQL. Segna solleciti e promesse di pagamento: le note restano anche dopo ogni importazione.',
   `<button class="btn need-export" data-acc-exp="dues">${icon('download')}Scadenze CSV</button><button class="btn need-export" data-acc-exp="invoices">${icon('download')}Fatture CSV</button>`)}
- ${explain('accounting','I dati arrivano da <strong>MastroSQL</strong> da soli: il server lo legge ogni ora, in sola lettura (Mastro resta il programma di contabilità). Tocca un mese nel grafico per leggerlo e aprirne le fatture. Apri una scadenza per segnare <strong>Sollecitato</strong>, <strong>Promesso</strong> o <strong>Incassato</strong> e preparare un’email di sollecito.')}
- ${A.has?'':`<div class="card reveal" style="--i:2">${empty('euro','Nessun dato contabile','Il server legge fatture e scadenze da MastroSQL da solo ogni ora (sola lettura). Per averle subito: Impostazioni → Importa da MastroSQL.')}</div>`}
+ ${explain('accounting','I dati arrivano da <strong>MastroSQL</strong> da soli: il server lo legge ogni mezz’ora, in sola lettura (Mastro resta il programma di contabilità). Tocca un mese nel grafico per leggerlo e aprirne le fatture. Apri una scadenza per segnare <strong>Sollecitato</strong>, <strong>Promesso</strong> o <strong>Incassato</strong> e preparare un’email di sollecito.')}
+ ${A.has?'':`<div class="card reveal" style="--i:2">${empty('euro','Nessun dato contabile','Il server legge fatture e scadenze da MastroSQL da solo ogni mezz’ora (sola lettura). Per averle subito: Impostazioni → Importa da MastroSQL.')}</div>`}
  <div class="kpis">
   <div class="card kpi t-info reveal" style="--i:2"><div class="kpi-top"><span>Fatturato ${new Date().getFullYear()}</span><span class="kpi-icon">${icon('euro')}</span></div><div class="kpi-value acc-v">${DFE0.format(A.revY)}</div><div class="kpi-note">${delta===null?'imponibile, note di credito dedotte':`<span style="color:var(--${delta>=0?'ok':'bad'})">${delta>=0?'▲':'▼'} ${Math.abs(delta).toFixed(1).replace('.',',')}%</span> rispetto allo stesso periodo ${new Date().getFullYear()-1}`}</div></div>
   <div class="card kpi reveal" style="--i:3" data-acc-tab="receivables" tabindex="0"><div class="kpi-top"><span>Da incassare</span><span class="kpi-icon">${icon('download')}</span></div><div class="kpi-value acc-v">${DFE0.format(A.toCollect)}</div><div class="kpi-note">${plur(A.recOpen.length,'rata aperta','rate aperte')}</div></div>
@@ -130,7 +130,7 @@ function accRegister(kind){
   payables:['Da <span class="grad">pagare</span>.','Le scadenze verso i fornitori, in ordine di data.',payablesTab,'dues'],
   clients:['Situazione <span class="grad">clienti</span>.','Fatturato, residui e scaduto di ogni cliente: prima chi è in ritardo.',clientsAccTab,'']}[kind];
  return`${hero(T[0],T[1],T[3]?`<button class="btn need-export" data-acc-exp="${T[3]}">${icon('download')}${T[3]==='dues'?'Scadenze':'Fatture'} CSV</button>`:'')}
- ${A.has?T[2]():`<div class="card reveal" style="--i:2">${empty('euro','Nessun dato contabile','Il server legge fatture e scadenze da MastroSQL da solo ogni ora (sola lettura). Per averle subito: Impostazioni → Importa da MastroSQL.')}</div>`}`;
+ ${A.has?T[2]():`<div class="card reveal" style="--i:2">${empty('euro','Nessun dato contabile','Il server legge fatture e scadenze da MastroSQL da solo ogni mezz’ora (sola lettura). Per averle subito: Impostazioni → Importa da MastroSQL.')}</div>`}`;
 }
 
 function dueRows(list,cols){

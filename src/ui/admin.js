@@ -102,7 +102,7 @@ async function openLicenseEditor(id){
 /* Users: name, delete (others), own profile from any device */
 async function editUserName(u){
  const self=u.username===me?.username;
- const v=await formPanel({title:u.name,tag:'Utente',sub:esc(u.username),body:`<div class="form-grid">${fieldHtml('name','Nome e cognome','text',u.name,2,'required maxlength="80"')}${fieldHtml('username','Nome utente per accedere','text',u.username,2,'required minlength="3" maxlength="40" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off"')}<p class="muted span-2" style="font-size:12.5px;margin:0">Se cambi il nome utente la password resta la stessa, ma ${self?'dovrai':'dovrà'} accedere di nuovo con il nuovo nome su tutti i dispositivi.</p></div>`,ok:'Salva'});if(!v)return;
+ const v=await formPanel({title:u.name,tag:'Utente',sub:esc(u.username),body:`<div class="form-grid">${fieldHtml('name','Nome e cognome','text',u.name,2,'required maxlength="80" autocapitalize="words"')}${fieldHtml('username','Nome utente per accedere','text',u.username,2,'required minlength="3" maxlength="40" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off"')}<p class="muted span-2" style="font-size:12.5px;margin:0">Se cambi il nome utente la password resta la stessa, ma ${self?'dovrai':'dovrà'} accedere di nuovo con il nuovo nome su tutti i dispositivi.</p></div>`,ok:'Salva'});if(!v)return;
  const name=v.name.trim(),user=v.username.trim();
  try{
   if(name!==u.name){await post(self?'/api/me':'/api/users/'+encodeURIComponent(u.username),{name});if(self)me.name=name;}

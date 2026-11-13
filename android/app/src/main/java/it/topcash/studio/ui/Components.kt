@@ -73,10 +73,12 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.semantics.contentDescription
 
-/** Springy press feedback: the element sinks slightly and bounces back. */
-fun Modifier.pressScale(source: MutableInteractionSource): Modifier = composed {
+/** Springy press feedback: the element sinks slightly and bounces back.
+ *  After a long press ([held] true) it rises back at once, smoothly and without bouncing, while the finger is still down:
+ *  the long-press action (menu, actions) then opens on a still card instead of a wobbling one. */
+fun Modifier.pressScale(source: MutableInteractionSource, held: Boolean = false): Modifier = composed {
     val pressed by source.collectIsPressedAsState()
-    val s by animateFloatAsState(if (pressed) 0.98f else 1f, Bouncy, label = "press")
+    val s by animateFloatAsState(if (pressed && !held) 0.98f else 1f, if (held) androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 900f) else Bouncy, label = "press")
     graphicsLayer { scaleX = s; scaleY = s }
 }
 
@@ -130,12 +132,15 @@ fun hueColor(key: String, dark: Boolean = false): Color { var h = 0; key.forEach
 
 @Composable fun CardBox(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, padding: PaddingValues = PaddingValues(18.dp), onLongClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     val src = remember { MutableInteractionSource() }
+    val pressed by src.collectIsPressedAsState()
+    var held by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(pressed) { if (!pressed) held = false }
     Surface(
-        modifier = modifier.fillMaxWidth().then(if (onClick != null) Modifier.pressScale(src) else Modifier),
+        modifier = modifier.fillMaxWidth().then(if (onClick != null) Modifier.pressScale(src, held) else Modifier),
         shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 0.dp, shadowElevation = 0.dp,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Column(Modifier.then(if (onClick != null) Modifier.combinedClickable(interactionSource = src, indication = androidx.compose.material3.ripple(), onLongClick = onLongClick, onClick = onClick) else Modifier).padding(padding), content = content)
+        Column(Modifier.then(if (onClick != null) Modifier.combinedClickable(interactionSource = src, indication = androidx.compose.material3.ripple(), onLongClick = onLongClick?.let { f -> { held = true; f() } }, onClick = onClick) else Modifier).padding(padding), content = content)
     }
 }
 

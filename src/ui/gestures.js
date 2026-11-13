@@ -15,7 +15,7 @@
   const el=e.target.closest?.('[data-int]');if(!el||e.target.closest('button,a,input,select,textarea,label,[data-iq]'))return;
   const a=allowed(el.dataset.int);if(!a||!(a.print||a.close))return;   // nothing to do on it (e.g. a technician on an imported report): a normal tap
   g={el,a,x:e.clientX,y:e.clientY,dx:0,lock:'',w:el.getBoundingClientRect().width,
-   timer:setTimeout(()=>{if(g&&!g.lock){g.lock='press';g.eat=true;navigator.vibrate?.(12);sheet(g.a);}},LONG)};
+   timer:setTimeout(()=>{if(g&&!g.lock){g.lock='press';g.eat=true;g.el.classList.add('lp-held');navigator.vibrate?.(12);sheet(g.a);}},LONG)};
  },{passive:true});
  document.addEventListener('pointermove',e=>{
   if(!g||e.pointerType!=='touch')return;const dx=e.clientX-g.x,dy=e.clientY-g.y;
@@ -32,14 +32,14 @@
  },{passive:true});
  const end=e=>{
   if(!g||e.pointerType!=='touch')return;clearTimeout(g.timer);const s=g;g=null;
-  if(s.lock==='press'){eat();return;}   // the finger lifted after a long press: its click must not close the sheet just opened
+  if(s.lock==='press'){eat();setTimeout(()=>s.el.classList.remove('lp-held'),400);return;}   // the finger lifted after a long press: its click must not close the sheet just opened
   if(s.lock!=='x')return;s.eat=true;eat(s);
   const hit=Math.abs(s.dx)>=s.w*THRESHOLD,el=s.el,id=el.dataset.int;
   el.classList.add('sw-back');reset(el);setTimeout(()=>el.classList.remove('sw-back'),360);
   if(hit&&typeof intQuick==='function')intQuick(s.dx>0?'print':'close',id);
  };
  document.addEventListener('pointerup',end,{passive:true});
- document.addEventListener('pointercancel',e=>{if(g){clearTimeout(g.timer);const el=g.el;g=null;el.classList.add('sw-back');reset(el);setTimeout(()=>el.classList.remove('sw-back'),360);}},{passive:true});
+ document.addEventListener('pointercancel',e=>{if(g){clearTimeout(g.timer);const el=g.el;g=null;setTimeout(()=>el.classList.remove('lp-held'),400);el.classList.add('sw-back');reset(el);setTimeout(()=>el.classList.remove('sw-back'),360);}},{passive:true});
  // the click that follows a swipe or a long press must not also open the intervention
  let swallow=0;const eat=()=>{swallow=Date.now();};
  document.addEventListener('click',e=>{if(Date.now()-swallow<450&&e.target.closest?.('[data-int],.int-sheet')){e.stopPropagation();e.preventDefault();}},true);

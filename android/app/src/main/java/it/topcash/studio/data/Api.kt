@@ -156,9 +156,14 @@ class Api(context: Context) {
     suspend fun deleteClient(code: String, deleted: Boolean) { post("/api/clients/delete", json.encodeToString(ClientDeleteRequest(code, deleted))) }
     suspend fun resetClient(code: String) { post("/api/clients/reset", json.encodeToString(ClientDeleteRequest(code, false))) }
     suspend fun saveLicense(id: String, e: LicenseEdit) { post("/api/licenses/save", json.encodeToString(LicenseSaveRequest(id, e))) }
-    suspend fun users(): List<UserRow> = json.decodeFromString<UsersResponse>(get("/api/users")).users
+    suspend fun users(): List<UserRow> = usersFull().users
+    suspend fun autoClose(): AutoCloseRule = json.decodeFromString(get("/api/settings/interventions"))
+    suspend fun saveAutoClose(r: AutoCloseSave): AutoCloseRule = json.decodeFromString(post("/api/settings/interventions", json.encodeToString(r)))
+    suspend fun usersFull(): UsersResponse = json.decodeFromString<UsersResponse>(get("/api/users"))
+    suspend fun saveRoster(r: RosterSave): RosterView = json.decodeFromString(post("/api/team/roster", json.encodeToString(r)))
     suspend fun createUser(u: UserCreate) { post("/api/users", json.encodeToString(u)) }
     suspend fun updateUser(username: String, p: UserPatch) { post("/api/users/" + enc(username), json.encodeToString(p)) }
+    suspend fun renameUser(username: String, newName: String) { post("/api/users/" + enc(username) + "/rename", json.encodeToString(UserRename(newName))) }
     suspend fun deleteUser(username: String) { post("/api/users/" + enc(username) + "/delete") }
     suspend fun updateMe(name: String) { post("/api/me", json.encodeToString(UserPatch(name = name))) }
     suspend fun changePassword(current: String, password: String) { post("/api/password", json.encodeToString(PasswordChange(current, password))) }

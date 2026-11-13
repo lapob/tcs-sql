@@ -1497,3 +1497,17 @@ body:has([data-int].sw-on),#main:has([data-int].sw-on),.card:has([data-int].sw-o
 .int-sheet-btn.go{background:var(--accent);color:#fff}
 .int-sheet-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){[data-int].sw-back{transition:none}}
+/* Team page: technicians and agents */
+.ros-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:8px;margin-top:6px}
+.ros-row{display:flex;align-items:center;gap:10px;min-width:0;padding:9px 10px;border:1px solid var(--line);border-radius:14px;background:var(--surface-2);transition:opacity .25s var(--ease),border-color .25s var(--ease)}
+.ros-row .grow{min-width:0}.ros-row strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ros-row small{display:block;color:var(--text-3);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ros-row.off{opacity:.62}
+.ros-chip{display:inline-flex;align-items:center;gap:5px;flex:none;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--text-2);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:background .2s var(--ease),color .2s var(--ease),border-color .2s var(--ease),transform .3s var(--spring)}
+.ros-chip svg{width:14px;height:14px}.ros-chip:hover{border-color:var(--accent-ring)}.ros-chip:active{transform:scale(.94)}
+.ros-chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.ros-off{margin-top:12px}.ros-off summary{cursor:pointer;color:var(--text-2);font-weight:600;font-size:13px}
+@media (max-width:520px){.ros-row .btn.sm{padding-inline:10px}}
+/* long press: the row stops "sinking" as soon as the actions open and rises back gently, without the bounce of a tap */
+tbody tr[data-int].lp-held,tbody tr[data-int].lp-held:active,[data-int].lp-held{transform:none!important;transition:transform .22s var(--ease)!important}
+.ros-row .grow{flex:1 1 0;min-width:0}
+@media (max-width:520px){.ros-row small{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}}

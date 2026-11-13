@@ -85,7 +85,7 @@ private fun tabsOf(x: Analysis): List<AnaTab> {
     var sub by rememberSaveable { mutableStateOf("A") }
     var q by rememberSaveable { mutableStateOf("") }
     Page(vm, "Analisi", "Calcolate da Mastro a ogni lettura", onBack = { nav.popBackStack() }) {
-        if (x == null) { item(key = "none") { Empty(Icons.Rounded.Insights, "Le analisi stanno arrivando", "Si calcolano alla prossima lettura di Mastro, ogni ora.") }; return@Page }
+        if (x == null) { item(key = "none") { Empty(Icons.Rounded.Insights, "Le analisi stanno arrivando", "Si calcolano alla prossima lettura di Mastro, ogni mezz’ora.") }; return@Page }
         val tabs = tabsOf(x)
         item(key = "tiles") {
             LazyRow(Modifier.padding(top = 4.dp, bottom = 12.dp).bleed(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
@@ -120,7 +120,7 @@ private fun tabsOf(x: Analysis): List<AnaTab> {
 private fun intro(tab: String, x: Analysis) = when (tab) {
     "cash" -> "Rate dei clienti pesate su come pagano oggi (chi è in regola incassa alla scadenza, chi è in ritardo più tardi e non sempre); pagamenti ai fornitori alla scadenza, quelli già scaduti nella prima settimana. Dagli scaduti dei clienti si stimano ${money0(x.overdueExpected)} in arrivo."
     "abc" -> "Ultimi 12 mesi al netto delle note di credito. A: i clienti che fanno l'80% del fatturato; B: il 15% successivo; C: il resto."
-    "agents" -> "Fatturato degli ultimi 12 mesi sulle fatture di ciascun agente, con margine e sconti rispetto al prezzo abituale."
+    "agents" -> "Fatturato degli ultimi 12 mesi sulle fatture: prima gli agenti (si scelgono in Utenti), poi chi altro compare sulle fatture, con margine e sconti."
     "techs" -> "Interventi chiusi negli ultimi 12 mesi con il loro importo; le verifiche periodiche sono contate a parte."
     "machines" -> "Canone riportato all'anno, interventi chiusi sulla macchina in 12 mesi e verificazione (metà all'anno). Stima: le fatture non indicano la macchina."
     "disc" -> "Vendite pagate almeno il 10% meno del prezzo abituale dello stesso articolo (solo articoli a prezzo stabile, niente contratti o servizi)."
@@ -129,8 +129,8 @@ private fun intro(tab: String, x: Analysis) = when (tab) {
 
 private fun linesOf(x: Analysis, tab: String, sub: String): List<AnaLine> = when (tab) {
     "abc" -> x.abc.filter { it.`class` == sub }.map { c -> AnaLine("a" + c.clientCode, c.clientCode, c.name, "${c.rank}° · ${dec(c.share)}% del fatturato" + if (c.prev > 0) " · anno prima ${money0(c.prev)}" else "", money0(c.revenue), pct(c.revenue, c.prev), null) }
-    "agents" -> x.agents.map { g -> AnaLine("g" + g.code, "", g.name, "${int(g.clients)} clienti · margine ${money0(g.margin)} (${dec(g.marginPct)}%) · ${g.topFamily}" + if (g.discounts > 0) " · sconti ${money0(g.discounts)}" else "", money0(g.revenue), pct(g.revenue, g.prev), null) }
-    "techs" -> x.techs.map { t -> AnaLine("t" + t.name, "", t.name, "${int(t.jobs)} interventi · ${int(t.verifications)} verifiche · ${int(t.clients)} clienti", money0(t.amount), if (t.jobs > 0) money0(t.amount / t.jobs) + " a intervento" else "", if (t.open > 0) "${t.open} aperti" to (if (t.open > 40) Tone.Due else Tone.Info) else null) }
+    "agents" -> x.agents.map { g -> AnaLine("g" + g.code, "", g.name, "${int(g.clients)} clienti · margine ${money0(g.margin)} (${dec(g.marginPct)}%) · ${g.topFamily}" + if (g.discounts > 0) " · sconti ${money0(g.discounts)}" else "", money0(g.revenue), pct(g.revenue, g.prev), if (g.agent) "Agente" to Tone.Accent else null) }
+    "techs" -> x.techs.map { t -> AnaLine("t" + t.name, "", t.name, "${if (t.agent) "anche agente · " else ""}${int(t.jobs)} interventi · ${int(t.verifications)} verifiche · ${int(t.clients)} clienti", money0(t.amount), if (t.jobs > 0) money0(t.amount / t.jobs) + " a intervento" else "", if (t.open > 0) "${t.open} aperti" to (if (t.open > 40) Tone.Due else Tone.Info) else null) }
     "machines" -> if (sub == "Per registratore") x.machines.map { m -> AnaLine("m" + m.id, m.clientCode, m.name, listOf(m.model, if (m.serial.isNotBlank()) "matr. ${m.serial}" else "", "canone ${money0(m.contract)}", "interventi ${money0(m.interventions)}").filter { it.isNotBlank() }.joinToString(" · "), money0(m.total), "l'anno", null) }
         else x.models.map { m -> AnaLine("o" + m.model, "", m.model, "${int(m.machines)} attivi · in media ${money0(m.average)} l'anno", money0(m.total), "l'anno", null) }
     "disc" -> if (sub == "Per articolo") x.discountArticles.map { d -> AnaLine("d" + d.key, "", d.name, "${d.key} · ${d.sub} · ${int(d.lines)} vendite", money0(d.given), "di sconto", null) }

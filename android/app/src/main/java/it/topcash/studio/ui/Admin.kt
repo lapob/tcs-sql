@@ -1,5 +1,7 @@
 package it.topcash.studio.ui
 
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -51,6 +53,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import it.topcash.studio.data.AppViewModel
+import it.topcash.studio.data.RosterPerson
+import it.topcash.studio.data.RosterView
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.ui.graphics.graphicsLayer
 import it.topcash.studio.data.Archive
 import it.topcash.studio.data.Catalog
 import it.topcash.studio.data.ClientEdit
@@ -194,6 +200,40 @@ private fun roleHelp(r: String) = when (r) {
     else -> ""
 }
 
+/** The team by surname: who is also an agent (stays a technician) and who must not appear anywhere. Same card as on the website. */
+private fun androidx.compose.foundation.lazy.LazyListScope.rosterItems(vm: AppViewModel, roster: RosterView?) {
+    val r = roster ?: return
+    val on = r.people.filter { !it.hidden }; val off = r.people.filter { it.hidden }
+    item(key = "ros-title") {
+        Column(Modifier.padding(top = 18.dp, bottom = 8.dp)) {
+            Text("Tecnici e agenti", style = MaterialTheme.typography.titleMedium)
+            Text("Tutti per cognome, una volta sola. Agente: vende anche e resta tecnico. Occhio: nasconde il nome, che sparisce da interventi, casse, filtri e analisi; i dati restano.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+    items(on.size, key = { "ros-" + on[it].name }) { i -> RosterRow(vm, on[i], Modifier.animateItem()) }
+    if (off.isNotEmpty()) {
+        item(key = "ros-off") { Text("Nascosti (${off.size})", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp)) }
+        items(off.size, key = { "ros-h-" + off[it].name }) { i -> RosterRow(vm, off[i], Modifier.animateItem()) }
+    }
+}
+
+@Composable private fun RosterRow(vm: AppViewModel, p: RosterPerson, modifier: Modifier) {
+    CardBox(modifier.padding(bottom = 8.dp).graphicsLayer { alpha = if (p.hidden) 0.62f else 1f }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Avatar(p.name, p.name, 36.dp)
+            Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                Text(p.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(listOfNotNull(if (p.group) "gruppo" else if (p.username.isNotBlank()) "accede come ${p.username}" else "senza account", p.jobs.takeIf { it > 0 }?.let { if (it == 1) "1 intervento" else "$it interventi" }).joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (!p.hidden && !p.group) FilterChip(p.agent, { vm.toggleRoster(p.name, true) }, label = { Text("Agente") }, shape = MaterialTheme.shapes.small, modifier = Modifier.padding(start = 6.dp),
+                leadingIcon = if (p.agent) ({ Icon(Icons.Rounded.Check, null, Modifier.size(16.dp)) }) else null)
+            IconButton({ vm.toggleRoster(p.name, false) }) { Icon(if (p.hidden) androidx.compose.material.icons.Icons.Rounded.Visibility else androidx.compose.material.icons.Icons.Rounded.VisibilityOff, if (p.hidden) "Mostra ${p.name}" else "Nascondi ${p.name}", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+    }
+}
+
 /** Only the owner can create other owners or touch them. */
 private fun roles(owner: Boolean) = (if (owner) listOf("owner" to "Proprietario") else emptyList()) +
     listOf("admin" to "Amministratore", "ufficio" to "Amministrazione", "tecnico" to "Tecnico")
@@ -201,12 +241,13 @@ private fun roles(owner: Boolean) = (if (owner) listOf("owner" to "Proprietario"
 /** Users and roles (administrators): create, rename, change role, new password, disable, delete. Your own name too. */
 @Composable fun UsersScreen(vm: AppViewModel, nav: NavHostController) {
     val users by vm.users.collectAsState(); val me by vm.me.collectAsState()
+    val roster by vm.roster.collectAsState()
     LaunchedEffect(Unit) { vm.loadUsers() }
     var editing by remember { mutableStateOf<UserRow?>(null) }
     var creating by rememberSaveable { mutableStateOf(false) }
     Page(null, "Utenti", users?.let { "${it.size} utenti · ${it.count { u -> !u.disabled }} attivi" } ?: "Caricamento…", onBack = { nav.popBackStack() },
         actions = { IconButton({ creating = true }) { Icon(Icons.Rounded.PersonAdd, "Nuovo utente") } }) {
-        item(key = "info") { Text("Proprietario: poteri illimitati, gestisce anche gli amministratori. Amministratore: tutto, compresi utenti e backup. Amministrazione: vede tutto, contabilità compresa. Tecnico: tutto tranne la contabilità.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 12.dp)) }
+        item(key = "info") { Text("Proprietario: poteri illimitati, gestisce anche gli amministratori. Amministratore: tutto, compresi utenti e backup. Amministrazione: contabilità, clienti e casse (non elimina clienti, non gestisce utenti). Tecnico: consulta clienti e casse e fa interventi, firme e ricambi; niente contabilità.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 12.dp)) }
         val list = users.orEmpty()
         if (users != null && list.isEmpty()) item(key = "none") { Empty(Icons.Rounded.Group, "Nessun utente", "") }
         items(list.size, key = { list[it].username }) { i ->
@@ -222,10 +263,14 @@ private fun roles(owner: Boolean) = (if (owner) listOf("owner" to "Proprietario"
                 }
             }
         }
+        rosterItems(vm, roster)
     }
     editing?.let { u -> UserSheet(vm, u, u.username == me?.username) { editing = null } }
     if (creating) NewUserSheet(vm) { creating = false }
 }
+
+/** The characters a sign-in name may have (same rule as the server and the website): letters, digits, . _ - @, capitals kept. */
+private fun cleanLogin(s: String) = s.filter { it.isLetterOrDigit() || it in "._-@" }.take(40)
 
 private fun genPassword(): String { val a = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"; val r = java.security.SecureRandom(); return (1..14).map { a[r.nextInt(a.length)] }.joinToString("") }
 
@@ -234,7 +279,7 @@ private fun genPassword(): String { val a = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLM
     val meOwner = vm.me.collectAsState().value?.isOwner == true
     val locked = u.role == "owner" && !meOwner
     val sheet = rememberSheet(); val scope = rememberCoroutineScope()
-    var name by remember { mutableStateOf(u.name) }; var role by remember { mutableStateOf(u.role) }
+    var name by remember { mutableStateOf(u.name) }; var role by remember { mutableStateOf(u.role) }; var login by remember { mutableStateOf(u.username) }
     var newPwd by remember { mutableStateOf<String?>(null) }; var confirmDelete by remember { mutableStateOf(false) }
     var current by remember { mutableStateOf("") }; var mine by remember { mutableStateOf("") }
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -242,7 +287,11 @@ private fun genPassword(): String { val a = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLM
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
             Text(u.name, style = MaterialTheme.typography.titleLarge); Text(u.username, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedTextField(name, { if (it.length <= 80) name = it }, Modifier.fillMaxWidth().padding(top = 12.dp), label = { Text("Nome e cognome") }, singleLine = true)
+            OutlinedTextField(name, { if (it.length <= 80) name = it }, Modifier.fillMaxWidth().padding(top = 12.dp), label = { Text("Nome e cognome") }, singleLine = true, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Words))
+            if (!locked) {
+                OutlinedTextField(login, { login = cleanLogin(it) }, Modifier.fillMaxWidth().padding(top = 6.dp), label = { Text("Nome utente per accedere") }, singleLine = true, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None, autoCorrectEnabled = false, keyboardType = androidx.compose.ui.text.input.KeyboardType.Email),
+                    supportingText = { Text(if (login.trim() != u.username) "La password resta la stessa: ${if (self) "dovrai" else "dovrà"} accedere di nuovo con il nuovo nome su tutti i dispositivi." else "Maiuscole e minuscole restano come le scrivi; per accedere non contano.") })
+            }
             if (!self && !locked) {
                 Text("Ruolo", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { roles(meOwner).forEach { (k, l) -> FilterChip(role == k, { role = k }, label = { Text(l) }, shape = MaterialTheme.shapes.small) } }
@@ -272,7 +321,8 @@ private fun genPassword(): String { val a = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLM
                 if (!self && !locked) IconButton({ confirmDelete = true }) { Icon(Icons.Rounded.Delete, "Elimina utente", tint = LocalStatus.current.bad) }
                 Spacer(Modifier.weight(1f))
                 Button({
-                    val n = name.trim()
+                    val n = name.trim(); val l = login.trim()
+                    if (!locked && l != u.username) { if (l.length < 3) { vm.notify("Il nome utente deve avere almeno 3 caratteri"); return@Button }; vm.renameUser(u.username, l, self) }
                     if (self) { if (n != u.name && n.isNotBlank()) vm.renameMe(n) }
                     else if (n != u.name || role != u.role) vm.updateUser(u.username, UserPatch(role = role.takeIf { it != u.role }, name = n.takeIf { it != u.name && it.isNotBlank() }), "Utente aggiornato")
                     close()
@@ -296,8 +346,9 @@ private fun genPassword(): String { val a = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLM
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
             Text("Nuovo utente", style = MaterialTheme.typography.titleLarge)
-            OutlinedTextField(name, { if (it.length <= 80) name = it }, Modifier.fillMaxWidth().padding(top = 12.dp), label = { Text("Nome e cognome") }, singleLine = true)
-            OutlinedTextField(user, { user = it.lowercase().filter { ch -> ch.isLetterOrDigit() || ch in "._-" } }, Modifier.fillMaxWidth().padding(top = 6.dp), label = { Text("Nome utente") }, placeholder = { Text("es. mario.rossi") }, singleLine = true)
+            OutlinedTextField(name, { if (it.length <= 80) name = it }, Modifier.fillMaxWidth().padding(top = 12.dp), label = { Text("Nome e cognome") }, singleLine = true, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Words))
+            OutlinedTextField(user, { user = cleanLogin(it) }, Modifier.fillMaxWidth().padding(top = 6.dp), label = { Text("Nome utente per accedere") }, placeholder = { Text("es. Mario.Rossi") }, singleLine = true, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None, autoCorrectEnabled = false, keyboardType = androidx.compose.ui.text.input.KeyboardType.Email),
+                supportingText = { Text("Maiuscole e minuscole restano come le scrivi; per accedere non contano.") })
             Text("Ruolo", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { roles(meOwner).forEach { (k, l) -> FilterChip(role == k, { role = k }, label = { Text(l) }, shape = MaterialTheme.shapes.small) } }
                 Text(roleHelp(role), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

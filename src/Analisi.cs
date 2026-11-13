@@ -10,9 +10,9 @@ public sealed record Party(string Code,string Name);
 public sealed record CostChange(string Date,string Code,string Name,string Supplier,decimal Old,decimal New);
 
 /// Agent: what the customers they follow bought in the last 12 months and the 12 before.
-public sealed record AnaAgent(string Code,string Name,decimal Revenue,decimal Prev,decimal Margin,decimal MarginPct,int Clients,string TopFamily,decimal Discounts);
+public sealed record AnaAgent(string Code,string Name,decimal Revenue,decimal Prev,decimal Margin,decimal MarginPct,int Clients,string TopFamily,decimal Discounts,bool Agent=false);
 /// Technician: closed work in the last 12 months (interventions and periodic verifications).
-public sealed record AnaTech(string Name,int Jobs,int Verifications,decimal Amount,decimal Hours,int Clients,int Open);
+public sealed record AnaTech(string Name,int Jobs,int Verifications,decimal Amount,decimal Hours,int Clients,int Open,bool Agent=false);
 /// What a register yields in a year: contract fee, interventions on it, verification fee (every 2 years, counted per year).
 public sealed record AnaMachine(string Id,string ClientCode,string Name,string Model,string Serial,decimal Contract,decimal Interventions,decimal Verification,decimal Total);
 public sealed record AnaModel(string Model,int Machines,decimal Total,decimal Average);
@@ -118,7 +118,7 @@ public sealed partial class Store
   foreach(var s in eligible)if(usual.TryGetValue(s.Code,out var u)&&u>0&&s.Revenue/s.Qty<u*.9m)given.Add((s,s.Qty*u-s.Revenue));
   var agentNames=Agents().GroupBy(a=>a.Code).ToDictionary(g=>g.Key,g=>g.First().Name);
   // removed people (hidden in the team list) are not shown: their invoices count as "Senza agente", like everywhere else
-  var roster=Roster();
+  var roster=Roster();var agentSet=AgentSet(roster);
   string AgentName(string c){if(c.Length==0||c=="0")return "Senza agente";var n=agentNames.GetValueOrDefault(c,"Agente "+c);return HiddenTech(n,roster)?"Senza agente":TechName(n);}
   var discClients=given.GroupBy(x=>x.s.Client).Select(g=>new AnaDiscount(g.Key,Name(g.Key),AgentName(g.First().s.Agent),Math.Round(g.Sum(x=>x.g)),Math.Round(g.Sum(x=>x.s.Revenue)),g.Count()))
    .OrderByDescending(d=>d.Given).Take(60).ToList();
@@ -132,8 +132,8 @@ public sealed partial class Store
    var l=g.Where(s=>Last12(s.Month)).ToList();var rev=l.Sum(s=>s.Revenue);var cr=l.Sum(s=>s.CostedRevenue);var margin=cr-l.Sum(s=>s.Cost);
    var top=l.GroupBy(s=>s.Family).OrderByDescending(f=>f.Sum(s=>s.Revenue)).FirstOrDefault()?.Key??"";
    return new AnaAgent(g.First().Agent,g.Key,Math.Round(rev),Math.Round(g.Where(s=>Prev12(s.Month)).Sum(s=>s.Revenue)),Math.Round(margin),cr>0?Math.Round(margin/cr*100,1):0,
-    l.Select(s=>s.Client).Distinct().Count(),top,Math.Round(discByAgent.GetValueOrDefault(g.Key)));
-  }).Where(a=>a.Revenue>0||a.Prev>0).OrderByDescending(a=>a.Revenue).ToList();
+    l.Select(s=>s.Client).Distinct().Count(),top,Math.Round(discByAgent.GetValueOrDefault(g.Key)),agentSet.Contains(g.Key));
+  }).Where(a=>a.Revenue>0||a.Prev>0).OrderByDescending(a=>a.Agent).ThenByDescending(a=>a.Revenue).ToList();   // the agents first, then whoever else is on the invoices
 
   // ── 5. technicians: closed work of the last 12 months (Mastro history + app), periodic verifications counted apart
   var techs=mv.Interventions.Concat(Interventions().Where(i=>i.Source=="app")).DistinctBy(i=>i.Id).Where(i=>i.Technician.Length>0&&!HiddenTech(i.Technician,roster))
@@ -141,7 +141,7 @@ public sealed partial class Store
    {
     var done=g.Where(i=>i.Status=="Chiuso"&&Day(i.Date) is DateTime d&&d>y1&&d<=today).ToList();
     return new AnaTech(g.Key,done.Count(i=>i.Kind!="Verifica"),done.Count(i=>i.Kind=="Verifica"),Math.Round(done.Sum(i=>Dec(i.Total))),
-     Math.Round(done.Sum(i=>Dec(i.Hours)),1),done.Select(i=>i.ClientCode).Distinct().Count(),g.Count(i=>i.Status!="Chiuso"));
+     Math.Round(done.Sum(i=>Dec(i.Hours)),1),done.Select(i=>i.ClientCode).Distinct().Count(),g.Count(i=>i.Status!="Chiuso"),agentSet.Contains(g.Key));
    }).Where(t=>t.Jobs+t.Verifications+t.Open>0).OrderByDescending(t=>t.Amount).ThenByDescending(t=>t.Jobs).ToList();
 
   // ── 6. what each register yields in a year: contract (fee over its months), interventions on it, verification every 2 years

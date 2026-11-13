@@ -96,7 +96,7 @@ private fun qty(v: Double) = java.text.NumberFormat.getIntegerInstance(java.util
             ChoiceChips(v.periods, period, { period = it; fam = "" }, Modifier.padding(top = 4.dp))
             Text("Variazioni rispetto a ${v.period.cmpLabel}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp, bottom = 10.dp))
         } }
-        if (!c.has && !p.has) { item(key = "none") { Empty(Icons.Rounded.Insights, "Le vendite stanno arrivando", "Il server legge MastroSQL da solo ogni ora (sola lettura): vendite e conti compaiono qui alla prossima lettura.") }; return@Page }
+        if (!c.has && !p.has) { item(key = "none") { Empty(Icons.Rounded.Insights, "Le vendite stanno arrivando", "Il server legge MastroSQL da solo ogni mezz’ora (sola lettura): vendite e conti compaiono qui alla prossima lettura.") }; return@Page }
         item(key = "kpi") {
             AnimatedContent(period, transitionSpec = { fadeIn(tween(260)) togetherWith fadeOut(tween(140)) }, label = "kpi") { _ ->
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

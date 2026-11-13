@@ -110,7 +110,7 @@ enum class AccView(val route: String, val title: String) { Home("acc", "Contabil
     }
     val go: (AccView, String) -> Unit = { v, f -> nav.openAccounting(v, f) }
     Page(vm, view.title, subtitle, onBack = if (topLevel) null else ({ nav.popBackStack() })) {
-        if (!acc.hasData) { item(key = "none") { Empty(Icons.Rounded.Euro, "Nessun dato contabile", "Il server legge fatture e scadenze da MastroSQL da solo ogni ora: compaiono qui alla prossima lettura.") }; return@Page }
+        if (!acc.hasData) { item(key = "none") { Empty(Icons.Rounded.Euro, "Nessun dato contabile", "Il server legge fatture e scadenze da MastroSQL da solo ogni mezz’ora: compaiono qui alla prossima lettura.") }; return@Page }
         if (view == AccView.Home) { insightsStrip(a, nav); accSummary(acc, nav, go) { open = it } } else accRegister(view, tab, filter, { filter = it }, q, { q = it }, dues, invoices, invMonths, month, { month = it }, nav) { open = it }
     }
     open?.let { id -> acc.due(id)?.let { d -> DueSheet(vm, d, nav, onDismiss = { open = null }) } ?: LaunchedEffect(id) { open = null } }

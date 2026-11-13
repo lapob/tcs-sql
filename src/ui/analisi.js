@@ -39,7 +39,7 @@ function analisiPage(){
  const X=anaData(),S=anaStats(X);const tab=ANA_TABS.some(t=>t[0]===anaUi.tab)?anaUi.tab:'cash';
  const q=norm(ui.q);const f=(l,keys)=>q?l.filter(x=>norm(keys.map(k=>x[k]).join(' ')).includes(q)):l;
  let body='';
- if(!state.analysis)body=empty('chart','Analisi in arrivo','Si calcolano alla prossima lettura di Mastro (ogni ora, o con “Aggiorna ora” nelle Priorità).');
+ if(!state.analysis)body=empty('chart','Analisi in arrivo','Si calcolano alla prossima lettura di Mastro (ogni mezz’ora, o con “Aggiorna ora” nelle Priorità).');
  else if(tab==='cash'){
   const max=Math.max(1,...X.forecast.map(w=>Math.max(w.in,w.out)));
   body=`<div class="card-head"><div><h2>Incassi e pagamenti delle prossime 13 settimane</h2><p>Le rate dei clienti pesate su come pagano oggi: chi è in regola incassa quasi sempre alla scadenza, chi è in ritardo più tardi e non sempre (come nelle Priorità). I pagamenti ai fornitori alla loro scadenza; quelli già scaduti nella prima settimana. Degli scaduti dei clienti si stimano ${anaE(X.overdue)} in arrivo.</p></div></div>
@@ -57,14 +57,14 @@ function analisiPage(){
   ${(C[cls]?.clients||0)>l.length&&!q?`<p class="sub" style="margin:-4px 0 10px">I primi ${fmt(l.length)} per fatturato su ${fmt(C[cls].clients)}.</p>`:''}<div class="list">${rows.map((x,k)=>insRow(k,{code:x.clientCode,name:x.name,title:x.name,sub:`${fmt(x.rank)}° · ${String(x.share).replace('.',',')}% del fatturato${x.prev>0?' · anno prima '+anaE(x.prev):' · nuovo'}`,amount:anaE(x.revenue),amountNote:anaTrend(x.revenue,x.prev)||'nuovo',badge:'Classe '+x.class,tone:x.class==='A'?'ok':x.class==='B'?'info':''})).join('')||empty('users','Nessun cliente','Nessun cliente in questa classe.')}</div>${pager(l.length,14)}`;
  }else if(tab==='agents'){
   const l=f(X.agents,['name','topFamily']);const tot=X.agents.reduce((s,a)=>s+a.revenue,0);
-  body=`<div class="card-head"><div><h2>Vendite per agente<span class="count">${fmt(l.length)}</span></h2><p>Fatturato degli ultimi 12 mesi sulle fatture di ciascun agente in Mastro, con il margine sugli articoli che hanno un costo e gli sconti fatti rispetto al prezzo abituale.</p></div></div>
+  body=`<div class="card-head"><div><h2>Vendite per agente<span class="count">${fmt(l.length)}</span></h2><p>Fatturato degli ultimi 12 mesi sulle fatture di ciascuno in Mastro: prima gli <strong>agenti</strong> (si scelgono in Utenti e accessi), poi chi altro compare sulle fatture; con il margine sugli articoli che hanno un costo e gli sconti fatti rispetto al prezzo abituale.</p></div></div>
   <div class="toolbar">${search('Cerca agente…')}</div>
-  <div class="list">${l.map((x,k)=>anaRow(k,{title:x.name,sub:`${plur(x.clients,'cliente','clienti')} · margine ${anaE(x.margin)} (${String(x.marginPct).replace('.',',')}%) · più venduto: ${esc(x.topFamily||'—')}${x.discounts>0?` · sconti ${anaE(x.discounts)}`:''}`,amount:anaE(x.revenue),note:`${tot>0?Math.round(x.revenue/tot*100)+'% · ':''}${anaTrend(x.revenue,x.prev)||'—'}`})).join('')||empty('user','Nessun agente','Mastro non indica agenti sulle fatture.')}</div>`;
+  <div class="list">${l.map((x,k)=>anaRow(k,{title:x.name,badge:x.agent?'Agente':'',tone:'acc',sub:`${plur(x.clients,'cliente','clienti')} · margine ${anaE(x.margin)} (${String(x.marginPct).replace('.',',')}%) · più venduto: ${esc(x.topFamily||'—')}${x.discounts>0?` · sconti ${anaE(x.discounts)}`:''}`,amount:anaE(x.revenue),note:`${tot>0?Math.round(x.revenue/tot*100)+'% · ':''}${anaTrend(x.revenue,x.prev)||'—'}`})).join('')||empty('user','Nessun agente','Mastro non indica agenti sulle fatture.')}</div>`;
  }else if(tab==='techs'){
   const l=f(X.techs,['name']);const hours=X.techs.some(t=>t.hours>0);
   body=`<div class="card-head"><div><h2>Lavoro dei tecnici<span class="count">${fmt(l.length)}</span></h2><p>Interventi chiusi negli ultimi 12 mesi (storico Mastro e app), con l’importo degli interventi; le verifiche periodiche sono contate a parte.</p></div></div>
   <div class="toolbar">${search('Cerca tecnico…')}</div>
-  <div class="list">${l.map((x,k)=>anaRow(k,{title:x.name,sub:`${plur(x.jobs,'intervento','interventi')} · ${plur(x.verifications,'verifica','verifiche')} · ${plur(x.clients,'cliente','clienti')}${hours?` · ${String(x.hours).replace('.',',')} ore`:''}`,amount:anaE(x.amount),note:x.jobs?`${anaE(x.amount/x.jobs)} a intervento`:'',badge:x.open?`${fmt(x.open)} aperti`:'',tone:x.open>40?'due':'info'})).join('')||empty('tool','Nessun dato','Nessun intervento chiuso negli ultimi 12 mesi.')}</div>`;
+  <div class="list">${l.map((x,k)=>anaRow(k,{title:x.name,sub:`${x.agent?'anche agente · ':''}${plur(x.jobs,'intervento','interventi')} · ${plur(x.verifications,'verifica','verifiche')} · ${plur(x.clients,'cliente','clienti')}${hours?` · ${String(x.hours).replace('.',',')} ore`:''}`,amount:anaE(x.amount),note:x.jobs?`${anaE(x.amount/x.jobs)} a intervento`:'',badge:x.open?`${fmt(x.open)} aperti`:'',tone:x.open>40?'due':'info'})).join('')||empty('tool','Nessun dato','Nessun intervento chiuso negli ultimi 12 mesi.')}</div>`;
  }else if(tab==='machines'){
   const v=anaUi.mach==='list'?'list':'models';
   const seg=`<div class="seg" role="tablist">${[['models','Per modello'],['list','Per registratore']].map(([k,lb])=>`<button role="tab" class="${k===v?'active':''}" data-ana-mach="${k}">${lb}</button>`).join('')}</div>`;

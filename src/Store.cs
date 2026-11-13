@@ -175,6 +175,14 @@ public sealed partial class Store
   if(store.Interventions().Single(i=>i.Id=="mi1").Title!="Verifica corretta")throw new Exception("La lettura di Mastro sovrascrive le modifiche");
   store.DeleteIntervention("mi1");store.ImportMastro(new([mc],[mm],[mi1],"t","test"),"test");
   if(store.Interventions().Any(i=>i.Id=="mi1"))throw new Exception("Intervento eliminato ricomparso con la lettura di Mastro");
+  // open interventions older than the set days close by themselves (not deleted); recent ones stay open, and Mastro does not reopen them
+  var mi2=new Intervention("mi2","15","Cliente Mastro","2026-09-01","1","Riparazione","","Aperto","","Normale","","mastro","","","","");
+  store.ImportMastro(new([mc],[mm],[mi1,mi2],"t","test"),"test");
+  if(store.CloseOldInterventions(new DateTime(2026,11,13))!=1||store.Interventions().Single(i=>i.Id=="mi2").Status!="Chiuso"||store.Interventions().Single(i=>i.Id==app.Id).Status!="Aperto")throw new Exception("Chiusura automatica interventi vecchi");
+  store.ImportMastro(new([mc],[mm],[mi1,mi2],"t","test"),"test");
+  if(store.Interventions().Single(i=>i.Id=="mi2").Status!="Chiuso")throw new Exception("La lettura di Mastro riapre gli interventi chiusi in automatico");
+  store.SaveAutoClose(false,30,"test");if(store.AutoClose().Enabled)throw new Exception("Chiusura automatica: impostazione");
+  store.SaveAutoClose(true,30,"test");store.DeleteIntervention("mi2");
   try{store.SaveIntervention(app with{Status="Boh"},"test");throw new Exception("Stato non validato");}catch(InvalidDataException){}
   store.ImportMastro(new([mc with{Name="Cliente Mastro 2"}],[],[],"t","test"),"test");
   if(store.MastroClients().Single().Name!="Cliente Mastro 2"||store.Machines().Count!=0||store.Interventions().Count!=1||store.Interventions()[0].Id!=app.Id)throw new Exception("Importazione Mastro non atomica");
