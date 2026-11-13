@@ -66,7 +66,7 @@ function brandGrid(){
  const card=(b,i)=>{const cov=b.portal&&b.synced&&b.active?Math.round(b.in/b.active*100):null;
   return`<button class="brand-card reveal${ui.mbrand===b.k?' on':''}" style="--i:${i};--h:${b.hue}" data-mbrand="${b.k}" aria-pressed="${ui.mbrand===b.k}">
    <div class="brand-top">${brandMark(b)}<div class="grow"><strong>${esc(b.l)}</strong><small>${plur(b.active,'attiva','attive')} · ${plur(b.models.length,'modello','modelli')}</small></div>${b.portal?`<span class="brand-portal">${esc(b.pl)}</span>`:''}</div>
-   ${b.portal&&!b.synced?`<small class="cov-txt">${icon('clock')} ${esc(b.pl)} non ancora sincronizzato: collegalo dall’app Windows per il confronto</small>`:cov!==null?`<div class="cov"><i style="width:${cov}%"></i></div><small class="cov-txt"><b>${fmt(b.in)}</b> nel portale${b.out?` · <span class="warn">${fmt(b.out)} non iscritte</span>`:' · tutte iscritte'}</small>`:`<small class="cov-txt muted">${b.models.slice(0,3).map(x=>esc(x.name)).join(' · ')}</small>`}</button>`;};
+   ${b.portal&&!b.synced?`<small class="cov-txt">${icon('clock')} ${esc(b.pl)} non ancora sincronizzato: collegalo da Sincronizzazione → Portali e accessi per il confronto</small>`:cov!==null?`<div class="cov"><i style="width:${cov}%"></i></div><small class="cov-txt"><b>${fmt(b.in)}</b> nel portale${b.out?` · <span class="warn">${fmt(b.out)} non iscritte</span>`:' · tutte iscritte'}</small>`:`<small class="cov-txt muted">${b.models.slice(0,3).map(x=>esc(x.name)).join(' · ')}</small>`}</button>`;};
  return`<div class="card reveal" style="--i:2"><div class="card-head"><div><h2>Sezioni</h2><p>DTR, Ital Retail e RCH (che hanno un portale) ed Epson hanno la loro sezione; tutti gli altri sono in Registratori di cassa. Per i marchi con un portale controllo se ogni cassa attiva è iscritta al portale.${D.dropped?` <span class="muted">${plur(D.dropped,'macchina Edit, Ditron o Custom esclusa','macchine Edit, Ditron o Custom escluse')}.</span>`:''}</p></div>${ui.mbrand?`<button class="btn sm ghost" data-mbrand="">${icon('close')}Tutti i marchi</button>`:''}</div>
   <div class="brand-grid">${rt.map(card).join('')}</div>
   ${other.length?`<div class="cat-row">${other.map((b,i)=>`<button class="chip${ui.mbrand===b.k?' on':''}" data-mbrand="${b.k}">${brandMark(b,'xs')}${esc(RT_CATS[b.cat]||b.l)}<em>${fmt(b.active)}</em></button>`).join('')}</div>`:''}</div>`;
@@ -162,12 +162,22 @@ function portalAccess(){
  return[z,portal('dtr','DTR-Service',state.dtrStatus,'dtr',212,'Portale DTR'),portal('ital','Ital Retail',state.italStatus,'ital',152,'Portale Ital Retail'),portal('rch','RCH XDealer',state.rchStatus,'rch',4,'Portale RCH')];
 }
 function accessCard(onlyMissing){
- const list=portalAccess();const missing=list.filter(p=>p.state!=='ok');
+ const owner=WEB&&typeof isOwnerNow==='function'&&isOwnerNow();
+ if(owner&&typeof loadPortals==='function')loadPortals();
+ const list=portalAccess().map(p=>{
+  const hosted=typeof serverHosts==='function'&&serverHosts(p.k);
+  const s=owner&&typeof psvRow==='function'?psvRow(p):null;
+  if(s)return{...p,state:s.state,text:s.text,btnHtml:s.btn};
+  // portals kept by the server: nobody needs the office station for them
+  if(hosted)return{...p,text:p.state==='ok'?p.text+' · letto dal server':p.text,btnHtml:p.state==='ok'?'':'<small class="muted">accesso dal proprietario</small>'};
+  return p;});
+ const missing=list.filter(p=>p.state!=='ok');
  if(onlyMissing&&!missing.filter(p=>p.state!=='todo').length)return'';
  const head=missing.length?`${plur(missing.length,'accesso da rifare','accessi da rifare')}`:'Tutti i portali sono collegati';
- const btn=p=>p.state==='ok'?(WEB?'':`<button class="btn ghost sm" data-action="${p.act}">${icon('external')}Apri</button>`):!p.act?'':WEB?'<small class="muted">dalla postazione dell’ufficio</small>':`<button class="btn accent sm" data-action="${p.act}">${icon('external')}Accedi di nuovo</button>`;
- return`<div class="card reveal access-card" style="--i:1"><div class="card-head"><div><h2>Portali e accessi</h2><p>${head}. ${WEB?'Gli accessi si rifanno dall’app Windows della postazione di sincronizzazione.':'Accedi tu nella finestra del portale: Studio non salva le password e poi legge i dati in sola lettura.'}</p></div></div>
- <div class="access-list">${list.map(p=>`<div class="access-row s-${p.state}"><span class="bmark" style="--h:${p.hue}">${esc(p.mark)}</span><div class="grow"><strong>${esc(p.name)} <span class="access-dot" aria-hidden="true"></span></strong><small>${esc(p.sub)} · ${esc(p.text)}</small></div>${btn(p)}</div>`).join('')}</div></div>`;
+ const btn=p=>p.btnHtml!==undefined?p.btnHtml:p.state==='ok'?(WEB?'':`<button class="btn ghost sm" data-action="${p.act}">${icon('external')}Apri</button>`):!p.act?'':WEB?'<small class="muted">dalla postazione dell’ufficio</small>':`<button class="btn accent sm" data-action="${p.act}">${icon('external')}Accedi di nuovo</button>`;
+ const note=owner?'I portali spostati sul server si leggono da soli, anche con il PC dell’ufficio spento: accedi una volta da qui, anche da fuori.':WEB?((state.serverPortals||[]).length?'Gli accessi li gestisce il proprietario dal server.':'Gli accessi si rifanno dall’app Windows della postazione di sincronizzazione.'):'Accedi tu nella finestra del portale: Studio non salva le password e poi legge i dati in sola lettura.';
+ return`<div class="card reveal access-card" style="--i:1"><div class="card-head"><div><h2>Portali e accessi</h2><p>${head}. ${note}</p></div></div>
+ <div class="access-list">${list.map(p=>`<div class="access-row s-${p.state}"><span class="bmark" style="--h:${p.hue}">${esc(p.mark)}</span><div class="grow"><strong>${esc(p.name)} <span class="access-dot" aria-hidden="true"></span></strong><small>${esc(p.sub)} · ${esc(p.text)}</small></div><div class="access-btns">${btn(p)}</div></div>`).join('')}</div></div>`;
 }
 
 // ───────────────────────── 2.9.0 machines to check: verification overdue for over a year → "dismessa" or "ancora attiva"

@@ -11,6 +11,8 @@ public sealed class Hub(Store store)
 {
  /// The team (names and roles only, never anything else): interventions are assigned to a person, who finds them in "I miei".
  public Func<object[]>? Team;
+ /// Portals the server keeps itself (ids): the pages stop pointing at the office station for those.
+ public Func<List<string>>? ServerPortals;
  static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
  readonly ConcurrentDictionary<Guid,Channel<string>> clients=new();
  readonly Lock gate=new();
@@ -31,7 +33,7 @@ public sealed class Hub(Store store)
  /// (usually a few KB instead of the whole archive); the full snapshot is assembled from the same bytes.
  sealed record Snap(long Version,byte[] Full,byte[] FullNoAccounting,Dictionary<string,(byte[] Json,string Hash)> Sections);
  /// Sections a technician never receives (accounting stays on the server for them).
- static readonly HashSet<string> Accounting=["invoices","dues","balances","dueNotes","riba","sales","ledger","mastroSync","insights","analysis"];
+ static readonly HashSet<string> Accounting=["moneyInterventions","invoices","dues","balances","dueNotes","riba","sales","ledger","mastroSync","insights","analysis","bilancio"];
  Snap? snap;
  /// Devices get the invoices from January 1st of last year (charts, receivables and client situation never look further back);
  /// the full history stays here, in the CSV export and in Mastro. 40k rows since 2019 were too much for a phone's memory.
@@ -46,11 +48,11 @@ public sealed class Hub(Store store)
    var v=Version;
    var mv=store.Mastro();
    var parts=new (string,object)[]{("records",store.Licenses()),("licenseEdits",store.LicenseEdits()),("licenseCleanup",store.LicenseCleanup()),("clientEdits",store.ClientEdits()),("clients",store.Clients()),("orders",store.Orders()),
-    ("mastroClients",mv.Clients),("machines",mv.Machines),("interventions",mv.Interventions),("brandRule",mv.Excluded),("assets",store.Assets()),("renewals",store.Renewals()),("deviceLinks",store.DeviceLinks()),
+    ("mastroClients",mv.Clients),("machines",mv.Machines),("interventions",mv.Interventions.Where(i=>!MoneyWork.IsMoney(i.Kind)).ToList()),("moneyInterventions",mv.Interventions.Where(i=>MoneyWork.IsMoney(i.Kind)).ToList()),("moneyRule",store.Money()),("brandRule",mv.Excluded),("assets",store.Assets()),("renewals",store.RenewalsView()),("licenseRule",store.LicenseRules()),("deviceLinks",store.DeviceLinks()),
     ("warehouses",store.Warehouses()),("articles",store.Articles()),("stockLevels",store.StockLevels()),("stock",store.Stock()),("movements",store.Movements()),("invoices",RecentInvoices()),("dues",store.Dues()),("balances",store.Balances()),("dueNotes",store.DueNotes()),("sales",store.Sales().Where(x=>string.CompareOrdinal(x.Month,SinceMonth)>=0).ToList()),("ledger",store.Ledger().Where(x=>string.CompareOrdinal(x.Month,SinceMonth)>=0).ToList()),
     ("sources",store.Sources()),("events",store.Events()),("notes",store.Notes()),("metadata",store.Metadata()),("dtr",store.DtrRegisters()),("dtrStatus",store.DtrState()),("ital",store.ItalDevices()),("italOrders",store.ItalOrders()),("italStatus",store.ItalState()),("rch",store.RchDevices()),("rchStatus",store.RchState()),
-    ("rt",store.RtInfos()),("machineFlags",store.MachineFlags()),("routeDone",store.RouteDone()),("photos",store.Photos()),("sites",store.Sites()),("riba",store.RibaList()),("team",Team?.Invoke()??[]),
-    ("features",new{mail=store.MailReady(),backupError=Backups.Status(store).Error}),("mastroSync",(object?)store.LastMastroSync()??new{}),("insights",store.Insights()),("analysis",store.Analysis())};
+    ("rt",store.RtInfos()),("machineFlags",store.MachineFlags()),("routeDone",store.RouteDone()),("photos",store.Photos()),("sites",store.Sites()),("riba",store.RibaList()),("team",Team?.Invoke()??[]),("serverPortals",ServerPortals?.Invoke()??[]),
+    ("features",new{mail=store.MailReady(),backupError=Backups.Status(store).Error}),("mastroSync",(object?)store.LastMastroSync()??new{}),("insights",store.Insights()),("analysis",store.Analysis()),("bilancio",store.Bilancio())};
    var sections=new Dictionary<string,(byte[],string)>(parts.Length);
    foreach(var(name,value) in parts){var b=JsonSerializer.SerializeToUtf8Bytes(value,value.GetType(),Json);sections[name]=(b,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(b),0,8));}
    snap=new Snap(v,Compose(v,sections,null,true),Compose(v,sections,null,false),sections);encoded.Clear();return snap;

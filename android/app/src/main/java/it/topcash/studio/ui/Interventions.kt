@@ -81,6 +81,7 @@ import it.topcash.studio.data.Intervention
 import it.topcash.studio.data.Tone
 import it.topcash.studio.data.UIntervention
 import it.topcash.studio.data.norm
+import it.topcash.studio.data.isMoneyKind
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
@@ -244,12 +245,17 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
     var machine by remember { mutableStateOf(existing?.i?.machine.orEmpty().let { raw -> // Mastro stores the bare machine number: match it to the customer's machine
         if (raw.isBlank()) raw else existing?.client?.machines?.firstOrNull { it.m.id == raw || it.m.id == "m$raw" || it.m.serial == raw }?.m?.id ?: raw }) }
     var parts by remember { mutableStateOf(existing?.i?.parts.orEmpty()) }
+    val oldKind = existing?.i?.kind.orEmpty()
+    // collections and credit notes: whoever sees Accounting can move a record between the work and Accounting
+    var kind by remember { mutableStateOf(if (isMoneyKind(oldKind)) oldKind else "Intervento") }
+    val showKind = me?.seesAccounting == true && oldKind != "Verifica"
     var pickDate by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     val close: () -> Unit = { scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss() } }
     val current = { Intervention(id = existing?.i?.id.orEmpty(), clientCode = clientCode, clientName = clientQuery, date = date, machine = machine, title = title.trim(), work = work,
-        status = status, technician = tech.trim(), priority = priority, total = existing?.i?.total.orEmpty(), parts = parts, hours = existing?.i?.hours.orEmpty(), kind = existing?.i?.kind.orEmpty()) }
+        status = status, technician = tech.trim(), priority = priority, total = existing?.i?.total.orEmpty(), parts = parts, hours = existing?.i?.hours.orEmpty(),
+        kind = if (!showKind || (kind == "Intervento" && !isMoneyKind(oldKind))) oldKind else kind) }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         val sheetScroll = rememberScrollState()
@@ -276,6 +282,16 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
                 }
             }
             OutlinedTextField(title, { title = it.take(200) }, Modifier.fillMaxWidth(), enabled = !ro, label = { Text("Titolo") }, placeholder = { Text("es. Sostituzione stampante, verificazione…") }, singleLine = true, shape = MaterialTheme.shapes.medium)
+            if (showKind) {
+                Gap(14.dp)
+                Text("Tipo", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val kinds = listOf("Intervento" to "Intervento", "Incasso" to "Incasso", "Nota di credito" to "Nota credito")
+                Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    kinds.forEach { (k, l) -> FilterChip(kind == k, { if (!ro) kind = k }, modifier = Modifier.weight(1f).height(40.dp), enabled = !ro, shape = MaterialTheme.shapes.small,
+                        label = { Text(l, Modifier.fillMaxWidth(), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis) }) }
+                }
+                Text("Incassi, insoluti e note di credito stanno in Contabilità → Incassi e note.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+            }
             Gap(14.dp)
             Text("Stato", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

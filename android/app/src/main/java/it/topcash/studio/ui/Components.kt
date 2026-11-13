@@ -1,6 +1,7 @@
 package it.topcash.studio.ui
 
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.runtime.setValue
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.togetherWith
@@ -341,26 +342,41 @@ fun Modifier.bleed(h: Dp): Modifier = this.layout { m, c ->
 }
 
 /**
- * Soft edges (same as the site): a scrolling row or column fades out over [length] on the sides that still hide content,
- * so a list never ends with a hard cut. The fade comes in and out softly as you reach the start or the end.
- * Put it before verticalScroll / on the Lazy list, after bleed().
+ * Soft edges (same as the site): a scrolling row or column blurs and fades out over [length] on the sides that still
+ * hide content, so a list never ends with a hard cut. Both come in and out softly as you reach the start or the end.
+ * The blur is a second, blurred copy of the content drawn only in the edge band with a gradient (Android 12+;
+ * older phones keep the fade alone). Put it before verticalScroll / on the Lazy list, after bleed().
  */
 fun Modifier.fadeEdges(state: androidx.compose.foundation.gestures.ScrollableState, vertical: Boolean, length: Dp = 24.dp): Modifier = composed {
     val start = animateFloatAsState(if (state.canScrollBackward) 1f else 0f, tween(220), label = "fadeStart")
     val end = animateFloatAsState(if (state.canScrollForward) 1f else 0f, tween(220), label = "fadeEnd")
+    val blurred = if (android.os.Build.VERSION.SDK_INT >= 31) androidx.compose.ui.graphics.rememberGraphicsLayer() else null
+    val radius = with(androidx.compose.ui.platform.LocalDensity.current) { 3.5.dp.toPx() }
+    LaunchedEffect(blurred, radius) { blurred?.renderEffect = androidx.compose.ui.graphics.BlurEffect(radius, radius, androidx.compose.ui.graphics.TileMode.Clamp) }
     this.graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
         .drawWithContent {
             drawContent()
             val l = length.toPx(); val a = start.value; val b = end.value
             val ink = { k: Float -> Color.Black.copy(alpha = k) }
-            if (a > 0f) drawRect(
-                if (vertical) androidx.compose.ui.graphics.Brush.verticalGradient(listOf(ink(a), Color.Transparent), 0f, l)
-                else androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(ink(a), Color.Transparent), 0f, l),
-                blendMode = androidx.compose.ui.graphics.BlendMode.DstOut)
-            if (b > 0f) drawRect(
-                if (vertical) androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Transparent, ink(b)), size.height - l, size.height)
-                else androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color.Transparent, ink(b)), size.width - l, size.width),
-                blendMode = androidx.compose.ui.graphics.BlendMode.DstOut)
+            fun band(from: Boolean) = if (vertical)
+                androidx.compose.ui.geometry.Rect(0f, if (from) 0f else size.height - l, size.width, if (from) l else size.height)
+            else androidx.compose.ui.geometry.Rect(if (from) 0f else size.width - l, 0f, if (from) l else size.width, size.height)
+            fun ramp(from: Boolean, k: Float) = if (vertical)
+                androidx.compose.ui.graphics.Brush.verticalGradient(if (from) listOf(ink(k), Color.Transparent) else listOf(Color.Transparent, ink(k)), if (from) 0f else size.height - l, if (from) l else size.height)
+            else androidx.compose.ui.graphics.Brush.horizontalGradient(if (from) listOf(ink(k), Color.Transparent) else listOf(Color.Transparent, ink(k)), if (from) 0f else size.width - l, if (from) l else size.width)
+            // blur first: the blurred copy, kept only in the band and strongest at the very edge
+            if (blurred != null && (a > 0f || b > 0f) && size.width > 0f && size.height > 0f) {
+                blurred.record { this@drawWithContent.drawContent() }
+                for ((from, k) in listOf(true to a, false to b)) if (k > 0f) {
+                    val r = band(from)
+                    drawContext.canvas.saveLayer(r, androidx.compose.ui.graphics.Paint())
+                    drawLayer(blurred)
+                    drawRect(ramp(from, k), r.topLeft, r.size, blendMode = androidx.compose.ui.graphics.BlendMode.DstIn)
+                    drawContext.canvas.restore()
+                }
+            }
+            if (a > 0f) drawRect(ramp(true, a), blendMode = androidx.compose.ui.graphics.BlendMode.DstOut)
+            if (b > 0f) drawRect(ramp(false, b), blendMode = androidx.compose.ui.graphics.BlendMode.DstOut)
         }
 }
 

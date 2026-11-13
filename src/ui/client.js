@@ -123,6 +123,7 @@ function interventionsTab(c){
  return`<button class="btn accent block" data-newint="${esc(c.code)}">${icon('plus')}Nuovo intervento per ${esc(c.name)}</button>
  <div class="d-section"><h3>${icon('tool')} Da fare <span>${fmt(open.length)}</span></h3>${open.map(i=>intRow(i)).join('')||'<p class="sub">Nessun intervento aperto.</p>'}</div>
  ${done.length?`<div class="d-section"><h3>${icon('check')} Chiusi <span>${fmt(done.length)}</span></h3>${done.slice(0,8).map(i=>intRow(i)).join('')}${done.length>8?`<details class="extra-sec"><summary><small class="muted">Mostra altri ${fmt(done.length-8)}</small></summary>${done.slice(8,60).map(i=>intRow(i)).join('')}</details>`:''}</div>`:''}
+ ${c.money?.length&&canAccounting()?`<details class="d-section extra-sec"${c.money.some(i=>i.kind==='Incasso'&&i.status!=='Chiuso')?' open':''}><summary><h3>Incassi e note di credito <span>${fmt(c.money.length)}</span></h3></summary><p class="sub">Registrati in Mastro come interventi: li segue la contabilità.</p>${c.money.slice(0,20).map(i=>intRow(i)).join('')}</details>`:''}
  ${c.verifications?.length?`<details class="d-section extra-sec"><summary><h3>Verifiche periodiche <span>${fmt(c.verifications.length)}</span></h3></summary><p class="sub">Ogni 2 anni per ogni registratore: non sono interventi di riparazione.</p>${c.verifications.slice(0,20).map(i=>intRow(i)).join('')}</details>`:''}`;
 }
 
@@ -146,7 +147,7 @@ async function saveIntQuick(id,patch,msg){
  try{if(WEB)await post('/api/interventions',item);else send('intervention',{item});toast(msg);}catch(e){toast(e.message,'alert');}
 }
 async function intQuick(action,id){
- const it=D.interventions.find(x=>x.id===id);if(!it)return;
+ const it=findInt(id);if(!it)return;
  if(action==='sign')return openSignature({...it,c:it.c});
  if(action==='print')return printReport(id);
  if(action==='mail')return sendReportDialog({...it,c:it.c});

@@ -83,7 +83,7 @@ private var accFilterHint: String? = null
 private var accMonthHint: String? = null
 /** Opens an accounting page already filtered (from "Altro" in the Contabilità area). */
 fun NavHostController.openAccounting(view: AccView, filter: String) { accFilterHint = filter; if (view.route in accTabRoutes) switchTab(view.route) else navigate(view.route) { launchSingleTop = true } }
-enum class AccView(val route: String, val title: String) { Home("acc", "Contabilità"), Receivables("accRec", "Da incassare"), Invoices("accInv", "Fatture"), Payables("accPay", "Da pagare") }
+enum class AccView(val route: String, val title: String) { Home("acc", "Contabilità"), Receivables("accRec", "Da incassare"), Invoices("accInv", "Fatture"), Payables("accPay", "Da pagare"), Money("accMoney", "Incassi e note") }
 
 @Composable fun AccountingScreen(vm: AppViewModel, a: Archive, nav: NavHostController, view: AccView = AccView.Home, topLevel: Boolean = false) {
     val acc = a.acc
@@ -107,13 +107,62 @@ enum class AccView(val route: String, val title: String) { Home("acc", "Contabil
         AccView.Receivables -> "${money0(acc.toCollect)} · ${acc.receivables.count { it.open }} rate aperte"
         AccView.Payables -> "${money0(acc.toPay)} · ${money0(acc.toPay30)} entro 30 giorni"
         AccView.Invoices -> "${acc.invoices.size} documenti · ${money0(acc.revenueYear)} nel ${java.time.LocalDate.now().year}"
+        AccView.Money -> a.money.filter { it.i.kind == "Incasso" && it.i.status != "Chiuso" }.let { o -> "${money0(o.sumOf { it.amount })} da incassare · ${o.size} pratiche" }
     }
     val go: (AccView, String) -> Unit = { v, f -> nav.openAccounting(v, f) }
+    var moneyTab by rememberSaveable { mutableStateOf(moneyTabs[0]) }
+    if (view == AccView.Money) {
+        Page(vm, view.title, subtitle, onBack = if (topLevel) null else ({ nav.popBackStack() })) { moneyRegister(vm, a, moneyTab, { moneyTab = it }, q, { q = it }) }
+        return
+    }
     Page(vm, view.title, subtitle, onBack = if (topLevel) null else ({ nav.popBackStack() })) {
         if (!acc.hasData) { item(key = "none") { Empty(Icons.Rounded.Euro, "Nessun dato contabile", "Il server legge fatture e scadenze da MastroSQL da solo ogni mezz’ora: compaiono qui alla prossima lettura.") }; return@Page }
         if (view == AccView.Home) { insightsStrip(a, nav); accSummary(acc, nav, go) { open = it } } else accRegister(view, tab, filter, { filter = it }, q, { q = it }, dues, invoices, invMonths, month, { month = it }, nav) { open = it }
     }
     open?.let { id -> acc.due(id)?.let { d -> DueSheet(vm, d, nav, onDismiss = { open = null }) } ?: LaunchedEffect(id) { open = null } }
+}
+
+private val moneyTabs = listOf("Da incassare", "Incassati", "Note di credito", "Tutti")
+/** Incassi e note: unpaid RiBa/RID, invoice balances, deposits and credit notes that Mastro records as interventions.
+ *  The same records (a tap opens them), apart from the technicians' work and never closed automatically. */
+private fun LazyListScope.moneyRegister(vm: AppViewModel, a: Archive, tab: String, setTab: (String) -> Unit, q: String, setQ: (String) -> Unit) {
+    val coll = a.money.filter { it.i.kind == "Incasso" }
+    val open = coll.filter { it.i.status != "Chiuso" }; val paid = coll.filter { it.i.status == "Chiuso" }; val credit = a.money.filter { it.i.kind == "Nota di credito" }
+    val today = java.time.LocalDate.now()
+    val paid90 = paid.filter { it.date != null && !it.date.isBefore(today.minusDays(90)) }
+    val n = norm(q.trim())
+    val list = (when (tab) { "Incassati" -> paid; "Note di credito" -> credit; "Tutti" -> a.money; else -> open })
+        .filter { n.isEmpty() || norm(listOf(it.clientName, it.i.title, it.i.work, it.i.technician).joinToString(" ")).contains(n) }
+    item(key = "m-kpi") {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            MoneyTile("Da incassare", open.sumOf { it.amount }, "${open.size} pratiche aperte", if (open.isEmpty()) Tone.Ok else Tone.Bad, Modifier.weight(1f).appear(0)) { setTab(moneyTabs[0]) }
+            MoneyTile("Incassati · 90 gg", paid90.sumOf { it.amount }, "${paid90.size} incassi", Tone.Ok, Modifier.weight(1f).appear(1)) { setTab(moneyTabs[1]) }
+        }
+    }
+    if (a.state.moneyRule?.enabled == false) item(key = "m-off") {
+        Text("Riconoscimento automatico spento: qui ci sono solo quelli spostati a mano. Si riaccende da Account → Interventi.", style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
+    }
+    item(key = "m-search") { SearchField(q, setQ, "Cerca cliente, fattura, importo", Modifier.padding(top = 10.dp)) }
+    item(key = "m-tabs") { ChoiceChips(moneyTabs, tab, setTab, Modifier.padding(vertical = 8.dp)) }
+    if (list.isEmpty()) item(key = "m-e") { Empty(Icons.Rounded.TaskAlt, if (tab == moneyTabs[0]) "Niente da incassare" else "Nessuna pratica",
+        if (n.isNotEmpty()) "Prova a cambiare la ricerca." else if (tab == moneyTabs[0]) "Tutti gli incassi registrati risultano chiusi." else "Compaiono qui appena registrati in Mastro o spostati a mano.") }
+    items(list.size.coerceAtMost(400), key = { "m" + list[it].i.id }) { k -> val x = list[k]
+        CardBox(Modifier.padding(bottom = 8.dp).animateItem(), onClick = { vm.shortcut.value = "int:" + x.i.id }, padding = PaddingValues(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(x.clientName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(x.i.title.replace('\n', ' '), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(listOfNotNull(x.date?.let { Dates.short(it) }, x.i.technician.takeIf { it.isNotBlank() }).joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 10.dp)) {
+                    if (x.amount > 0) Text(money(x.amount), style = MaterialTheme.typography.titleSmall.tabular)
+                    val done = x.i.status == "Chiuso"; val late = !done && x.date != null && x.date.isBefore(today.minusDays(30))
+                    Pill(if (done) (if (x.i.kind == "Incasso") "Incassato" else "Registrata") else x.i.status, if (done) Tone.Ok else if (late) Tone.Bad else Tone.Due, Modifier.padding(top = 4.dp))
+                }
+            }
+        }
+    }
 }
 
 /** Summary: figures, the monthly chart and what the office should look at today. */

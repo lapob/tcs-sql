@@ -385,12 +385,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _roster = MutableStateFlow<RosterView?>(null); val roster = _roster.asStateFlow()
     private val _autoClose = MutableStateFlow<AutoCloseRule?>(null); val autoClose = _autoClose.asStateFlow()
     fun loadAutoClose() = viewModelScope.launch { try { _autoClose.value = api.autoClose() } catch (_: ApiException) { } }
+    fun saveLicenseRule(keepMonths: Int, renewedUntil: String) = viewModelScope.launch {
+        try { val r = api.saveLicenseRule(LicenseRuleSave(keepMonths, renewedUntil))
+            _messages.tryEmit("Salvato: tolte dopo ${if (r.keepMonths == 1) "1 mese" else "${r.keepMonths} mesi"}" + (if (r.renewedUntil.isNotBlank()) ", rinnovate fino a ${monthLabel(r.renewedUntil)}" else "")); refresh(true) }
+        catch (e: ApiException) { _messages.tryEmit(e.message ?: "Impossibile salvare") }
+    }
+    fun saveMoney(enabled: Boolean) = viewModelScope.launch {
+        try { api.saveMoney(MoneySave(enabled)); _messages.tryEmit(if (enabled) "Incassi e note di credito spostati in Contabilità" else "Incassi e note di credito tornano tra gli interventi"); refresh(true) }
+        catch (e: ApiException) { _messages.tryEmit(e.message ?: "Impossibile salvare") }
+    }
     fun saveAutoClose(enabled: Boolean, days: Int) = viewModelScope.launch {
         try { val r = api.saveAutoClose(AutoCloseSave(enabled, days)); _autoClose.value = r
             _messages.tryEmit(if (!r.enabled) "Chiusura automatica disattivata" else if (r.closed > 0) "Salvato: chiusi ${r.closed} interventi aperti da oltre ${r.days} giorni" else "Salvato: chiusura dopo ${r.days} giorni")
             refresh(true)
         } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Operazione non riuscita") }
     }
+    private val _portals = MutableStateFlow<PortalList?>(null); val portals = _portals.asStateFlow()
+    fun loadPortals() = viewModelScope.launch { try { _portals.value = api.portals() } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Portali non disponibili") } }
+    fun portalEnabled(id: String, on: Boolean, then: () -> Unit = {}) = viewModelScope.launch {
+        try { api.portalEnabled(id, on); _portals.value = api.portals(); then() } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Impossibile salvare") } }
+    fun portalAction(id: String, action: String, done: String) = viewModelScope.launch {
+        try { api.portalAction(id, action); _messages.tryEmit(done); kotlinx.coroutines.delay(1500); _portals.value = api.portals() } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Operazione non riuscita") } }
+    suspend fun portalView(id: String) = api.portalView(id)
+    fun portalDone(id: String) = viewModelScope.launch {
+        if (portalInput(id, PortalInput("done")).isSuccess) _messages.tryEmit("Controllo l’accesso: se è riuscito la lettura parte da sola")
+        delay(1500); runCatching { _portals.value = api.portals() } }
+    suspend fun portalInput(id: String, i: PortalInput) = runCatching { api.portalInput(id, i) }.onFailure { _messages.tryEmit(it.message ?: "Portale non raggiungibile") }
     fun loadUsers() = viewModelScope.launch { try { val r = api.usersFull(); _users.value = r.users; _roster.value = r.roster } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Utenti non disponibili") } }
     /** Agent on/off or hidden on/off for one person: shown at once, then confirmed by the server (undone if it refuses). */
     fun toggleRoster(name: String, agent: Boolean) = viewModelScope.launch {

@@ -36,7 +36,8 @@ import kotlinx.serialization.Serializable
     val total: String = "", val source: String = "app", val created: String = "", val createdBy: String = "", val updated: String = "", val updatedBy: String = "",
     val parts: List<PartUse> = emptyList(), val hours: String = "", val signer: String = "", val signedAt: String = "", val reportNo: String = "",
     val sentTo: String = "", val sentAt: String = "",
-    /** "Verifica" = periodic verification (every 2 years), kept apart from the real interventions. */
+    /** "Verifica" = periodic verification (every 2 years), kept apart from the real interventions;
+     *  "Incasso" / "Nota di credito" = collection or credit note (Accounting); "Intervento" = kept among the work by hand. */
     val kind: String = "",
     /** "mastro" = imported from Mastro and then edited here: the next Mastro reads never overwrite it. */
     val origin: String = "",
@@ -61,6 +62,22 @@ import kotlinx.serialization.Serializable
     val dueDate: String = "", val amount: Double = 0.0, val paid: Double = 0.0, val payment: String = "", val source: String = "")
 /** Last read of Mastro (the server does it by itself every hour). */
 /** Analisi: computed by the server from Mastro at every read, the same figures the site shows. */
+@Serializable data class PortalView(val id: String = "", val name: String = "", val enabled: Boolean = false, val browser: Boolean = false, val connected: Boolean = false, val running: Boolean = false,
+    val status: String = "", val lastSync: String = "", val error: String = "", val url: String = "", val every: String = "")
+@Serializable data class PortalList(val portals: List<PortalView> = emptyList(), val browser: Boolean = false)
+@Serializable data class PortalSwitch(val enabled: Boolean)
+@Serializable data class PortalInput(val kind: String, val x: Double = 0.0, val y: Double = 0.0, val dy: Double = 0.0, val text: String? = null)
+/** Income statement and balance sheet from Mastro's general ledger (computed by the server, same as the site). */
+@Serializable data class BilLine(val code: String = "", val label: String = "", val amount: Double = 0.0, val prev: Double = 0.0)
+@Serializable data class BilGroup(val code: String = "", val label: String = "", val section: String = "", val amount: Double = 0.0, val prev: Double = 0.0, val accounts: List<BilLine> = emptyList())
+@Serializable data class BilMonth(val month: String = "", val revenue: Double = 0.0, val costs: Double = 0.0, val result: Double = 0.0, val liquidity: Double = 0.0)
+@Serializable data class Bilancio(val at: String = "", val month: String = "", val prevEnd: String = "", val hasIncome: Boolean = false, val hasBalance: Boolean = false, val note: String = "",
+    val revenue: Double = 0.0, val costs: Double = 0.0, val result: Double = 0.0, val revenuePrev: Double = 0.0, val costsPrev: Double = 0.0, val resultPrev: Double = 0.0, val revenueLastYear: Double = 0.0, val resultLastYear: Double = 0.0,
+    val income: List<BilGroup> = emptyList(), val assets: List<BilGroup> = emptyList(), val liabilities: List<BilGroup> = emptyList(),
+    val totalAssets: Double = 0.0, val totalLiabilities: Double = 0.0, val totalAssetsPrev: Double = 0.0, val totalLiabilitiesPrev: Double = 0.0,
+    val liquidity: Double = 0.0, val liquidityPrev: Double = 0.0, val financialDebt: Double = 0.0, val netFinancial: Double = 0.0, val netFinancialPrev: Double = 0.0,
+    val receivables: Double = 0.0, val receivablesPrev: Double = 0.0, val payables: Double = 0.0, val payablesPrev: Double = 0.0, val vat: Double = 0.0, val equity: Double = 0.0, val equityPrev: Double = 0.0,
+    val dso: Int = 0, val dpo: Int = 0, val revenue12: Double = 0.0, val purchases12: Double = 0.0, val months: List<BilMonth> = emptyList(), val monthsPrev: List<BilMonth> = emptyList())
 @Serializable data class Analysis(val at: String = "", val forecast: List<AnaWeek> = emptyList(), val forecastIn: Double = 0.0, val forecastOut: Double = 0.0, val overdueExpected: Double = 0.0,
     val abc: List<AnaAbc> = emptyList(), val abcClasses: List<AnaAbcClass> = emptyList(), val agents: List<AnaAgent> = emptyList(), val techs: List<AnaTech> = emptyList(),
     val machines: List<AnaMachine> = emptyList(), val models: List<AnaModel> = emptyList(), val discountClients: List<AnaDiscount> = emptyList(), val discountArticles: List<AnaDiscount> = emptyList(),
@@ -97,18 +114,20 @@ import kotlinx.serialization.Serializable
 @Serializable data class ArchiveState(
     val records: List<LicenseRecord> = emptyList(), val clients: List<RegistryClient> = emptyList(), val orders: List<Order> = emptyList(),
     val mastroClients: List<MastroClient> = emptyList(), val machines: List<Machine> = emptyList(), val interventions: List<Intervention> = emptyList(),
+    /** Collections and credit notes Mastro files as interventions (Accounting only; a technician never receives them). */
+    val moneyInterventions: List<Intervention> = emptyList(), val moneyRule: MoneyRule? = null,
     val events: List<SyncEvent> = emptyList(), val notes: Map<String, String> = emptyMap(), val metadata: Map<String, ClientMeta> = emptyMap(),
     val warehouses: List<Warehouse> = emptyList(), val articles: List<Article> = emptyList(), val stockLevels: List<StockLevel> = emptyList(),
     val stock: List<StockRow> = emptyList(), val movements: List<Movement> = emptyList(),
     val invoices: List<Invoice> = emptyList(), val dues: List<Due> = emptyList(), val balances: List<Balance> = emptyList(), val dueNotes: Map<String, DueNote> = emptyMap(),
     val sales: List<SaleRow> = emptyList(), val ledger: List<LedgerRow> = emptyList(), val mastroSync: MastroSync? = null,
-    val insights: Insights? = null, val analysis: Analysis? = null,
+    val insights: Insights? = null, val analysis: Analysis? = null, val bilancio: Bilancio? = null,
     val features: Features = Features(),
     val dtr: List<DtrRegister> = emptyList(), val dtrStatus: DtrStatus = DtrStatus(),
     val ital: List<ItalDevice> = emptyList(), val italOrders: List<ItalOrder> = emptyList(), val italStatus: DtrStatus = DtrStatus(),
     val team: List<TeamMember> = emptyList(),
     val rch: List<RchDevice> = emptyList(), val rchStatus: DtrStatus = DtrStatus(),
-    val clientEdits: Map<String, ClientEdit> = emptyMap(), val licenseEdits: Map<String, LicenseEdit> = emptyMap(), val licenseCleanup: LicenseCleanup = LicenseCleanup(),
+    val clientEdits: Map<String, ClientEdit> = emptyMap(), val licenseEdits: Map<String, LicenseEdit> = emptyMap(), val licenseCleanup: LicenseCleanup = LicenseCleanup(), val licenseRule: LicenseRule? = null,
     val assets: List<Asset> = emptyList(), val renewals: Map<String, RenewalMark> = emptyMap(), val deviceLinks: Map<String, String> = emptyMap(),
     val machineFlags: Map<String, MachineFlag> = emptyMap(), val routeDone: Map<String, RouteMark> = emptyMap(), val photos: Map<String, List<PhotoInfo>> = emptyMap(),
     val version: Long = 0,
@@ -190,7 +209,11 @@ object Catalog {
 /** A build published on the office server by the administrator (network updates). */
 @Serializable data class AppBuild(val version: String = "", val size: Long = 0, val sha256: String = "", val uploadedAt: String = "", val uploadedBy: String = "", val notes: String = "")
 @Serializable data class UpdateInfo(val windows: AppBuild? = null, val android: AppBuild? = null)
-@Serializable data class LicenseCleanup(val red: Int = 0, val old: Int = 0, val hidden: Int = 0, val keepMonths: Int = 2)
+@Serializable data class LicenseCleanup(val red: Int = 0, val old: Int = 0, val hidden: Int = 0, val keepMonths: Int = 1)
+/** Office rule (server setting, same on every app): licences not renewed leave the list after [keepMonths];
+ *  every expiry up to the month [renewedUntil] ("yyyy-MM") counts as renewed unless marked otherwise by hand. */
+@Serializable data class LicenseRule(val keepMonths: Int = 1, val renewedUntil: String = "", val updatedAt: String = "", val updatedBy: String = "")
+@Serializable data class LicenseRuleSave(val keepMonths: Int, val renewedUntil: String)
 @Serializable data class ClientSaveRequest(val code: String, val edit: ClientEdit)
 @Serializable data class ClientDeleteRequest(val code: String, val deleted: Boolean)
 @Serializable data class LicenseSaveRequest(val id: String, val edit: LicenseEdit)
@@ -204,6 +227,9 @@ object Catalog {
 /** Open interventions that close by themselves after [days] days (same setting on website, Windows and Android). */
 @Serializable data class AutoCloseRule(val enabled: Boolean = true, val days: Int = 30, val updatedAt: String = "", val updatedBy: String = "", val closed: Int = 0)
 @Serializable data class AutoCloseSave(val enabled: Boolean, val days: Int)
+/** Server rule: collections and credit notes recorded in Mastro as interventions move to Accounting (on by default). */
+@Serializable data class MoneyRule(val enabled: Boolean = true, val updatedAt: String = "", val updatedBy: String = "")
+@Serializable data class MoneySave(val enabled: Boolean)
 @Serializable data class RosterSave(val hidden: List<String>, val agents: List<String>)
 @Serializable data class UserCreate(val username: String, val name: String, val role: String, val password: String)
 @Serializable data class UserPatch(val role: String? = null, val disabled: Boolean? = null, val name: String? = null, val password: String? = null)

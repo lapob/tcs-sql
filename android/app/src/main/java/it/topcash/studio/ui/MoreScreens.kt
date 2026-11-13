@@ -23,6 +23,7 @@ import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Route
 import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.AccountCircle
@@ -54,6 +55,10 @@ import it.topcash.studio.data.Tone
 import it.topcash.studio.data.UMachine
 import it.topcash.studio.data.UOrder
 import it.topcash.studio.data.norm
+import it.topcash.studio.data.monthLabel
+import it.topcash.studio.data.LicenseRule
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Spacer
 
 private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
 
@@ -121,8 +126,14 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
                         a.state.insights?.let { ins ->
                             MoreRow(Icons.Rounded.AutoAwesome, "Priorità", "${ins.unbilled.size} da fatturare · ${ins.payers.size} pagano tardi · ${ins.opps.size} da vendere", Modifier.appear(0)) { nav.navigate("accOpp") { launchSingleTop = true } }
                         }
+                        a.state.bilancio?.takeIf { it.hasIncome || it.hasBalance }?.let { b ->
+                            MoreRow(Icons.Rounded.Insights, "Bilancio", "${if (b.result >= 0) "Utile" else "Perdita"} ${AccountingView.money0(b.result)} · conto economico e stato patrimoniale", Modifier.appear(0)) { nav.navigate("accBil") { launchSingleTop = true } }
+                        }
                         a.state.analysis?.let { an ->
                             MoreRow(Icons.Rounded.Insights, "Analisi", "Incassi previsti ${AccountingView.money0(an.forecastIn)} · clienti ABC · agenti · sconti · costi", Modifier.appear(0)) { nav.navigate("accAna") { launchSingleTop = true } }
+                        }
+                        a.money.filter { it.i.kind == "Incasso" && it.i.status != "Chiuso" }.let { o ->
+                            MoreRow(Icons.Rounded.Euro, "Incassi e note", if (o.isEmpty()) "Insoluti, saldi e note di credito da Mastro" else "${o.size} da incassare · ${AccountingView.money0(o.sumOf { it.amount })}", Modifier.appear(0)) { nav.navigate("accMoney") { launchSingleTop = true } }
                         }
                         MoreRow(Icons.Rounded.Euro, "Rate scadute da incassare", "${ac.overdue.size} rate · ${AccountingView.money0(ac.overdueSum)}", Modifier.appear(0)) { nav.openAccounting(AccView.Receivables, "Scadute") }
                         MoreRow(Icons.Rounded.CalendarMonth, "In scadenza nei prossimi 7 giorni", "Incassi da seguire questa settimana", Modifier.appear(0)) { nav.openAccounting(AccView.Receivables, "7 giorni") }
@@ -158,6 +169,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
         }
         item(key = "account") {
             MoreGroup("Account") {
+                if (me?.isOwner == true) MoreRow(Icons.Rounded.Cloud, "Portali sul server", "Zucchetti, DTR-Service, Ital Retail e RCH letti dal server, senza PC acceso", Modifier.appear(3)) { nav.navigate("portals") }
                 if (me?.isAdmin == true) MoreRow(Icons.Rounded.AccountCircle, "Utenti", "Crea, modifica ed elimina gli accessi, compreso il tuo", Modifier.appear(3)) { nav.navigate("users") }
                 MoreRow(Icons.Rounded.AccountCircle, "Account e impostazioni", if (me?.canEdit == true) "Tema, chiusura automatica interventi, server, uscita" else "Tema, server, uscita", Modifier.appear(3)) { nav.navigate("account") }
                 MoreRow(Icons.Rounded.SystemUpdate, "Versione ${vm.appVersion}", "Tocca per controllare gli aggiornamenti", Modifier.appear(3)) { vm.checkUpdate(true) }
@@ -235,7 +247,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
     Page(null, "Licenze", "${list.size} licenze", onBack = { nav.popBackStack() }) {
         item(key = "tabs") { val tabs = listOf("Correnti", "Storico", "Tutte"); SegmentedPicker(tabs, tabs.indexOf(tab), { tab = tabs[it] }) }
         item(key = "search") { SearchField(q, { q = it }, "Cerca cliente, matricola, P.IVA", Modifier.padding(vertical = 10.dp)) }
-        a.state.licenseCleanup.let { k -> if (k.red + k.old + k.hidden > 0) item(key = "clean") { Text("Non compaiono ${listOfNotNull(k.red.takeIf { it > 0 }?.let { "$it licenze non valide sul portale" }, k.old.takeIf { it > 0 }?.let { "$it non rinnovate da oltre 2 mesi" }, k.hidden.takeIf { it > 0 }?.let { "$it tolte a mano" }).joinToString(", ")}.${if (admin) " Tocca una licenza per correggerla." else ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 10.dp)) } }
+        a.state.licenseCleanup.let { k -> if (k.red + k.old + k.hidden > 0) item(key = "clean") { Text("Non compaiono ${listOfNotNull(k.red.takeIf { it > 0 }?.let { "$it licenze non valide sul portale" }, k.old.takeIf { it > 0 }?.let { "$it non rinnovate da oltre ${if (k.keepMonths == 1) "1 mese" else "${k.keepMonths} mesi"}" }, k.hidden.takeIf { it > 0 }?.let { "$it tolte a mano" }).joinToString(", ")}.${if (admin) " Tocca una licenza per correggerla." else ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 10.dp)) } }
         items(list.size.coerceAtMost(1500), key = { list[it].r.id }) { i ->
             val l = list[i]
             CardBox(Modifier.padding(bottom = 8.dp).animateItem(), onClick = { if (admin) editing = l else nav.openClient(l.r.clientCode) }, padding = PaddingValues(14.dp)) {
@@ -296,6 +308,45 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
                 enabled = on != r.enabled || days != r.days.toString()) { Text("Salva") }
         }
         if (r.updatedBy.isNotBlank()) Text("Ultima modifica: ${r.updatedBy}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+    }
+    val archive by vm.archive.collectAsStateWithLifecycle()
+    val money = archive?.state?.moneyRule?.enabled != false
+    CardBox(Modifier.padding(top = 10.dp).appear(3)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Incassi e note di credito in Contabilità", style = MaterialTheme.typography.titleSmall)
+                Text("In Mastro sono registrati come interventi: così stanno in Contabilità → Incassi e note, i tecnici non li vedono e non si chiudono mai da soli.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            androidx.compose.material3.Switch(money, { vm.saveMoney(it) }, Modifier.padding(start = 12.dp))
+        }
+    }
+    LicenseRuleCard(vm, archive?.state?.licenseRule ?: LicenseRule())
+}
+
+@Composable private fun LicenseRuleCard(vm: AppViewModel, r: LicenseRule) {
+    var keep by androidx.compose.runtime.saveable.rememberSaveable(r.updatedAt) { androidx.compose.runtime.mutableStateOf(r.keepMonths) }
+    var until by androidx.compose.runtime.saveable.rememberSaveable(r.updatedAt) { androidx.compose.runtime.mutableStateOf(r.renewedUntil) }
+    val now = java.time.YearMonth.now()
+    SectionTitle("Licenze", Modifier.padding(top = 16.dp))
+    CardBox(Modifier.appear(4)) {
+        Text("Regole dell'ufficio per l'elenco licenze Zucchetti, uguali su sito e app Windows. Nulla viene cancellato: cambiando i valori tutto torna com'era.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Togli le non rinnovate dopo", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp))
+        Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(1, 2, 3, 6).forEach { m -> androidx.compose.material3.FilterChip(keep == m, { keep = m }, { Text(if (m == 1) "1 mese" else "$m mesi") }) }
+        }
+        Text("Considera rinnovate fino a", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp))
+        val opts = listOf("") + (0..2).map { now.minusMonths(it.toLong()).toString() } + listOfNotNull(r.renewedUntil.takeIf { it.isNotBlank() })
+        Row(Modifier.padding(top = 6.dp).horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            opts.distinct().forEach { o -> androidx.compose.material3.FilterChip(until == o, { until = o }, { Text(if (o.isBlank()) "Nessuno" else monthLabel(o)) }) }
+        }
+        Text(if (until.isBlank()) "Valgono solo i rinnovi segnati a mano." else "Le licenze in scadenza fino a ${monthLabel(until)} risultano rinnovate, tranne quelle segnate diversamente a mano.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+        Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (r.updatedBy.isNotBlank()) Text("Ultima modifica: ${r.updatedBy}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            else Spacer(Modifier.weight(1f))
+            androidx.compose.material3.Button({ vm.saveLicenseRule(keep, until) }, enabled = keep != r.keepMonths || until != r.renewedUntil) { Text("Salva") }
+        }
     }
 }
 

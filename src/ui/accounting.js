@@ -259,3 +259,121 @@ document.addEventListener('change',e=>{const id=e.target.id;
  else if(id==='f-acc-mm'){aui.mm=e.target.value;ui.p=1;render(false);}
  else if(id==='f-acc-kind'){aui.kind=e.target.value;ui.p=1;render(false);}
 });
+
+// ───────────────────────── Incassi e note: unpaid RiBa/RID, invoice balances, deposits and credit notes that Mastro records as
+// interventions. Same records (open one to change it), kept apart from the technicians' work and never closed automatically.
+let MQ={tab:'open'};
+function moneyPage(){
+ const all=D.money||[],q=norm(ui.q);const tabs=[['open','Da incassare'],['paid','Incassati'],['credit','Note di credito'],['all','Tutti']];
+ if(!tabs.some(([k])=>k===MQ.tab))MQ.tab='open';
+ const coll=all.filter(i=>i.kind==='Incasso'),open=coll.filter(i=>i.status!=='Chiuso'),paid=coll.filter(i=>i.status==='Chiuso'),credit=all.filter(i=>i.kind==='Nota di credito');
+ const sum=l=>l.reduce((s,i)=>s+(i.amount||0),0);const y1=all.filter(i=>i.d&&dayDiff(i.d)>=-365);
+ const paid90=paid.filter(i=>i.d&&dayDiff(i.d)>=-90),credit12=credit.filter(i=>i.d&&dayDiff(i.d)>=-365);
+ let list=MQ.tab==='open'?open:MQ.tab==='paid'?paid:MQ.tab==='credit'?credit:all;
+ if(q)list=list.filter(i=>norm([i.client,i.title,i.work,i.technician].join(' ')).includes(q));
+ if(ui.tech)list=list.filter(i=>i.technician===ui.tech);
+ if(!['date','client','amount'].includes(ui.sort.key))ui.sort={key:'date',dir:-1};
+ list=sortBy(list,{date:i=>i.d?+i.d:0,client:i=>i.client,amount:i=>i.amount||0});
+ const rows=pageOf(list,20);const who=[...new Set(all.map(i=>i.technician).filter(Boolean))].sort();
+ const late=open.filter(i=>i.d&&dayDiff(i.d)<-30).length;
+ const rule=state.moneyRule||{enabled:true};
+ return`${hero('Incassi e <span class="grad">note</span>.','Insoluti, saldi di fattura, acconti e note di credito: in Mastro sono registrati come interventi, qui stanno con la contabilità.','')}
+ ${explain('money','Studio riconosce da titolo e articolo di Mastro gli <strong>incassi</strong> (insoluti RiBa e RID, saldi, acconti) e le <strong>note di credito</strong>, e li toglie dagli interventi tecnici: i tecnici non li vedono e non si chiudono mai da soli. Se uno è finito qui per sbaglio aprilo e cambia <strong>Tipo</strong>. La regola si spegne da Impostazioni → Interventi.')}
+ ${rule.enabled===false?`<div class="banner reveal" style="--i:1"><span class="orb">${icon('alert')}</span><div class="grow"><h3>Riconoscimento automatico spento</h3><p>Qui compaiono solo quelli spostati a mano. Riaccendilo da Impostazioni → Interventi.</p></div></div>`:''}
+ <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
+  <div class="card kpi t-bad reveal" style="--i:2" data-mq-tab="open" tabindex="0"><div class="kpi-top"><span>Da incassare</span><span class="kpi-icon">${icon('euro')}</span></div><div class="kpi-value">${eurA(sum(open))}</div><div class="kpi-note">${plur(open.length,'pratica aperta','pratiche aperte')}${late?` · <b>${fmt(late)} da oltre 30 giorni</b>`:''}</div></div>
+  <div class="card kpi t-ok reveal" style="--i:3" data-mq-tab="paid" tabindex="0"><div class="kpi-top"><span>Incassati in 90 giorni</span><span class="kpi-icon">${icon('check')}</span></div><div class="kpi-value">${eurA(sum(paid90))}</div><div class="kpi-note">${plur(paid90.length,'incasso','incassi')}</div></div>
+  <div class="card kpi t-info reveal" style="--i:4" data-mq-tab="credit" tabindex="0"><div class="kpi-top"><span>Note di credito</span><span class="kpi-icon">${icon('file')}</span></div><div class="kpi-value">${fmt(credit12.length)}</div><div class="kpi-note">negli ultimi 12 mesi, su ${plur(y1.length,'pratica','pratiche')} in tutto</div></div>
+ </div>
+ <div class="card reveal" style="--i:5"><div class="card-head"><div><h2>${tabs.find(([k])=>k===MQ.tab)[1]}<span class="count">${fmt(list.length)}</span></h2>${list.length&&MQ.tab!=='credit'?`<p>Totale ${eurA(sum(list))}</p>`:''}</div><div class="seg">${tabs.map(([k,l])=>`<button class="${MQ.tab===k?'active':''}" data-mq-tab="${k}">${l}<span class="count">${fmt(k==='open'?open.length:k==='paid'?paid.length:k==='credit'?credit.length:all.length)}</span></button>`).join('')}</div></div>
+ <div class="toolbar">${search('Cerca cliente, fattura, importo…')}${who.length?`<select class="select" id="f-tech"><option value="">Chiunque</option>${who.map(t=>`<option${t===ui.tech?' selected':''}>${esc(t)}</option>`).join('')}</select>`:''}</div>
+ ${list.length?`<div class="table-wrap"><table class="t-money"><thead><tr>${th('Data','date')}${th('Cliente','client')}<th>Descrizione</th>${th('Importo','amount')}<th>Incaricato</th><th>Stato</th><th></th></tr></thead><tbody>
+ ${rows.map((i,k)=>`<tr class="reveal" style="--i:${k}" data-int="${esc(i.id)}" tabindex="0"><td>${i.d?dShort(i.d):'<span class="muted">—</span>'}<br><small class="muted">${i.d?rel(dayDiff(i.d)):''}</small></td><td><div class="who">${markEl(i.client,i.code||i.client)}<div><strong>${hl(i.client,ui.q)}</strong><small>${i.kind==='Nota di credito'?'Nota di credito':'Incasso'}</small></div></div></td><td><span class="money-title">${hl(i.title,ui.q)}</span></td><td class="num">${i.amount?eurA(i.amount):'<span class="muted">—</span>'}</td><td>${i.technician?esc(i.technician):'<span class="muted">—</span>'}</td><td><span class="badge ${i.status==='Chiuso'?'ok':i.d&&dayDiff(i.d)<-30?'bad':'due'}">${i.status==='Chiuso'?(i.kind==='Incasso'?'Incassato':'Registrata'):esc(i.status)}</span></td><td>${i.kind==='Incasso'&&i.status!=='Chiuso'&&canEditClients()?`<button class="btn sm" data-mq-paid="${esc(i.id)}">${icon('check')}Incassato</button>`:''}</td></tr>`).join('')}
+ </tbody></table></div>${pager(list.length,20)}`:empty(MQ.tab==='open'?'check':'file',MQ.tab==='open'?'Niente da incassare':'Nessuna pratica',q||ui.tech?'Prova a cambiare la ricerca o il filtro.':MQ.tab==='open'?'Tutti gli incassi registrati risultano chiusi.':'Qui compariranno appena registrati in Mastro o spostati a mano.')}</div>`;
+}
+document.addEventListener('click',e=>{
+ const t=e.target.closest?.('[data-mq-tab]');if(t&&page==='accMoney'){MQ.tab=t.dataset.mqTab;ui.p=1;render(false);return;}
+ const p=e.target.closest?.('[data-mq-paid]');if(p){e.stopPropagation();e.preventDefault();saveIntQuick(p.dataset.mqPaid,{status:'Chiuso'},'Segnato come incassato');}
+},true);
+
+// ───────────────────────── Bilancio: income statement and balance sheet from Mastro's general ledger (computed by the server,
+// the same on every app). Year to date against the same months of last year; balance sheet at the month end against 31 December.
+let BQ={sel:null,open:new Set()};
+function bilancioPage(){
+ const b=state.bilancio,y=new Date().getFullYear();
+ const head=hero('Il <span class="grad">bilancio</span>.','Conto economico e stato patrimoniale letti da MastroSQL, aggiornati a ogni lettura. Il bilancio ufficiale resta quello del commercialista.',
+  b?.hasIncome||b?.hasBalance?`<button class="btn need-export" data-action="exportBilancio">${icon('download')}Esporta per il commercialista</button>`:'');
+ if(!b||!(b.hasIncome||b.hasBalance))return head+`<div class="card reveal" style="--i:2">${empty('chart','Bilancio non ancora disponibile','Compare alla prossima lettura di MastroSQL (il server la fa da sola ogni mezz’ora).')}</div>`;
+ const pct=(a,p)=>p?((a-p)/Math.abs(p)*100):null;
+ const delta=(a,p,good=1)=>{const d=pct(a,p);return d===null||!isFinite(d)?'':`<span class="bil-d ${(d>=0)===(good>0)?'up':'down'}">${d>=0?'▲':'▼'} ${Math.abs(d).toFixed(1).replace('.',',')}%</span>`;};
+ const mon=k=>{const[yy,mm]=k.split('-').map(Number);return new Date(yy,mm-1,1);};
+ const upTo=DF3.format(mon(b.month)),endPrev=`31/12/${y-1}`;
+ const marg=b.revenue?b.result/b.revenue*100:0;
+ const k=(label,value,note,ic,tone,i,tip)=>`<div class="card kpi ${tone} reveal" style="--i:${i}"${tip?` data-tip="${esc(tip)}"`:''}><div class="kpi-top"><span>${label}</span><span class="kpi-icon">${icon(ic)}</span></div><div class="kpi-value acc-v">${value}</div><div class="kpi-note">${note}</div></div>`;
+ const kpis=`<div class="kpis bil-kpis">
+  ${k(b.result>=0?`Utile ${y} a ${upTo}`:`Perdita ${y} a ${upTo}`,DFE0.format(b.result),`${delta(b.result,b.resultPrev)} su ${DFE0.format(b.resultPrev)} nel ${y-1} · margine ${marg.toFixed(1).replace('.',',')}%`,'trend',b.result>=0?'t-ok':'t-bad',2,'Ricavi meno costi registrati finora: ammortamenti, ratei e rimanenze finali li registra il commercialista a fine anno')}
+  ${k('Ricavi',DFE0.format(b.revenue),`${delta(b.revenue,b.revenuePrev)} su ${DFE0.format(b.revenuePrev)} (gen–${upTo} ${y-1})`,'euro','t-info',3)}
+  ${b.hasBalance?k('Cassa e banche',DFE0.format(b.liquidity),`${DFE0.format(b.liquidityPrev)} al ${endPrev}`,'shield',b.liquidity>=0?'t-ok':'t-bad',4,'Contanti, assegni, conti correnti e carte: gli anticipi su RiBa sono tra i debiti finanziari'):''}
+  ${b.hasBalance?k('Posizione finanziaria netta',DFE0.format(b.netFinancial),`debiti verso banche ${DFE0.format(b.financialDebt)}`,'chart',b.netFinancial>=0?'t-ok':'t-due',5,'Cassa e banche meno mutui, finanziamenti e anticipi su effetti'):''}
+ </div>
+ ${b.hasBalance?`<div class="kpis bil-kpis">
+  ${k('Crediti verso clienti',DFE0.format(b.receivables),b.dso?`incassati in media in <b>${fmt(b.dso)} giorni</b>`:'','download','t-info',6,'Clienti e portafoglio effetti, IVA compresa; giorni medi = crediti / fatturato degli ultimi 12 mesi')}
+  ${k('Debiti verso fornitori',DFE0.format(b.payables),b.dpo?`pagati in media in <b>${fmt(b.dpo)} giorni</b>`:'','upload','t-due',7,'Giorni medi = debiti / acquisti degli ultimi 12 mesi, IVA compresa')}
+  ${k(b.vat<0?'IVA da versare':'Credito IVA',DFE0.format(Math.abs(b.vat)),'saldo dei conti IVA in Mastro','file',b.vat<0?'t-due':'t-ok',8)}
+  ${k('Patrimonio netto',DFE0.format(b.equity),`${DFE0.format(b.equityPrev)} al ${endPrev}`,'star','t-info',9,'Capitale, riserve, risultati non ancora destinati e utile in corso')}
+ </div>`:''}`;
+ // months: result bars (green/red) with last year's line as a tick, tap one to read it
+ const ms=b.months||[],pm=b.monthsPrev||[];const max=Math.max(1,...ms.map(m=>Math.abs(m.result)),...pm.map(m=>Math.abs(m.result)));
+ const sel=Math.min(BQ.sel??ms.length-1,ms.length-1),sm=ms[sel],sp=pm[sel];
+ const chart=ms.length?`<div class="card reveal" style="--i:10"><div class="card-head"><div><h2>Risultato mese per mese</h2><p>Ricavi meno costi registrati in ogni mese del ${y}; la tacca è lo stesso mese del ${y-1}.</p></div></div>
+  ${sm?`<div class="acc-mon bil-mon" aria-live="polite"><div><span class="acc-mon-l">${esc(DFMY.format(mon(sm.month)).replace(/^./,c=>c.toUpperCase()))}${sel===ms.length-1?' · in corso':''}</span><strong class="acc-mon-v" style="color:var(--${sm.result>=0?'ok':'bad'})">${DFE0.format(sm.result)}</strong>
+   <small>ricavi ${DFE0.format(sm.revenue)} · costi ${DFE0.format(sm.costs)}${b.hasBalance?` · cassa e banche a fine mese ${DFE0.format(sm.liquidity)}`:''}${sp?` · ${y-1}: ${DFE0.format(sp.result)}`:''}</small></div></div>`:''}
+  <div class="bars acc-bars bil-bars" role="group" aria-label="Risultato per mese">${ms.map((m,i)=>{const p=pm[i];return`<button type="button" class="bar${i===sel?' on':''}" data-bil-m="${i}" aria-pressed="${i===sel}" aria-label="${esc(DFMY.format(mon(m.month)))}: ${esc(DFE0.format(m.result))}"><i class="${m.result<0?'neg':''}" style="height:${Math.max(3,Math.abs(m.result)/max*100)}%;--i:${i}"></i>${p?`<b class="bil-tick" style="bottom:${Math.min(100,Math.abs(p.result)/max*100)}%"></b>`:''}<span>${DF3.format(mon(m.month))}</span></button>`;}).join('')}</div></div>`:'';
+ // statements: groups that open on a tap to show their accounts
+ const grp=(g,i,cmp)=>{const key=g.section+'|'+g.code;const on=BQ.open.has(key);return`<div class="bil-g${on?' open':''}"><button type="button" class="bil-row" data-bil-g="${esc(key)}" aria-expanded="${on}">${g.accounts.length>1?icon('chevron'):'<i class="bil-dot"></i>'}<span class="grow">${esc(g.label)}</span><b class="num">${DFE0.format(g.amount)}</b><small class="num muted">${DFE0.format(g.prev)}</small></button>
+  ${on&&g.accounts.length>1?`<div class="bil-acc">${g.accounts.map(a=>`<div class="bil-row sub"><span class="grow">${esc(a.label)}</span><span class="num">${DFE0.format(a.amount)}</span><small class="num muted">${DFE0.format(a.prev)}</small></div>`).join('')}</div>`:''}</div>`;};
+ const block=(title,list,secs,cmpLabel)=>`${secs.map(s=>{const gs=list.filter(g=>g.section===s);if(!gs.length)return'';const t=gs.reduce((a,g)=>a+g.amount,0),tp=gs.reduce((a,g)=>a+g.prev,0);
+   return`<div class="bil-sec"><div class="bil-row head"><span class="grow">${esc(s)}</span><b class="num">${DFE0.format(t)}</b><small class="num muted">${DFE0.format(tp)}</small></div>${gs.map(grp).join('')}</div>`;}).join('')}`;
+ const colHead=(a,b2)=>`<div class="bil-row cols"><span class="grow"></span><b class="num">${a}</b><small class="num muted">${b2}</small></div>`;
+ const ce=b.hasIncome?`<div class="card reveal" style="--i:11"><div class="card-head"><div><h2>Conto economico</h2><p>Da gennaio a ${esc(DFMY.format(mon(b.month)))}, confrontato con gli stessi mesi del ${y-1}. Tocca una voce per vederne i conti.</p></div></div>
+  ${colHead(String(y),String(y-1))}
+  ${block('Ricavi',b.income,['Ricavi'])}${block('Costi',b.income,['Costi'])}
+  <div class="bil-row total"><span class="grow">${b.result>=0?'Utile':'Perdita'} del periodo</span><b class="num" style="color:var(--${b.result>=0?'ok':'bad'})">${DFE0.format(b.result)}</b><small class="num muted">${DFE0.format(b.resultPrev)}</small></div>
+  <p class="sub" style="margin-top:10px">Tutto il ${y-1}: ricavi ${DFE0.format(b.revenueLastYear)}, ${b.resultLastYear>=0?'utile':'perdita'} ${DFE0.format(b.resultLastYear)} prima delle scritture di chiusura.</p></div>`:'';
+ const sp2=b.hasBalance?`<div class="layout-half bil-sp">
+  <div class="card reveal" style="--i:12"><div class="card-head"><div><h2>Attivo</h2><p>Al ${esc(DFMY.format(mon(b.month)))} e al ${endPrev}.</p></div></div>${colHead('Oggi',endPrev)}
+   ${block('Attivo',b.assets,['Immobilizzazioni','Rimanenze','Crediti','Liquidità'])}<div class="bil-row total"><span class="grow">Totale attivo</span><b class="num">${DFE0.format(b.totalAssets)}</b><small class="num muted">${DFE0.format(b.totalAssetsPrev)}</small></div></div>
+  <div class="card reveal" style="--i:13"><div class="card-head"><div><h2>Passivo e netto</h2><p>Debiti, fondi e patrimonio dell’azienda.</p></div></div>${colHead('Oggi',endPrev)}
+   ${block('Passivo',b.liabilities,['Patrimonio netto','Fondi e TFR','Debiti finanziari','Debiti'])}<div class="bil-row total"><span class="grow">Totale passivo e netto</span><b class="num">${DFE0.format(b.totalLiabilities)}</b><small class="num muted">${DFE0.format(b.totalLiabilitiesPrev)}</small></div></div>
+ </div>`:'';
+ return`${head}
+ ${explain('bilancio','Numeri calcolati dalla <strong>contabilità generale di Mastro</strong> (sola lettura) a ogni lettura del server. Il risultato dell’anno è <strong>provvisorio</strong>: ammortamenti, ratei, risconti e rimanenze finali li registra il commercialista a fine esercizio. <strong>Esporta</strong> scarica conto economico e stato patrimoniale, conto per conto, in un file che si apre con Excel.')}
+ ${b.note?`<div class="note reveal" style="--i:1">${icon('alert')}<span>${esc(b.note)}</span></div>`:''}
+ ${kpis}${chart}${ce}${sp2}${typeof fiscalCard==='function'?fiscalCard(14):''}`;
+}
+document.addEventListener('click',e=>{if(page!=='accBil')return;
+ const m=e.target.closest?.('[data-bil-m]');if(m){BQ.sel=+m.dataset.bilM;render(false);return;}
+ const g=e.target.closest?.('[data-bil-g]');if(g){const k=g.dataset.bilG;BQ.open.has(k)?BQ.open.delete(k):BQ.open.add(k);render(false);}});
+
+// ───────────────────────── Scadenze fiscali: the usual deadlines of an Italian S.r.l. (reminder for the office; dates that fall on
+// a Saturday, Sunday or public holiday move to the next working day). The accountant's calendar always prevails.
+function fiscalDeadlines(from,days){
+ const out=[],y0=from.getFullYear();
+ const hol=y=>{const e=easter(y);const em=new Date(e);em.setDate(e.getDate()+1);return new Set([`${y}-01-01`,`${y}-01-06`,`${y}-04-25`,`${y}-05-01`,`${y}-06-02`,`${y}-08-15`,`${y}-11-01`,`${y}-12-08`,`${y}-12-25`,`${y}-12-26`,isoDay(em)]);};
+ const work=d=>{const h=hol(d.getFullYear());while(d.getDay()===0||d.getDay()===6||h.has(isoDay(d)))d.setDate(d.getDate()+1);return d;};
+ for(let y=y0;y<=y0+1;y++){
+  for(let m=0;m<12;m++)out.push([new Date(y,m,16),'F24 del mese','IVA mensile, ritenute su stipendi e compensi, contributi INPS']);
+  const lastFeb=new Date(y,2,0);
+  out.push([lastFeb,'Comunicazione liquidazioni IVA','4° trimestre dell’anno prima'],[new Date(y,4,31),'Comunicazione liquidazioni IVA','1° trimestre'],[new Date(y,8,30),'Comunicazione liquidazioni IVA','2° trimestre'],[new Date(y,10,30),'Comunicazione liquidazioni IVA','3° trimestre'],
+   [new Date(y,2,16),'Certificazione Unica','Invio all’Agenzia e consegna a dipendenti e collaboratori; saldo IVA annuale'],[new Date(y,3,30),'Dichiarazione IVA annuale',''],
+   [new Date(y,5,16),'IMU','Acconto'],[new Date(y,11,16),'IMU','Saldo'],[new Date(y,5,30),'Saldo e 1° acconto IRES e IRAP','Esercizio solare'],
+   [new Date(y,9,31),'Dichiarazioni dei redditi, IRAP e 770',''],[new Date(y,10,30),'2° acconto IRES e IRAP',''],[new Date(y,11,27),'Acconto IVA','']);
+ }
+ const end=new Date(from);end.setDate(end.getDate()+days);
+ return out.map(([d,t,s])=>({d:work(d),t,s})).filter(x=>x.d>=from&&x.d<=end).sort((a,b)=>a.d-b.d);
+}
+function easter(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;return new Date(y,mo-1,da);}
+function fiscalCard(i){const t=new Date();t.setHours(0,0,0,0);const l=fiscalDeadlines(t,75);
+ return`<div class="card reveal" style="--i:${i}"><div class="card-head"><div><h2>Scadenze fiscali</h2><p>Le prossime scadenze abituali di una S.r.l., spostate al primo giorno lavorativo. Promemoria per l’ufficio: vale sempre il calendario del commercialista.</p></div></div>
+  ${l.length?l.map(x=>{const n=dayDiff(x.d);return`<div class="list-row" style="cursor:default"><span class="date-chip ${n<=3?'bad':n<=10?'due':''}"><b>${x.d.getDate()}</b><span>${DF3.format(x.d)}</span></span><div class="grow"><strong>${esc(x.t)}</strong><small>${esc(x.s||'')}</small></div><span class="in-days">${n===0?'oggi':rel(n)}</span></div>`;}).join(''):empty('calendar','Nessuna scadenza','Niente nei prossimi 75 giorni.')}</div>`;}
+

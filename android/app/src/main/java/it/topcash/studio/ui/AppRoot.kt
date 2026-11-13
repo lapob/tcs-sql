@@ -114,7 +114,7 @@ private val allTabs = listOf(Tab("home", "Home", Icons.Rounded.Dashboard), Tab("
 // the accounting area (like Mastro's Contabilità): its own four pages in the bottom bar
 private val accTabs = listOf(Tab("acc", "Riepilogo", Icons.Rounded.Insights), Tab("accSal", "Vendite", Icons.Rounded.ShoppingBag), Tab("accRec", "Incassi", Icons.Rounded.Payments),
     Tab("accInv", "Fatture", Icons.AutoMirrored.Rounded.ReceiptLong), Tab("more", "Altro", Icons.Rounded.MoreHoriz))
-private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay", "accOpp", "accAna")
+private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay", "accOpp", "accAna", "accBil", "accMoney")
 
 @Composable fun MainScreen(vm: AppViewModel) {
     val nav = rememberNavController()
@@ -223,6 +223,7 @@ private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay", "ac
                     screen("route") { RouteScreen(vm, it, nav) { id -> editor = EditorRequest(interventionId = id) } }
                     screen("search") { SearchScreen(vm, it, nav) { id -> editor = EditorRequest(interventionId = id) } }
                     screen("machinesCheck") { MachinesCheckScreen(vm, it, nav) }
+                    screen("portals") { if (me?.isOwner == true) PortalsScreen(vm, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("users") { if (admin) UsersScreen(vm, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("deleted") { if (admin) DeletedClientsScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("warehouse") { if (admin) WarehouseScreen(vm, it, nav) { t, art -> movement = t to art } else LaunchedEffect(Unit) { nav.switchTab("home") } }
@@ -232,6 +233,7 @@ private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay", "ac
                     screen("accSal") { if (seesAcc) SalesScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("accOpp") { if (seesAcc) InsightsScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     screen("accAna") { if (seesAcc) AnalysisScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
+                    screen("accBil") { if (seesAcc) BilancioScreen(vm, it, nav) else LaunchedEffect(Unit) { nav.switchTab("home") } }
                     AccView.entries.forEach { v -> screen(v.route) { if (seesAcc) AccountingScreen(vm, it, nav, v, topLevel = v.route in accTabRoutes) else LaunchedEffect(Unit) { nav.switchTab("home") } } }
                     screen("licenses") { LicensesScreen(vm, it, nav) }
                     screen("orders") { OrdersScreen(it, nav) }

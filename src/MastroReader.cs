@@ -439,7 +439,7 @@ public static class MastroReader
   catch(MySqlException ex){riba=null;warnings.Add("Effetti (RiBa) non leggibili: "+ex.Message);}
 
   // ── sales by article and month, general ledger by account and month (aggregated by MySQL: a few thousand rows)
-  List<SaleRow>? sales=null;List<LedgerRow>? ledger=null;
+  List<SaleRow>? sales=null;List<LedgerRow>? ledger=null;List<LedgerRow>? patrimony=null;
   var from5=new DateTime(DateTime.Today.Year-5,1,1).ToString("yyyy-MM-dd");
   if(Tab("rig_fat") is string trf&&Tab("lis_fat") is string tlf)try
   {
@@ -488,8 +488,23 @@ public static class MastroReader
      ledger.Add(new(S(r.GetValue(0)),"F",acc,labels.GetValueOrDefault(acc,acc),Group(acc),supNames.GetValueOrDefault(sup,sup.Length>0?"Fornitore "+sup:"Senza fornitore"),Math.Round(v,2),Convert.ToInt32(r.GetValue(4))));
     }
    }
+   // balance sheet accounts (class 1) by month: "A" = the opening entry of the year (causale BAC on 1 January), "P" = the
+   // movements; the closing entry (BAC on 31 December) is left out, so opening + movements = the balance at any month end
+   patrimony=[];
+   await using(var q=new MySqlCommand($@"SELECT DATE_FORMAT(c.DATA,'%Y-%m'),c.CONTO,IF(n.CAUSALE='BAC',IF(DATE_FORMAT(c.DATA,'%m-%d')='01-01','A','X'),'P'),SUM(c.DARE-c.AVERE),COUNT(DISTINCT c.NREGI)
+    FROM `{tmc}` c JOIN `{tmn}` n ON n.NREGI=c.NREGI AND n.DATA=c.DATA WHERE c.DATA>=@s AND c.CONTO LIKE '1.%' GROUP BY 1,2,3",c))
+   {
+    q.Parameters.AddWithValue("@s",from5);
+    await using var r=await q.ExecuteReaderAsync(ct);
+    while(await r.ReadAsync(ct))
+    {
+     var kind=S(r.GetValue(2));if(kind=="X")continue;var acc=S(r.GetValue(1));var v=D(S(r.GetValue(3)));if(v==0)continue;
+     var g=acc.Split('.');var parent=g.Length>=2?g[0]+"."+g[1]:acc;
+     patrimony.Add(new(S(r.GetValue(0)),kind,acc,labels.GetValueOrDefault(acc,acc),parent+"|"+labels.GetValueOrDefault(parent,parent),"",Math.Round(v,2),Convert.ToInt32(r.GetValue(4))));
+    }
+   }
   }
-  catch(MySqlException ex){ledger=null;warnings.Add("Conti economici (mov_con) non leggibili: "+ex.Message);}
+  catch(MySqlException ex){ledger=null;patrimony=null;warnings.Add("Conti economici (mov_con) non leggibili: "+ex.Message);}
 
   // ── closed interventions with an amount that produced no document in Mastro (last 12 months)
   List<InsUnbilled>? unbilled=null;
@@ -574,7 +589,7 @@ public static class MastroReader
    }
   }
   catch(MySqlException ex){costs=null;warnings.Add("Storico costi degli articoli non leggibile: "+ex.Message);}
-  var batch=new MastroBatch(clients,machines,interventions,DateTimeOffset.Now.ToString("O"),$"MastroSQL {cfg.Host}/{cfg.Database}",invoices,dues,balances,rtList,sites,riba,sales,ledger,unbilled,sdi,clientSales,agents,costs);
+  var batch=new MastroBatch(clients,machines,interventions,DateTimeOffset.Now.ToString("O"),$"MastroSQL {cfg.Host}/{cfg.Database}",invoices,dues,balances,rtList,sites,riba,sales,ledger,unbilled,sdi,clientSales,agents,costs,patrimony);
   var preview=new Preview(clients.Count,machines.Count,interventions.Count,clients.Count(x=>x.Phones.Count>0),clients.Count(x=>x.Emails.Count>0),cols,machineCols,interTable,clients.Take(6).ToList(),warnings,
    invoices?.Count??0,dues?.Count??0,balances?.Count??0);
   return(batch,preview);

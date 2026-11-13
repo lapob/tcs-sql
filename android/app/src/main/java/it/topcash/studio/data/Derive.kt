@@ -108,7 +108,22 @@ class UItal(val r: ItalDevice, val client: UClient?, val machine: UMachine?, val
     val name get() = client?.name ?: label.ifBlank { r.serial }
     val search = norm(listOf(r.serial, r.type, r.client, r.note, r.detail?.firmware, client?.name, machine?.m?.model).joinToString(" "))
 }
-data class UIntervention(val i: Intervention, var client: UClient?, val clientName: String, val date: LocalDate?)
+data class UIntervention(val i: Intervention, var client: UClient?, val clientName: String, val date: LocalDate?) {
+    val isMoney get() = isMoneyKind(i.kind)
+    /** The amount written in the title ("euro 2.613,83", "€208,17 + 5 commissioni"), else the document total. */
+    val amount: Double by lazy { moneyAmount(i) }
+}
+fun isMoneyKind(k: String) = k == "Incasso" || k == "Nota di credito"
+/** "2026-11" → "novembre 2026" */
+fun monthLabel(ym: String): String = try { java.time.YearMonth.parse(ym).let { it.month.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ITALIAN) + " " + it.year } } catch (_: Exception) { ym }
+private val amountAfter = Regex("""(?:euro|eur|€)\s*:?\s*(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)""", RegexOption.IGNORE_CASE)
+private val amountBefore = Regex("""(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+,\d{2})\s*(?:euro|eur|€)""", RegexOption.IGNORE_CASE)
+private fun euro(s: String): Double? = s.replace(Regex("""\.(?=\d{3}(\D|$))"""), "").replace(',', '.').toDoubleOrNull()
+fun moneyAmount(i: Intervention): Double {
+    val t = i.title + " " + i.work.substringBefore('\n')
+    val n = (amountAfter.find(t) ?: amountBefore.find(t))?.groupValues?.get(1)?.let(::euro) ?: euro(i.total.trim())
+    return if (n != null && n > 0 && n < 1e7) Math.round(n * 100) / 100.0 else 0.0
+}
 data class UOrder(val o: Order, var client: UClient?, val date: LocalDate?)
 
 class UClient(
@@ -132,6 +147,8 @@ class UClient(
     var autoGone = false
     val interventions = mutableListOf<UIntervention>()
     val verifications = mutableListOf<UIntervention>()
+    /** Collections and credit notes (Accounting). */
+    val money = mutableListOf<UIntervention>()
     val orders = mutableListOf<UOrder>()
     val active get() = licenses.filter { it.current }
     /** Technician: the one on most active machines, else the customer's referent in Mastro, else the latest intervention. */
@@ -192,7 +209,9 @@ class Archive(val state: ArchiveState) {
     val interventions: List<UIntervention>
     /** Periodic verifications recorded as jobs in Mastro: shown in their own tab, never counted as work to do. */
     val verifications: List<UIntervention>
-    fun interventionById(id: String) = interventions.firstOrNull { it.i.id == id } ?: verifications.firstOrNull { it.i.id == id }
+    /** Collections (insoluti, saldi, acconti) and credit notes that Mastro records as interventions: Accounting → Incassi e note. */
+    val money: List<UIntervention>
+    fun interventionById(id: String) = interventions.firstOrNull { it.i.id == id } ?: verifications.firstOrNull { it.i.id == id } ?: money.firstOrNull { it.i.id == id }
     val orders: List<UOrder>
 
     init {
@@ -255,12 +274,14 @@ class Archive(val state: ArchiveState) {
             val c = cLink ?: m?.client ?: cVat ?: cName
             URegister(r, c, m, when { cLink != null -> "abbinata a mano"; m?.client != null -> "matricola"; cVat != null -> "P.IVA"; cName != null -> "nome"; else -> "" }).also { c?.registers?.add(it) }
         }
-        val (vers, ints) = state.interventions.map { i ->
+        val (cash, work) = (state.interventions + state.moneyInterventions).map { i ->
             val c = if (i.source == "mastro") mastroTo[i.clientCode] else map[i.clientCode]
-            UIntervention(i, c, c?.name ?: i.clientName.ifBlank { "—" }, Dates.parse(i.date)).also { if (i.kind == "Verifica") c?.verifications?.add(it) else c?.interventions?.add(it) }
-        }.sortedByDescending { it.date ?: LocalDate.MIN }.partition { it.i.kind == "Verifica" }
-        interventions = ints; verifications = vers
-        map.values.forEach { it.interventions.sortByDescending { x -> x.date ?: LocalDate.MIN }; it.verifications.sortByDescending { x -> x.date ?: LocalDate.MIN } }
+            UIntervention(i, c, c?.name ?: i.clientName.ifBlank { "—" }, Dates.parse(i.date)).also {
+                when { isMoneyKind(i.kind) -> c?.money?.add(it); i.kind == "Verifica" -> c?.verifications?.add(it); else -> c?.interventions?.add(it) } }
+        }.sortedByDescending { it.date ?: LocalDate.MIN }.partition { it.isMoney }
+        val (vers, ints) = work.partition { it.i.kind == "Verifica" }
+        interventions = ints; verifications = vers; money = cash
+        map.values.forEach { it.interventions.sortByDescending { x -> x.date ?: LocalDate.MIN }; it.verifications.sortByDescending { x -> x.date ?: LocalDate.MIN }; it.money.sortByDescending { x -> x.date ?: LocalDate.MIN } }
         orders = state.orders.map { o ->
             val c = serialTo[o.serial] ?: nameTo[nameKey(o.client)]
             UOrder(o, c, Dates.parse(o.date)).also { c?.orders?.add(it) }

@@ -34,7 +34,7 @@ public sealed partial class Store
   var lastInv=invoices.Where(i=>i.Kind!="Nota di credito").GroupBy(i=>i.ClientCode).ToDictionary(g=>g.Key,g=>g.Max(i=>i.Date)??"");
   foreach(var i in Interventions())
   {
-   if(i.Source!="app"||i.Status!="Chiuso"||!i.ClientCode.StartsWith('M'))continue;
+   if(i.Source!="app"||i.Status!="Chiuso"||!i.ClientCode.StartsWith('M')||MoneyWork.IsMoney(i.Kind))continue;
    var d=Day(i.Date)??Day(i.Updated);if(d==null||d<today.AddDays(-90))continue;
    var code=i.ClientCode[1..];var amount=Dec(i.Total);
    if(amount<=0&&(i.Parts==null||i.Parts.Count==0)&&string.IsNullOrEmpty(i.Hours))continue;   // nothing to charge

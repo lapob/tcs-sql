@@ -136,7 +136,7 @@ public sealed partial class Store
   }).Where(a=>a.Revenue>0||a.Prev>0).OrderByDescending(a=>a.Agent).ThenByDescending(a=>a.Revenue).ToList();   // the agents first, then whoever else is on the invoices
 
   // ── 5. technicians: closed work of the last 12 months (Mastro history + app), periodic verifications counted apart
-  var techs=mv.Interventions.Concat(Interventions().Where(i=>i.Source=="app")).DistinctBy(i=>i.Id).Where(i=>i.Technician.Length>0&&!HiddenTech(i.Technician,roster))
+  var techs=mv.Interventions.Concat(Interventions().Where(i=>i.Source=="app")).DistinctBy(i=>i.Id).Where(i=>i.Technician.Length>0&&!HiddenTech(i.Technician,roster)&&!MoneyWork.IsMoney(i.Kind))
    .GroupBy(i=>TechName(i.Technician),StringComparer.OrdinalIgnoreCase).Select(g=>
    {
     var done=g.Where(i=>i.Status=="Chiuso"&&Day(i.Date) is DateTime d&&d>y1&&d<=today).ToList();
@@ -146,7 +146,7 @@ public sealed partial class Store
 
   // ── 6. what each register yields in a year: contract (fee over its months), interventions on it, verification every 2 years
   var verFee=RtInfos().ToDictionary(r=>r.MachineId,r=>r.Fields.TryGetValue("Importo verificazione",out var v)?Dec(v):0);
-  var ivByMachine=mv.Interventions.Where(i=>i.Machine.Length>0&&i.Status=="Chiuso"&&Day(i.Date) is DateTime d&&d>y1&&d<=today)
+  var ivByMachine=mv.Interventions.Where(i=>i.Machine.Length>0&&!MoneyWork.IsMoney(i.Kind)&&i.Status=="Chiuso"&&Day(i.Date) is DateTime d&&d>y1&&d<=today)
    .GroupBy(i=>i.Machine.StartsWith('m')?i.Machine:"m"+i.Machine).ToDictionary(g=>g.Key,g=>g.Sum(i=>Dec(i.Total)));
   var machines=mv.Machines.Select(m=>
   {

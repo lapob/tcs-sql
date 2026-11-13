@@ -128,11 +128,13 @@ public partial class MainWindow : Window
    core.NavigationCompleted+=(_,ev)=>{if(!ev.IsSuccess&&ServerMode&&!serverErrorOpen&&ev.WebErrorStatus is CoreWebView2WebErrorStatus.CannotConnect or CoreWebView2WebErrorStatus.ConnectionAborted or CoreWebView2WebErrorStatus.ConnectionReset or CoreWebView2WebErrorStatus.Disconnected or CoreWebView2WebErrorStatus.HostNameNotResolved or CoreWebView2WebErrorStatus.ServerUnreachable or CoreWebView2WebErrorStatus.Timeout)ShowServerError();};
    await ChooseServer();Navigate();
    await Task.Yield();if(!ServerMode&&Scan(false)>0)await Push();
-   timer.Tick+=async(_,_)=>{if(!busy&&!ServerMode){var count=Scan(false);if(count>0)await Push();}};timer.Start();updateTimer.Start();
+   timer.Tick+=async(_,_)=>{if(!busy&&!ServerMode){var count=Scan(false);if(count>0)await Push();}if(DateTime.Now>=nextHostedCheck)await CheckHosted();};timer.Start();updateTimer.Start();
+   // the portals the server now reads itself are left to it (two sessions on the same account log each other out)
+   await CheckHosted();
    // DTR-Service: once connected on this PC the session is resumed in the background at every start
-   if(DtrWindow.Configured&&(!ServerMode||syncToken.Length>0))OpenDtr(false);
-   if(ItalRetailWindow.Configured&&(!ServerMode||syncToken.Length>0))OpenItal(false);
-   if(RchWindow.Configured&&(!ServerMode||syncToken.Length>0))OpenRch(false);
+   if(DtrWindow.Configured&&(!ServerMode||syncToken.Length>0)&&!ServerHosts("dtr"))OpenDtr(false);
+   if(ItalRetailWindow.Configured&&(!ServerMode||syncToken.Length>0)&&!ServerHosts("ital"))OpenItal(false);
+   if(RchWindow.Configured&&(!ServerMode||syncToken.Length>0)&&!ServerHosts("rch"))OpenRch(false);
   }
   catch(Exception ex)
   {
@@ -207,9 +209,9 @@ public partial class MainWindow : Window
      try{store.SaveStockLevel(JsonSerializer.Deserialize<StockLevel>(root.GetProperty("item").GetRawText(),jsonIn)!);await Push();}catch(InvalidDataException ex){await Notify(ex.Message);}break;
     case "dueNote":
      try{store.SaveDueNote(root.GetProperty("id").GetString()??"",root.GetProperty("status").GetString()??"",root.GetProperty("note").GetString()??"",Environment.UserName);await Push();}catch(InvalidDataException ex){await Notify(ex.Message);}break;
-    case "exportInvoices":case "exportDues":
-     var ap=new SaveFileDialog{Filter="CSV italiano|*.csv",FileName=(action=="exportInvoices"?"TopCash-fatture-":"TopCash-scadenze-aperte-")+DateTime.Today.ToString("yyyyMMdd")+".csv"};
-     if(ap.ShowDialog(this)==true){File.WriteAllText(ap.FileName,action=="exportInvoices"?AccountingReports.InvoicesCsv(store):AccountingReports.DuesCsv(store),new UTF8Encoding(true));await Notify("File salvato.");}break;
+    case "exportInvoices":case "exportDues":case "exportBilancio":
+     var ap=new SaveFileDialog{Filter="CSV italiano|*.csv",FileName=(action=="exportInvoices"?"TopCash-fatture-":action=="exportBilancio"?"TopCash-bilancio-":"TopCash-scadenze-aperte-")+DateTime.Today.ToString("yyyyMMdd")+".csv"};
+     if(ap.ShowDialog(this)==true){File.WriteAllText(ap.FileName,action=="exportInvoices"?AccountingReports.InvoicesCsv(store):action=="exportBilancio"?store.BilancioCsv():AccountingReports.DuesCsv(store),new UTF8Encoding(true));await Notify("File salvato.");}break;
     case "exportStock":case "exportReorder":
      var sp=new SaveFileDialog{Filter="CSV italiano|*.csv",FileName=(action=="exportStock"?"TopCash-giacenze-":"TopCash-proposta-ordine-")+DateTime.Today.ToString("yyyyMMdd")+".csv"};
      if(sp.ShowDialog(this)==true){File.WriteAllText(sp.FileName,action=="exportStock"?WarehouseReports.StockCsv(store):WarehouseReports.ReorderCsv(store),new UTF8Encoding(true));await Notify("File salvato.");}break;
@@ -289,14 +291,14 @@ public partial class MainWindow : Window
     case "licenseSave":{var le=JsonSerializer.Deserialize<LicenseEdit>(root.GetProperty("edit").GetRawText(),new JsonSerializerOptions{PropertyNameCaseInsensitive=true})!;
      try{store.SaveLicense(root.GetProperty("id").GetString()!,le,Environment.UserName);await Push();await Notify(le.Hidden?"Licenza tolta dall’elenco.":"Licenza aggiornata.");}catch(InvalidDataException ex){await Notify(ex.Message);}break;}
     case "meta":var meta=JsonSerializer.Deserialize<ClientMeta>(root.GetProperty("meta").GetRawText(),new JsonSerializerOptions{PropertyNameCaseInsensitive=true})!;store.SaveMeta(root.GetProperty("code").GetString()!,meta);await Push();await Notify("Scheda di lavoro aggiornata.");break;
-    case "portal":if(CanSync())OpenPortal();break;
-    case "dtr":if(CanSync())OpenDtr(true);break;
-    case "ital":if(CanSync())OpenItal(true);break;
-    case "italSync":if(CanSync()){OpenItal(false);if(ital!=null)await ital.StartSync();}break;
-    case "rch":if(CanSync())OpenRch(true);break;
-    case "rchSync":if(CanSync()){OpenRch(false);if(rch!=null)await rch.StartSync();}break;
-    case "dtrSync":if(CanSync()){OpenDtr(false);if(dtr!=null)await dtr.StartSync();}break;
-    case "syncPortal":if(CanSync()){OpenPortal();if(portal!=null)await portal.StartSync();}break;
+    case "portal":if(CanSync()&&!await LeftToServer("zucchetti"))OpenPortal();break;
+    case "dtr":if(CanSync()&&!await LeftToServer("dtr"))OpenDtr(true);break;
+    case "ital":if(CanSync()&&!await LeftToServer("ital"))OpenItal(true);break;
+    case "italSync":if(CanSync()&&!await LeftToServer("ital")){OpenItal(false);if(ital!=null)await ital.StartSync();}break;
+    case "rch":if(CanSync()&&!await LeftToServer("rch"))OpenRch(true);break;
+    case "rchSync":if(CanSync()&&!await LeftToServer("rch")){OpenRch(false);if(rch!=null)await rch.StartSync();}break;
+    case "dtrSync":if(CanSync()&&!await LeftToServer("dtr")){OpenDtr(false);if(dtr!=null)await dtr.StartSync();}break;
+    case "syncPortal":if(CanSync()&&!await LeftToServer("zucchetti")){OpenPortal();if(portal!=null)await portal.StartSync();}break;
     case "external":var ext=root.GetProperty("url").GetString()??"";if(SafeExternal(ext))Process.Start(new ProcessStartInfo(ext){UseShellExecute=true});break;
     case "exportClients":
      var xp=new SaveFileDialog{Filter="CSV italiano|*.csv",FileName="TopCash-anagrafica-clienti-"+DateTime.Today.ToString("yyyyMMdd")+".csv"};
@@ -307,6 +309,35 @@ public partial class MainWindow : Window
   catch(Exception ex){store.Log("error",ex.Message);await Notify(ex.Message);await Push();}
  }
  ISyncTarget SyncTarget()=>ServerMode&&syncToken.Length>0?new RemoteSyncTarget(serverUrl,syncToken):new LocalSyncTarget(store);
+ // ───────── portals kept by the server: this station steps aside (checked at start, every 10 minutes and before opening one)
+ HashSet<string> hostedPortals=[];DateTime nextHostedCheck=DateTime.MinValue;
+ bool ServerHosts(string id)=>hostedPortals.Contains(id);
+ async Task CheckHosted()
+ {
+  nextHostedCheck=DateTime.Now.AddMinutes(10);
+  if(!ServerMode||syncToken.Length==0){hostedPortals=[];return;}
+  try{
+   var ids=await RemoteSyncTarget.Hosted(serverUrl,syncToken);if(ids==null)return; // server unreachable: keep what we knew
+   hostedPortals=[..ids];
+   foreach(var id in hostedPortals)Release(id);
+  }catch{}
+ }
+ /// Closes this PC's window for a portal the server now reads (its saved session stays on disk, harmless).
+ void Release(string id)
+ {
+  switch(id)
+  {
+   case "zucchetti":if(portal!=null){portal.Quit();portal=null;store.Log("portal","Zucchetti ora lo legge il server: chiusa la finestra su questa postazione.");}break;
+   case "dtr":if(dtr!=null){dtr.Quit();dtr=null;store.Log("portal","DTR-Service ora lo legge il server: chiusa la finestra su questa postazione.");}break;
+   case "ital":if(ital!=null){ital.Quit();ital=null;store.Log("portal","Ital Retail ora lo legge il server: chiusa la finestra su questa postazione.");}break;
+   case "rch":if(rch!=null){rch.Quit();rch=null;store.Log("portal","RCH XDealer ora lo legge il server: chiusa la finestra su questa postazione.");}break;
+  }
+ }
+ async Task<bool> LeftToServer(string id)
+ {
+  await CheckHosted();if(!ServerHosts(id))return false;
+  await Notify("Questo portale ora lo legge il server: si gestisce da Sincronizzazione → Portali sul server, questa postazione non serve più.");return true;
+ }
  bool CanSync()
  {
   if(!ServerMode||syncToken.Length>0)return true;
@@ -418,7 +449,7 @@ public partial class MainWindow : Window
   bool running=portal?.Running??false,connected=portal?.Authenticated??false;string progress=portal?.Progress??"";
   var text=await Task.Run(()=>{var mv=store.Mastro();
  
-  return JsonSerializer.Serialize(new{type="state",records=store.Licenses(),licenseEdits=store.LicenseEdits(),licenseCleanup=store.LicenseCleanup(),clientEdits=store.ClientEdits(),clients=store.Clients(),orders=store.Orders(),mastroClients=mv.Clients,machines=mv.Machines,interventions=mv.Interventions,brandRule=mv.Excluded,assets=store.Assets(),renewals=store.Renewals(),deviceLinks=store.DeviceLinks(),rt=store.RtInfos(),machineFlags=store.MachineFlags(),routeDone=store.RouteDone(),photos=store.Photos(),sites=store.Sites(),riba=store.RibaList(),warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),sales=store.Sales(),ledger=store.Ledger(),mastroSync=store.LastMastroSync(),insights=store.Insights(),analysis=store.Analysis(),team=store.Team(),syncRunning=running,syncProgress=progress,sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),dtr=store.DtrRegisters(),dtrStatus=store.DtrState(),ital=store.ItalDevices(),italOrders=store.ItalOrders(),italStatus=store.ItalState(),rch=store.RchDevices(),rchStatus=store.RchState(),sourceFolder,dataFolder=store.Folder,autoImport=true,portalConnected=connected},json);});
+  return JsonSerializer.Serialize(new{type="state",records=store.Licenses(),licenseEdits=store.LicenseEdits(),licenseCleanup=store.LicenseCleanup(),clientEdits=store.ClientEdits(),clients=store.Clients(),orders=store.Orders(),mastroClients=mv.Clients,machines=mv.Machines,interventions=mv.Interventions.Where(i=>!MoneyWork.IsMoney(i.Kind)).ToList(),moneyInterventions=mv.Interventions.Where(i=>MoneyWork.IsMoney(i.Kind)).ToList(),moneyRule=store.Money(),brandRule=mv.Excluded,assets=store.Assets(),renewals=store.RenewalsView(),licenseRule=store.LicenseRules(),deviceLinks=store.DeviceLinks(),rt=store.RtInfos(),machineFlags=store.MachineFlags(),routeDone=store.RouteDone(),photos=store.Photos(),sites=store.Sites(),riba=store.RibaList(),warehouses=store.Warehouses(),articles=store.Articles(),stockLevels=store.StockLevels(),stock=store.Stock(),movements=store.Movements(),invoices=store.Invoices(),dues=store.Dues(),balances=store.Balances(),dueNotes=store.DueNotes(),sales=store.Sales(),ledger=store.Ledger(),mastroSync=store.LastMastroSync(),insights=store.Insights(),analysis=store.Analysis(),bilancio=store.Bilancio(),team=store.Team(),syncRunning=running,syncProgress=progress,sources=store.Sources(),events=store.Events(),notes=store.Notes(),metadata=store.Metadata(),dtr=store.DtrRegisters(),dtrStatus=store.DtrState(),ital=store.ItalDevices(),italOrders=store.ItalOrders(),italStatus=store.ItalState(),rch=store.RchDevices(),rchStatus=store.RchState(),sourceFolder,dataFolder=store.Folder,autoImport=true,portalConnected=connected},json);});
   if(text==lastJson)return;lastJson=text;
   Dashboard.CoreWebView2?.PostWebMessageAsJson(text);
   }catch(Exception ex){System.Diagnostics.Debug.WriteLine(ex);}

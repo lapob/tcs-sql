@@ -14,6 +14,29 @@ public sealed record Machine(string Id,string ClientCode,string Model,string Typ
 /// Origin "mastro" = imported from Mastro and then edited here: it keeps Mastro's id, and later imports never overwrite it.
 public sealed record MastroSchedule(bool Enabled, int Minutes, int From, int To, string UpdatedAt = "", string UpdatedBy = "");
 public sealed record AutoCloseRule(bool Enabled, int Days, string UpdatedAt = "", string UpdatedBy = "");
+/// Mastro also records collections (unpaid RiBa/RID, invoice balances, deposits) and credit notes as "interventions":
+/// with the rule on they move to Accounting (Kind "Incasso" / "Nota di credito"). One the office moves by hand keeps its Kind.
+public sealed record MoneyRule(bool Enabled, string UpdatedAt = "", string UpdatedBy = "");
+public static class MoneyWork
+{
+ public const string Collect = "Incasso", Credit = "Nota di credito", Work = "Intervento";
+ public static bool IsMoney(string? kind) => kind is Collect or Credit;
+ static readonly System.Text.RegularExpressions.Regex PayTitle = new(@"^(incass|incaso|insolut|insoltu|inc\.? ?ft|da saldare|saldare|saldo\b|acconto|recupero credit)", System.Text.RegularExpressions.RegexOptions.Compiled);
+ static readonly System.Text.RegularExpressions.Regex PayPart = new(@"^(INCASSO|INSOLUT|RID SCAD|RIBA SCAD|SALDO |ACCONTO )", System.Text.RegularExpressions.RegexOptions.Compiled);
+ static readonly System.Text.RegularExpressions.Regex CreditTitle = new(@"^(nota (di )?credito|storno|a (totale|parziale) storno)", System.Text.RegularExpressions.RegexOptions.Compiled);
+ static readonly System.Text.RegularExpressions.Regex CreditPart = new(@"^(NOTA DI CREDITO|A (TOTALE|PARZIALE) STORNO|PER ERRATA FATTURAZIONE)", System.Text.RegularExpressions.RegexOptions.Compiled);
+ static readonly System.Text.RegularExpressions.Regex Material = new(@"Materiale: ([^\n]*)",System.Text.RegularExpressions.RegexOptions.Compiled);
+ /// What a record with no Kind of its own is: by its title, or by the first article Mastro booked on it.
+ public static string Of(Intervention i)
+ {
+  var t = System.Text.RegularExpressions.Regex.Replace(i.Title ?? "", @"\s+", " ").Trim().ToLowerInvariant();
+  var m = Material.Match(i.Work ?? ""); var part = m.Success ? m.Groups[1].Value.Trim().ToUpperInvariant() : "";
+  if (PayTitle.IsMatch(t) || PayPart.IsMatch(part)) return Collect;
+  if (CreditTitle.IsMatch(t) || CreditPart.IsMatch(part)) return Credit;
+  return "";
+ }
+ public static Intervention Apply(Intervention i, bool on) => on && string.IsNullOrEmpty(i.Kind) && Of(i) is { Length: > 0 } k ? i with { Kind = k } : i;
+}
 public sealed record Intervention(string Id,string ClientCode,string ClientName,string Date,string Machine,string Title,string Work,string Status,
  string Technician,string Priority,string Total,string Source,string Created,string CreatedBy,string Updated,string UpdatedBy,List<PartUse>? Parts=null,
  string Hours="",string Signer="",string SignedAt="",string ReportNo="",string SentTo="",string SentAt="",string Kind="",string Origin="");
@@ -22,7 +45,8 @@ public sealed record MastroPruned(int Read, int Clients, int Machines, int Inter
 public sealed record MastroBatch(List<MastroClient> Clients,List<Machine> Machines,List<Intervention> Interventions,string CapturedAt,string Source,
  List<Invoice>? Invoices=null,List<Due>? Dues=null,List<Balance>? Balances=null,
  List<RtInfo>? Rt=null,List<Site>? Sites=null,List<Riba>? Riba=null,List<SaleRow>? Sales=null,List<LedgerRow>? Ledger=null,
- List<InsUnbilled>? Unbilled=null,List<InsSdi>? Sdi=null,List<ClientSale>? ClientSales=null,List<Party>? Agents=null,List<CostChange>? Costs=null);
+ List<InsUnbilled>? Unbilled=null,List<InsSdi>? Sdi=null,List<ClientSale>? ClientSales=null,List<Party>? Agents=null,List<CostChange>? Costs=null,
+ List<LedgerRow>? Patrimony=null);
 /// Last automatic or manual read of Mastro: when, what it brought and the fingerprint of the data (an unchanged read is not re-imported).
 public sealed record MastroSync(string At,string Hash,string Message,bool Ok,string Who="");
 /// Fiscal and technical details of a register from Mastro (firmware, electronic journal, RT activation, lottery, census,
@@ -77,7 +101,7 @@ public sealed partial class Store
  public List<InsSdi> MastroSdi()=>MastroExtra<InsSdi>("sdi");
  public List<MastroClient> MastroClients()=>ReadAll<MastroClient>("SELECT data FROM mastro_clients");
  public List<Machine> Machines()=>ReadAll<Machine>("SELECT data FROM machines").Select(m=>m.Technician.Length>0?m with{Technician=TechName(m.Technician)}:m).ToList();
- public List<Intervention> Interventions()=>ReadAll<Intervention>("SELECT data FROM interventions WHERE source<>'deleted'").Select(i=>i.Technician is {Length:>0} t?i with{Technician=TechName(t)}:i).ToList();
+ public List<Intervention> Interventions(){var on=Money().Enabled;return ReadAll<Intervention>("SELECT data FROM interventions WHERE source<>'deleted'").Select(i=>MoneyWork.Apply(i.Technician is {Length:>0} t?i with{Technician=TechName(t)}:i,on)).ToList();}
 
  /// Replaces the Mastro snapshot atomically. Interventions created in the app are never touched by an import.
  public string ImportMastro(MastroBatch b,string who)
@@ -117,7 +141,7 @@ public sealed partial class Store
   using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="CREATE TABLE IF NOT EXISTS mastro_extra(kind TEXT PRIMARY KEY,data TEXT NOT NULL)";q.ExecuteNonQuery();}
   void Extra(string kind,object? data){if(data==null)return;using var q=c.CreateCommand();q.Transaction=tx;q.CommandText="INSERT INTO mastro_extra VALUES($k,$d) ON CONFLICT(kind) DO UPDATE SET data=$d";q.Parameters.AddWithValue("$k",kind);q.Parameters.AddWithValue("$d",JsonSerializer.Serialize(data));q.ExecuteNonQuery();}
   Extra("pruned",new[]{pruned??new(read,0,0,0,0)});
-  Extra("rt",b.Rt);Extra("sites",b.Sites);Extra("riba",b.Riba);Extra("sales",b.Sales);Extra("ledger",b.Ledger);Extra("unbilled",b.Unbilled);Extra("sdi",b.Sdi);Extra("clientsales",b.ClientSales);Extra("agents",b.Agents);Extra("costs",b.Costs);
+  Extra("rt",b.Rt);Extra("sites",b.Sites);Extra("riba",b.Riba);Extra("sales",b.Sales);Extra("ledger",b.Ledger);Extra("unbilled",b.Unbilled);Extra("sdi",b.Sdi);Extra("clientsales",b.ClientSales);Extra("agents",b.Agents);Extra("costs",b.Costs);Extra("patrimony",b.Patrimony);
   var msg=$"Importazione MastroSQL ({who}): {b.Clients.Count} clienti · {b.Machines?.Count??0} macchine · {b.Interventions?.Count??0} interventi storici"+(b.Rt!=null?$" · {b.Rt.Sum(r=>r.VerificationCount)} verifiche periodiche":"")+(b.Sites!=null?$" · {b.Sites.Count} sedi":"")+(b.Invoices!=null?$" · {acc[0]} fatture":"")+(b.Dues!=null?$" · {acc[1]} scadenze":"")+"."
    +(pruned is {Clients:>0}or{Machines:>0}?$" Lasciati fuori perché cessati: {pruned.Clients} clienti, {pruned.Machines} macchine, {pruned.Interventions} interventi.":"");
   using(var q=c.CreateCommand()){q.Transaction=tx;q.CommandText="INSERT INTO events(time,kind,message) VALUES($t,'import',$m)";q.Parameters.AddWithValue("$t",DateTimeOffset.Now.ToString("O"));q.Parameters.AddWithValue("$m",msg);q.ExecuteNonQuery();}
@@ -137,6 +161,7 @@ public sealed partial class Store
   if((i.Work??"").Length>20000)throw new InvalidDataException("Descrizione troppo lunga.");
   if(!InterventionStates.Contains(i.Status))throw new InvalidDataException("Stato non valido.");
   if(!Priorities.Contains(i.Priority))throw new InvalidDataException("Priorità non valida.");
+  i=i with{Kind=i.Kind??""};if(i.Kind is not (""or"Verifica"or MoneyWork.Work or MoneyWork.Collect or MoneyWork.Credit))throw new InvalidDataException("Tipo non valido.");
   if(i.Date.Length>0&&!DateTime.TryParseExact(i.Date,"yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.None,out _))throw new InvalidDataException("Data non valida.");
   var now=DateTimeOffset.Now.ToString("O");
   using var c=Open();
@@ -177,6 +202,8 @@ public sealed partial class Store
   if (from is < 0 or > 23 || to is < 1 or > 24 || to <= from) throw new InvalidDataException("Orari non validi.");
   var r = new MastroSchedule(enabled, minutes, from, to, DateTimeOffset.Now.ToString("O"), who); SetSetting("mastro.auto", r); return r;
  }
+ public MoneyRule Money() => Setting<MoneyRule>("interventions.money") ?? new(true);
+ public MoneyRule SaveMoney(bool enabled, string who) { var r = new MoneyRule(enabled, DateTimeOffset.Now.ToString("O"), who); SetSetting("interventions.money", r); return r; }
  public AutoCloseRule AutoClose() => Setting<AutoCloseRule>("interventions.autoclose") ?? DefaultAutoClose;
  public AutoCloseRule SaveAutoClose(bool enabled, int days, string who)
  {
@@ -187,7 +214,7 @@ public sealed partial class Store
  /// Closes the open, unsigned interventions dated more than [days] days ago. Returns how many were closed.
  public int CloseOldInterventions(DateTime? today = null)
  {
-  var rule = AutoClose(); if (!rule.Enabled) return 0;
+  var rule = AutoClose(); if (!rule.Enabled) return 0; var money = Money().Enabled;
   var limit = (today ?? DateTime.Today).AddDays(-rule.Days);
   var now = DateTimeOffset.Now.ToString("O"); var n = 0;
   using var c = Open(); using var tx = c.BeginTransaction();
@@ -201,6 +228,7 @@ public sealed partial class Store
   foreach (var (id, src, i) in rows)
   {
    if (i.Status == "Chiuso" || !string.IsNullOrEmpty(i.SignedAt)) continue;
+   if (MoneyWork.IsMoney(MoneyWork.Apply(i, money).Kind)) continue; // an unpaid bill does not go away by itself
    if (!DateTime.TryParseExact((i.Date ?? "").Length >= 10 ? i.Date![..10] : "", "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d) || d >= limit) continue;
    var rec = i with { Status = "Chiuso", Source = "app", Origin = src == "mastro" ? "mastro" : i.Origin ?? "", Updated = now, UpdatedBy = $"Chiusura automatica (oltre {rule.Days} giorni)" };
    using var u = c.CreateCommand(); u.Transaction = tx; u.CommandText = "UPDATE interventions SET source='app',data=$d WHERE id=$i";

@@ -164,6 +164,10 @@ import java.time.ZoneOffset
         item(key = "int-title") { SectionTitle("Interventi") { TextButton(onNewIntervention) { Icon(Icons.Rounded.Add, null, Modifier.size(18.dp)); Text("Nuovo", Modifier.padding(start = 8.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) } } }
         if (c.interventions.isEmpty()) item(key = "int-empty") { CardBox { Text("Nessun intervento registrato.", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
         c.interventions.take(15).forEach { x -> item(key = "i" + x.i.id) { InterventionRow(x, a, Modifier.padding(bottom = 8.dp).animateItem(), showClient = false, vm = vm) { onOpenIntervention(x.i.id) } } }
+        if (c.money.isNotEmpty() && vm.me.value?.seesAccounting == true) {
+            item(key = "money-title") { SectionTitle("Incassi e note di credito · ${c.money.size}") }
+            c.money.take(10).forEach { x -> item(key = "mo" + x.i.id) { InterventionRow(x, a, Modifier.padding(bottom = 8.dp).animateItem(), showClient = false, vm = vm) { onOpenIntervention(x.i.id) } } }
+        }
         if (c.verifications.isNotEmpty()) {
             item(key = "ver-title") { SectionTitle("Verifiche periodiche · ${c.verifications.size}") }
             c.verifications.take(10).forEach { x -> item(key = "v" + x.i.id) { InterventionRow(x, a, Modifier.padding(bottom = 8.dp).animateItem(), showClient = false, vm = vm) { onOpenIntervention(x.i.id) } } }

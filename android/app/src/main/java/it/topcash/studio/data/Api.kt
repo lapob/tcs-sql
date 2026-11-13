@@ -101,6 +101,15 @@ class Api(context: Context) {
         }
     }
     private suspend fun get(path: String) = call { Request.Builder().url(url(path)).get().build() }
+    /** Portals kept by the server (owner only): list, on/off, read now, stop, forget, live picture and input for the sign-in. */
+    suspend fun portals(): PortalList = json.decodeFromString(get("/api/portals"))
+    suspend fun portalEnabled(id: String, on: Boolean) { post("/api/portals/$id/enabled", json.encodeToString(PortalSwitch(on))) }
+    suspend fun portalAction(id: String, action: String) { post("/api/portals/$id/$action") }
+    suspend fun portalInput(id: String, i: PortalInput) { post("/api/portals/$id/input", json.encodeToString(i)) }
+    suspend fun portalView(id: String): Pair<ByteArray, String> = withContext(Dispatchers.IO) {
+        http.newCall(Request.Builder().url(url("/api/portals/$id/view")).header("Cache-Control", "no-store").get().build()).execute().use { r ->
+            if (!r.isSuccessful) throw r.error(); r.body.bytes() to (r.header("X-Portal-Url") ?: "") }
+    }
     private suspend fun post(path: String, body: String = "{}") = call { Request.Builder().url(url(path)).post(body.toRequestBody(jsonType)).build() }
     suspend fun hello(): DeviceStatus = json.decodeFromString(post("/api/device/hello", json.encodeToString(DeviceHello(deviceName, "Android " + android.os.Build.VERSION.RELEASE))))
 
@@ -157,6 +166,8 @@ class Api(context: Context) {
     suspend fun resetClient(code: String) { post("/api/clients/reset", json.encodeToString(ClientDeleteRequest(code, false))) }
     suspend fun saveLicense(id: String, e: LicenseEdit) { post("/api/licenses/save", json.encodeToString(LicenseSaveRequest(id, e))) }
     suspend fun users(): List<UserRow> = usersFull().users
+    suspend fun saveLicenseRule(r: LicenseRuleSave): LicenseRule = json.decodeFromString(post("/api/settings/licenses", json.encodeToString(r)))
+    suspend fun saveMoney(r: MoneySave): MoneyRule = json.decodeFromString(post("/api/settings/money", json.encodeToString(r)))
     suspend fun autoClose(): AutoCloseRule = json.decodeFromString(get("/api/settings/interventions"))
     suspend fun saveAutoClose(r: AutoCloseSave): AutoCloseRule = json.decodeFromString(post("/api/settings/interventions", json.encodeToString(r)))
     suspend fun usersFull(): UsersResponse = json.decodeFromString<UsersResponse>(get("/api/users"))

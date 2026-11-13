@@ -13,12 +13,36 @@ public sealed record ClientEdit(string Name = "", string Vat = "", string TaxCod
 
 /// Changes made by an administrator to a licence: a corrected expiry, a note, or the licence hidden from Studio.
 public sealed record LicenseEdit(string Expiry = "", string Note = "", bool Hidden = false, string UpdatedAt = "", string UpdatedBy = "");
+/// Office rule for licences (from every app): those not renewed [KeepMonths] after their expiry leave the list, and every
+/// licence expiring up to the month [RenewedUntil] ("yyyy-MM", empty = none) counts as renewed unless someone marked it otherwise.
+/// Default (decided by the owner on 13/11/2026): 1 month, renewed up to November 2026.
+public sealed record LicenseRule(int KeepMonths = 1, string RenewedUntil = "2026-11", string UpdatedAt = "", string UpdatedBy = "");
 
 public sealed partial class Store
 {
-    /// Licences not renewed within two months of their expiry are not shown (the portal keeps them for years).
-    public const int ExpiredKeepMonths = 2;
-    static DateTime ExpiredLimit => DateTime.Today.AddMonths(-ExpiredKeepMonths);
+    /// Licences not renewed within [LicenseRule.KeepMonths] of their expiry are not shown (the portal keeps them for years).
+    public LicenseRule LicenseRules() => Setting<LicenseRule>("licenses.rule") ?? new();
+    public LicenseRule SaveLicenseRules(int keepMonths, string renewedUntil, string who)
+    {
+        if (keepMonths is < 1 or > 36) throw new InvalidDataException("Mesi non validi (da 1 a 36).");
+        renewedUntil = (renewedUntil ?? "").Trim();
+        if (renewedUntil.Length > 0 && !DateTime.TryParseExact(renewedUntil + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _)) throw new InvalidDataException("Mese non valido.");
+        var r = new LicenseRule(keepMonths, renewedUntil, DateTimeOffset.Now.ToString("O"), who); SetSetting("licenses.rule", r); return r;
+    }
+    DateTime ExpiredLimit => DateTime.Today.AddMonths(-LicenseRules().KeepMonths);
+    /// The renewal marks every app shows: the ones set by hand, plus "Rinnovato" for each licence expiring up to the month of
+    /// the office rule that nobody has marked (a hand mark always wins; changing the rule brings everything back).
+    public Dictionary<string, RenewalMark> RenewalsView()
+    {
+        var marks = Renewals(); var rule = LicenseRules();
+        if (rule.RenewedUntil.Length == 0 || !DateTime.TryParseExact(rule.RenewedUntil + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var m)) return marks;
+        var until = m.AddMonths(1); var label = "Regola dell’ufficio: rinnovate fino a " + m.ToString("MMMM yyyy", new CultureInfo("it-IT"));
+        var view = new Dictionary<string, RenewalMark>(marks);
+        foreach (var r in Licenses())
+            if (LicenseRecord.ParseDate(r.Expiry) is DateTime d && d.Date < until)
+                view.TryAdd($"lic|{r.Id}|{d:yyyy-MM-dd}", new RenewalMark("Rinnovato", "", "", rule.UpdatedAt, label));
+        return view;
+    }
 
     void InitEdits(SqliteConnection c)
     {
@@ -108,7 +132,7 @@ public sealed partial class Store
     }
 
     /// The licences Studio shows: the administrator's changes applied, hidden ones removed, licences marked
-    /// "not valid" on the portal (red square) removed, and those not renewed within two months of their expiry removed.
+    /// "not valid" on the portal (red square) removed, and those not renewed within the months of the office rule removed.
     public List<LicenseRecord> Licenses()
     {
         var edits = LicenseEdits(); var limit = ExpiredLimit; var list = new List<LicenseRecord>();
@@ -146,7 +170,7 @@ public sealed partial class Store
             if (NotValidOnPortal(r)) red++;
             else if (LicenseRecord.ParseDate(r.Expiry) is DateTime d && d.Date < limit) old++;
         }
-        return new { red, old, hidden, keepMonths = ExpiredKeepMonths };
+        return new { red, old, hidden, keepMonths = LicenseRules().KeepMonths };
     }
 }
 

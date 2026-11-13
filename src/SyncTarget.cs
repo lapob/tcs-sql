@@ -27,10 +27,19 @@ public sealed class RemoteSyncTarget:ISyncTarget
   http.DefaultRequestHeaders.Add("X-Sync-Token",token);http.DefaultRequestHeaders.Add("X-Requested-With","topcash");
  }
  public string Label=>"server condiviso "+http.BaseAddress?.Host;
+ /// Which portals the server reads by itself (null when it cannot be reached or is older and does not know).
+ public static async Task<List<string>?> Hosted(string baseUrl,string token)
+ {
+  using var h=new HttpClient{BaseAddress=new Uri(baseUrl.TrimEnd('/')+"/"),Timeout=TimeSpan.FromSeconds(15)};
+  h.DefaultRequestHeaders.Add("X-Sync-Token",token);h.DefaultRequestHeaders.Add("X-Requested-With","topcash");
+  try{var r=await h.GetAsync("api/sync/hosted");if(r.StatusCode==System.Net.HttpStatusCode.NotFound)return [];if(!r.IsSuccessStatusCode)return null;return await r.Content.ReadFromJsonAsync<List<string>>()??[];}
+  catch{return null;}
+ }
  public async Task<string> Apply(string kind,string product,string scope,List<string> headers,List<List<string>> rows,string capturedAt)
  {
   var res=await http.PostAsJsonAsync("api/sync/batch",new{kind,product,scope,headers,rows,capturedAt});
   var body=await res.Content.ReadAsStringAsync();
+  if(res.StatusCode==System.Net.HttpStatusCode.Conflict)throw new InvalidOperationException("Questo portale ora lo legge il server: la postazione non serve più.");
   if(!res.IsSuccessStatusCode)throw new InvalidOperationException($"Server: {(int)res.StatusCode} {body}");
   return body.Trim('"');
  }

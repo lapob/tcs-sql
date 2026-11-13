@@ -4,7 +4,7 @@
 (()=>{
  const THRESHOLD=.3,LONG=460;let g=null;
  const allowed=id=>{
-  const it=typeof D!=='undefined'&&D?D.interventions.find(x=>x.id===id):null;if(!it)return null;
+  const it=typeof D!=='undefined'&&D?findInt(id):null;if(!it)return null;
   // imported from Mastro: the office and administrators may act on it (it becomes the app's own), technicians only look
   const own=it.source==='app'||(it.source==='mastro'&&typeof canEditClients==='function'&&canEditClients());
   return{it,print:own&&!String(id).startsWith('local-'),close:own&&!it.signedAt&&it.status!=='Chiuso'};

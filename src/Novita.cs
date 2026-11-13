@@ -152,7 +152,7 @@ public sealed partial class Store
   if (key.Length == 0) return res;
   foreach (var i in Interventions())
   {
-   if (i.Source != "app" || i.Status == "Chiuso") continue;
+   if (i.Source != "app" || i.Status == "Chiuso" || MoneyWork.IsMoney(i.Kind)) continue;
    if (!DateTimeOffset.TryParse(i.Updated, CultureInfo.InvariantCulture, DateTimeStyles.None, out var up) || up <= since) continue;
    var by = string.IsNullOrWhiteSpace(i.UpdatedBy) ? i.CreatedBy : i.UpdatedBy;
    if (NameKey(by) == key) continue; // my own change
@@ -222,7 +222,7 @@ public static class WeeklyReport
    blocks.Add(new("Macchine da controllare", stale.Count.ToString(It), "Verificazione scaduta da oltre un anno: probabilmente non sono più dal cliente. Aprile in Studio → Macchine da controllare e segnale come dismesse o ancora attive.", [], ""));
   // licences expiring in 30 days
   var lic = s.Licenses().Where(r => !r.Scope.EndsWith("-scadute")).Select(r => (r, d: AnyDateOf(r.Expiry))).Where(x => x.d != null && x.d >= today && x.d <= today.AddDays(30)).ToList();
-  var renewals = s.Renewals();
+  var renewals = s.RenewalsView();
   lic = lic.Where(x => renewals.GetValueOrDefault($"lic|{x.r.Id}|{x.d:yyyy-MM-dd}")?.Status != "Rinnovato").ToList();
   if (lic.Count > 0) blocks.Add(new("Licenze in scadenza entro 30 giorni", lic.Count.ToString(It), "", lic.OrderBy(x => x.d).Take(8).Select(x => new Line(x.r.Client, $"{x.r.Product} · {x.r.Serial}", x.d!.Value.ToString("d MMM", It), "due")).ToList(), lic.Count > 8 ? $"e altre {lic.Count - 8}" : ""));
   // stock under minimum

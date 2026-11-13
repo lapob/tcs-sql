@@ -30,9 +30,9 @@ public sealed partial class Store
         var s = RchState(); var now = DateTimeOffset.Now.ToString("O"); var was = s.Connected;
         s = s with { Connected = connected, Message = Trim(message, 300), CheckedAt = now, PortalTotal = portalTotal > 0 ? portalTotal : s.PortalTotal };
         if (connected && s.Error.StartsWith("Accesso", StringComparison.Ordinal)) s = s with { Error = "", ErrorAt = "" };
-        if (!connected) s = s with { Error = "Accesso a RCH XDealer richiesto: apri Studio sulla postazione di sincronizzazione e accedi di nuovo.", ErrorAt = now };
+        if (!connected) s = s with { Error = "Accesso a RCH XDealer richiesto: ricollegalo da Sincronizzazione → Portali e accessi.", ErrorAt = now };
         SetSetting("rch.status", s);
-        if (was && !connected) Log("error", "RCH XDealer: sessione scaduta, serve un nuovo accesso sulla postazione di sincronizzazione.");
+        if (was && !connected) Log("error", "RCH XDealer: sessione scaduta, serve un nuovo accesso (Sincronizzazione → Portali e accessi).");
     }
 
     /// Rows: [serial, device JSON]. Replaces the whole list atomically: the window sends only complete reads.

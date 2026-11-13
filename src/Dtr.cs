@@ -84,9 +84,9 @@ public sealed partial class Store
         var wasConnected = s.Connected;
         s = s with { Connected = connected, Message = Trim(message, 300), CheckedAt = now, PortalTotal = portalTotal > 0 ? portalTotal : s.PortalTotal };
         if (connected && s.Error.StartsWith("Accesso", StringComparison.Ordinal)) s = s with { Error = "", ErrorAt = "" };
-        if (!connected) s = s with { Error = "Accesso a DTR-Service richiesto: apri Studio sulla postazione di sincronizzazione e accedi di nuovo.", ErrorAt = now };
+        if (!connected) s = s with { Error = "Accesso a DTR-Service richiesto: ricollegalo da Sincronizzazione → Portali e accessi.", ErrorAt = now };
         SetSetting("dtr.status", s);
-        if (wasConnected && !connected) Log("error", "DTR-Service: sessione scaduta, serve un nuovo accesso sulla postazione di sincronizzazione.");
+        if (wasConnected && !connected) Log("error", "DTR-Service: sessione scaduta, serve un nuovo accesso (Sincronizzazione → Portali e accessi).");
     }
 
     /// Replaces the whole register list atomically. Only a complete read reaches this point (the portal window checks the total).

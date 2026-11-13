@@ -164,6 +164,12 @@ public sealed partial class Store
   // gestionale: Mastro import replaces only Mastro data, app interventions survive, history is read-only
   var mc=new MastroClient("15","Cliente Mastro","01234567890","","VIA ROMA 1","50100","FIRENZE","FI","",["055 111"],["a@b.it"],"","",new());
   var mm=new Machine("m1","15","RT FORM 200","RT","9CF001","99MEX001","","2024-01-10","","2025-01-10",true,true,"2026-01-01","2026-12-31","120","","");
+  // statements: opening + movements, RiBa advances among the financial debts, assets equal liabilities plus the result in progress
+  store.ImportMastro(new([mc],[mm],[],"t","test",Ledger:[new("2026-03","R","3.10.10","Vendite","Vendite","",1000,1),new("2026-03","C","2.10.10","Acquisti","Acquisti","",400,1)],
+   Patrimony:[new("2026-01","A","1.11.20","Banca","1.11|BANCHE","",500,1),new("2026-01","A","1.67.10","Capitale","1.67|CAPITALE E RISERVE","",-500,1),new("2026-03","P","1.11.20","Banca","1.11|BANCHE","",600,1),
+    new("2026-03","P","1.11.11","Effetti all'incasso","1.11|BANCHE","",-300,1),new("2026-03","P","1.13.1","Clienti","1.13|CLIENTI","",300,1)]),"test");
+  var bil=store.Bilancio(new DateTime(2026,11,13));
+  if(!bil.HasBalance||bil.TotalAssets!=1400||bil.TotalLiabilities!=1400||bil.Result!=600||bil.Liquidity!=1100||bil.FinancialDebt!=300||bil.Receivables!=300||!store.BilancioCsv().Contains("Totale attivo"))throw new Exception("Bilancio non quadra");
   store.ImportMastro(new([mc],[mm],[new("mi1","15","Cliente Mastro","2025-03-01","1","Verifica","Verifica periodica","Chiuso","","Normale","50","mastro","","","","")],"t","test"),"test");
   try{store.SaveIntervention(new("","NON-ESISTE","x","","","Titolo","","Aperto","","Normale","","","","","",""),"test");throw new Exception("Cliente inesistente accettato");}catch(InvalidDataException){}
   var app=store.SaveIntervention(new("","M15","Cliente Mastro","2026-11-10","m1","Sostituzione rotolo","","Aperto","Mario","Alta","","","","","",""),"test");
@@ -189,6 +195,13 @@ public sealed partial class Store
   try{store.ImportMastro(new([],[],[],"t","test"),"test");throw new Exception("Import vuoto accettato");}catch(InvalidDataException){}
   if(store.MastroClients().Count!=1)throw new Exception("Import vuoto ha cancellato dati");
   store.DeleteIntervention(app.Id);if(store.Interventions().Count!=0)throw new Exception("Eliminazione intervento");
+  // collections and credit notes recorded as interventions: recognised by title or by Mastro's article, real work untouched
+  Intervention Iv(string t,string w="")=>new("x","1","C","2026-01-01","",t,w,"Aperto","","Normale","","mastro","","","","");
+  if(MoneyWork.Of(Iv("Incasso insoluto riba euro 208,17"))!="Incasso"||MoneyWork.Of(Iv("Da saldare euro 219,60 relativi a fattura n. 12"))!="Incasso"
+   ||MoneyWork.Of(Iv("Intervento n. 5","X · matr. 1\nMateriale: NOTA DI CREDITO FT.2560"))!="Nota di credito"||MoneyWork.Of(Iv("Passare dal cliente","Materiale: INCASSO FT."))!="Incasso"
+   ||MoneyWork.Of(Iv("Pulizia cassetto"))!=""||MoneyWork.Of(Iv("Pacchetto fatture elettroniche","Materiale: PACCHETTO FATTURAZIONE ELETTRONICA"))!=""||MoneyWork.Of(Iv("Dgfe in esaurim + fatt. da saldare"))!=""
+   ||MoneyWork.Apply(Iv("Incasso ft. 12") with{Kind="Intervento"},true).Kind!="Intervento"||MoneyWork.Apply(Iv("Incasso ft. 12"),false).Kind!="")
+   throw new Exception("Incassi e note di credito tra gli interventi");
 #if !TOPCASH_SERVER
   var ini=Path.Combine(folder,"RETE.ini");File.WriteAllText(ini,"[Server]\r\nuser=u\r\npsw=p\r\nhost=10.0.0.5\r\nport=3307\r\ndbname=db1\r\n[Altro]\r\nhost=nope\r\n");
   var cfg=MastroReader.FromIni(ini)!;if(cfg.Host!="10.0.0.5"||cfg.Port!=3307||cfg.Database!="db1")throw new Exception("Lettura RETE.ini");

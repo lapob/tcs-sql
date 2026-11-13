@@ -18,6 +18,8 @@ var store=new Store(dataDir);
 var users=new Users(store.DatabasePath);
 if(users.PromotedOwner)store.Log("users","Il primo amministratore del server è diventato Proprietario (nuovo ruolo con poteri illimitati).");
 var hub=new Hub(store);
+var portals=new Portals(store,hub);
+hub.ServerPortals=portals.HostedIds;
 hub.Team=()=>store.Team().Select(u=>(object)new{name=u.Name,username=u.Username,role=u.Role}).ToArray();
 var devices=new Devices(store.DatabasePath);
 // 2.8.12: sign-in names asked by the owner (password, role and history unchanged)
@@ -430,6 +432,8 @@ app.MapPost("/api/interventions",(HttpContext ctx,Intervention i)=>
 {
  // technicians create and update their own work; what came from Mastro is corrected by the office and administrators
  if(ctx.User.IsInRole(Roles.Tech)&&!string.IsNullOrEmpty(i?.Id)&&!i.Id.StartsWith("app-",StringComparison.Ordinal))return Results.Json(new{error="Gli interventi importati da Mastro li corregge l’amministrazione."},statusCode:403);
+ // collections and credit notes belong to Accounting: a technician can neither file one nor touch one
+ if(ctx.User.IsInRole(Roles.Tech)&&(MoneyWork.IsMoney(i?.Kind)||!string.IsNullOrEmpty(i?.Id)&&MoneyWork.IsMoney(store.Interventions().FirstOrDefault(x=>x.Id==i.Id)?.Kind)))return Results.Json(new{error="Incassi e note di credito li gestisce la contabilità."},statusCode:403);
  try{var r=store.SaveIntervention(i,Who(ctx));hub.Changed();return Results.Ok(r);}catch(InvalidDataException ex){return Bad(ex.Message);}
 }).RequireAuthorization("read");
 app.MapPost("/api/interventions/{id}/delete",(HttpContext ctx,string id)=>
@@ -510,6 +514,22 @@ app.MapPost("/api/settings/mastro-auto",(HttpContext ctx,MastroAutoSave r)=>
  store.Log("mastro",$"{Who(ctx)}: lettura automatica di Mastro {(rule.Enabled?$"ogni {rule.Minutes} minuti dalle {rule.From} alle {rule.To}":"disattivata")}.");hub.Changed();
  return Results.Ok(rule);
 }).RequireAuthorization("admin");
+// licences: how long a licence not renewed stays listed, and up to which month every expiry counts as renewed
+app.MapGet("/api/settings/licenses",()=>Results.Ok(store.LicenseRules())).RequireAuthorization("export");
+app.MapPost("/api/settings/licenses",(HttpContext ctx,LicenseRuleSave r)=>
+{
+ LicenseRule rule;try{rule=store.SaveLicenseRules(r?.KeepMonths??1,r?.RenewedUntil??"",Who(ctx));}catch(InvalidDataException ex){return Bad(ex.Message);}
+ store.Log("licenses",$"{Who(ctx)}: licenze non rinnovate tolte dopo {rule.KeepMonths} {(rule.KeepMonths==1?"mese":"mesi")}{(rule.RenewedUntil.Length>0?$", rinnovate fino a {rule.RenewedUntil}":"")}.");hub.Changed();
+ return Results.Ok(rule);
+}).RequireAuthorization("export");
+// collections and credit notes recorded in Mastro as interventions: shown in Accounting (on by default, reversible)
+app.MapGet("/api/settings/money",()=>Results.Ok(store.Money())).RequireAuthorization("export");
+app.MapPost("/api/settings/money",(HttpContext ctx,MoneySave r)=>
+{
+ var rule=store.SaveMoney(r?.Enabled??true,Who(ctx));
+ store.Log("interventions",$"{Who(ctx)}: incassi e note di credito da Mastro {(rule.Enabled?"spostati in Contabilità":"lasciati tra gli interventi")}.");hub.Changed();
+ return Results.Ok(rule);
+}).RequireAuthorization("export");
 // open interventions that close by themselves after N days (the office decides: on/off and how many days)
 app.MapGet("/api/settings/interventions",()=>Results.Ok(store.AutoClose())).RequireAuthorization("export");
 app.MapPost("/api/settings/interventions",(HttpContext ctx,AutoCloseSave r)=>
@@ -532,6 +552,7 @@ app.MapPost("/api/accounting/due-note",(HttpContext ctx,DueNoteRequest r)=>
  try{var n=store.SaveDueNote(r?.Id??"",r?.Status??"",r?.Note??"",Who(ctx));hub.Changed();return Results.Ok(n);}catch(InvalidDataException ex){return Bad(ex.Message);}
 }).RequireAuthorization("accounting");
 app.MapGet("/api/export/invoices.csv",()=>Results.File(Utf8Bom(AccountingReports.InvoicesCsv(store)),"text/csv; charset=utf-8",$"TopCash-fatture-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("export");
+app.MapGet("/api/export/bilancio.csv",()=>Results.File(Utf8Bom(store.BilancioCsv()),"text/csv; charset=utf-8",$"TopCash-bilancio-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("export");
 app.MapGet("/api/export/dues.csv",()=>Results.File(Utf8Bom(AccountingReports.DuesCsv(store)),"text/csv; charset=utf-8",$"TopCash-scadenze-aperte-{DateTime.Today:yyyyMMdd}.csv")).RequireAuthorization("export");
 
 // ───────────────────────── warehouse
@@ -561,11 +582,54 @@ app.MapPost("/api/sync/batch",(HttpContext ctx,BatchRequest b)=>
  if(!Station(ctx))return Results.Unauthorized();
  if(b?.Rows==null||b.Headers==null||string.IsNullOrEmpty(b.Kind)||string.IsNullOrEmpty(b.Scope))return Bad("Elenco incompleto.");
  if(b.Rows.Count>200_000)return Bad("Elenco troppo grande.");
+ // a portal the server now keeps itself: the office station's copy is not needed (and two sessions could log each other out)
+ if(portals.HostsKind(b.Kind))return Results.Json(new{error="Questo portale ora lo legge il server: la postazione non serve più."},statusCode:409);
  try{var msg=store.ApplyPortalList(b.Kind,b.Product,b.Scope,b.Headers,b.Rows,b.CapturedAt,"Zucchetti · postazione di sincronizzazione");hub.Changed();return Results.Ok(msg);}
  catch(InvalidDataException ex){store.Log("error",b.Scope+": "+ex.Message);hub.Changed();return Bad(ex.Message);}
 }).RequireRateLimiting("sync").AllowAnonymous();
 app.MapPost("/api/sync/log",(HttpContext ctx,LogRequest r)=>{if(!Station(ctx))return Results.Unauthorized();store.Log(r.Kind is "error" or "portal" or "check"?r.Kind:"portal",r.Message.Length>2000?r.Message[..2000]:r.Message);hub.Changed();return Results.Ok();}).RequireRateLimiting("sync").AllowAnonymous();
-app.MapPost("/api/sync/progress",(HttpContext ctx,ProgressRequest r)=>{if(!Station(ctx))return Results.Unauthorized();hub.SetProgress(r.Running,r.Connected,r.Text.Length>300?r.Text[..300]:r.Text);return Results.Ok();}).RequireRateLimiting("sync").AllowAnonymous();
+app.MapPost("/api/sync/progress",(HttpContext ctx,ProgressRequest r)=>{if(!Station(ctx))return Results.Unauthorized();if(portals.Hosted("zucchetti"))return Results.Ok();hub.SetProgress(r.Running,r.Connected,r.Text.Length>300?r.Text[..300]:r.Text);return Results.Ok();}).RequireRateLimiting("sync").AllowAnonymous();
+// the station asks which portals the server keeps: it closes those windows and stops reading them
+app.MapGet("/api/sync/hosted",(HttpContext ctx)=>Station(ctx)?Results.Ok(portals.HostedIds()):Results.Unauthorized()).RequireRateLimiting("sync").AllowAnonymous();
+
+// ───────────────────────── portals kept by the server (owner only: sign-in, live picture, read now, on/off)
+IResult PortalOwnerOnly()=>Results.Json(new{error="Solo il proprietario gestisce i portali sul server."},statusCode:403);
+app.MapGet("/api/portals",(HttpContext ctx)=>ctx.User.IsInRole(Roles.Owner)?Results.Ok(new{portals=portals.Views(),browser=HeadlessBrowser.FindExecutable()!=null}):PortalOwnerOnly()).RequireAuthorization("admin");
+app.MapPost("/api/portals/{id}/enabled",async(HttpContext ctx,string id,PortalSwitch r)=>
+{
+ if(!ctx.User.IsInRole(Roles.Owner))return PortalOwnerOnly();
+ if(portals.Get(id)==null)return Results.NotFound();
+ await portals.SetEnabled(id,r?.Enabled??false,Who(ctx));return Results.Ok(portals.Views());
+}).RequireAuthorization("admin");
+app.MapPost("/api/portals/{id}/sync",async(HttpContext ctx,string id)=>
+{
+ if(!ctx.User.IsInRole(Roles.Owner))return PortalOwnerOnly();
+ var p=portals.Get(id);if(p==null)return Results.NotFound();
+ if(!portals.Hosted(id))return Bad(p.Name+" non è attivo sul server.");
+ _=Task.Run(async()=>{try{await p.SyncNow();}catch{}});
+ store.Log("portal",$"{Who(ctx)} ha chiesto di leggere ora {p.Name} dal server.");hub.Changed();return Results.Ok();
+}).RequireAuthorization("admin");
+app.MapPost("/api/portals/{id}/stop",(HttpContext ctx,string id)=>{if(!ctx.User.IsInRole(Roles.Owner))return PortalOwnerOnly();var p=portals.Get(id);if(p==null)return Results.NotFound();p.StopSync();return Results.Ok();}).RequireAuthorization("admin");
+app.MapPost("/api/portals/{id}/forget",async(HttpContext ctx,string id)=>
+{
+ if(!ctx.User.IsInRole(Roles.Owner))return PortalOwnerOnly();
+ var p=portals.Get(id);if(p==null)return Results.NotFound();
+ await p.Forget();store.Log("portal",$"{Who(ctx)} ha scollegato {p.Name} dal server (accesso da rifare).");hub.Changed();return Results.Ok();
+}).RequireAuthorization("admin");
+app.MapGet("/api/portals/{id}/view",async(HttpContext ctx,string id)=>
+{
+ if(!ctx.User.IsInRole(Roles.Owner))return PortalOwnerOnly();
+ var p=portals.Get(id);if(p==null)return Results.NotFound();
+ try{var (jpeg,url)=await p.Picture();ctx.Response.Headers.CacheControl="no-store";ctx.Response.Headers["X-Portal-Url"]=Uri.TryCreate(url,UriKind.Absolute,out var u)?u.Host+u.AbsolutePath:"";return Results.File(jpeg,"image/jpeg");}
+ catch(Exception ex){return Results.Json(new{error=ex.Message},statusCode:503);}
+}).RequireAuthorization("admin");
+app.MapPost("/api/portals/{id}/input",async(HttpContext ctx,string id,PortalInput i)=>
+{
+ if(!ctx.User.IsInRole(Roles.Owner))return PortalOwnerOnly();
+ var p=portals.Get(id);if(p==null||i==null)return Results.NotFound();
+ try{await p.Input(i);return Results.Ok();}catch(Exception ex){return Results.Json(new{error=ex.Message},statusCode:503);}
+}).RequireAuthorization("admin");
+
 // addresses other devices of the office use to open Studio in the browser (physical adapters only: no VirtualBox, WSL, VPN)
 // office addresses (private IPs, PC name) only for administrators: everyone else just gets the public address
 app.MapGet("/api/lan",(HttpContext ctx)=>{
@@ -637,6 +701,8 @@ var watchTimer=new Timer(_=>WatchDb(),null,TimeSpan.FromSeconds(2),TimeSpan.From
 app.Lifetime.ApplicationStopping.Register(()=>{watchTimer.Dispose();lock(watchGate)watchDb.Dispose();});
 
 store.Log("server","Server Top Cash avviato.");
+portals.Begin();
+app.Lifetime.ApplicationStopping.Register(()=>{try{portals.StopAll().Wait(TimeSpan.FromSeconds(8));}catch{}});
 app.Run();
 
 static byte[] Utf8Bom(string s)=>[..Encoding.UTF8.GetPreamble(),..Encoding.UTF8.GetBytes(s)];
@@ -665,6 +731,8 @@ record UserUpdate(string? Role,bool? Disabled,string? Name,string? Password);
 record UserRename(string? Username);
 record RosterSave(List<string>? Hidden,List<string>? Agents);
 record AutoCloseSave(bool? Enabled,int? Days);
+record MoneySave(bool Enabled);
+record LicenseRuleSave(int? KeepMonths,string? RenewedUntil);
 record MastroAutoSave(bool? Enabled,int? Minutes,int? From,int? To);
 record CrashReport(string? Platform,string? Version,string? Text);
 record NoteRequest(string Code,string? Note);
@@ -682,3 +750,4 @@ record RouteDoneRequest(string? Key,bool Done);
 record MachineFlagRequest(List<string>? Ids,string? State);
 record PhotoRequest(string? Data);
 record WeeklyRequest(bool Enabled,string? To);
+record PortalSwitch(bool Enabled);

@@ -26,6 +26,7 @@
 <script src="analisi.js" defer></script>
 <script src="gestures.js" defer></script>
 <script src="edges.js" defer></script>
+<script src="portals.js" defer></script>
 <script src="report.js" defer></script>
 <script src="dtr.js" defer></script>
 <script src="ital.js" defer></script>
@@ -59,7 +60,7 @@
 <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3.5v11.5m-5-5 5 5 5-5M4 17v2.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V17"/></symbol>
 <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V3.5m-5 5 5-5 5 5M4 17v2.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V17"/></symbol>
 <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
-<symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol><symbol id="i-more" viewBox="0 0 24 24"><path d="M5.5 12h.01M12 12h.01M18.5 12h.01" stroke-width="3.2"/></symbol><symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10"/></symbol><symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol><symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
 <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5Z"/></symbol>
 <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9ZM10 20a2.2 2.2 0 0 0 4 0"/></symbol>
 <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/></symbol>
@@ -117,9 +118,11 @@
   <button data-area="ops" class="nav-item need-admin" data-page="check"><svg><use href="#i-check"/></svg><span>Controllo dati</span><em id="nav-check"></em></button>
   <div data-area="acc" class="nav-caption">Contabilità</div>
   <button data-area="acc" class="nav-item need-acc" data-page="accounting"><svg><use href="#i-chart"/></svg><span>Riepilogo</span></button>
+  <button data-area="acc" class="nav-item need-acc" data-page="accBil"><svg><use href="#i-file"/></svg><span>Bilancio</span></button>
   <button data-area="acc" class="nav-item need-acc" data-page="accOpp"><svg><use href="#i-sparkle"/></svg><span>Priorità</span></button>
   <button data-area="acc" class="nav-item need-acc" data-page="accAna"><svg><use href="#i-trend"/></svg><span>Analisi</span></button>
   <button data-area="acc" class="nav-item need-acc" data-page="accRec"><svg><use href="#i-download"/></svg><span>Da incassare</span><em id="nav-accounting" class="hot"></em></button>
+  <button data-area="acc" class="nav-item need-acc" data-page="accMoney"><svg><use href="#i-euro"/></svg><span>Incassi e note</span><em id="nav-money" class="hot"></em></button>
   <button data-area="acc" class="nav-item need-acc" data-page="accPay"><svg><use href="#i-upload"/></svg><span>Da pagare</span><em id="nav-accpay" class="hot"></em></button>
   <button data-area="acc" class="nav-item need-acc" data-page="accInv"><svg><use href="#i-file"/></svg><span>Fatture</span></button>
   <button data-area="acc" class="nav-item need-acc" data-page="accSal"><svg><use href="#i-bag"/></svg><span>Vendite</span></button>

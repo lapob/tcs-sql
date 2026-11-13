@@ -73,7 +73,8 @@ import kotlinx.coroutines.launch
             drawCircle(Brush.radialGradient(listOf(BrandBlue.copy(alpha = 0.18f), BrandBlue.copy(alpha = 0f)), center = a, radius = size.width * 0.9f), radius = size.width * 0.9f, center = a)
             drawCircle(Brush.radialGradient(listOf(BrandRed.copy(alpha = 0.10f), BrandRed.copy(alpha = 0f)), center = b, radius = size.width * 0.8f), radius = size.width * 0.8f, center = b)
         }
-        Column(Modifier.fillMaxSize().systemBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(28.dp),
+        val authScroll = rememberScrollState()
+        Column(Modifier.fillMaxSize().systemBarsPadding().imePadding().fadeEdges(authScroll, vertical = true).verticalScroll(authScroll).padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { content() }
     }
 }
