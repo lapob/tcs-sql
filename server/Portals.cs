@@ -25,11 +25,16 @@ public sealed class Portals
         All = [new ZucchettiRunner(store, hub), new DtrRunner(store, hub), new ItalRunner(store, hub), new RchRunner(store, hub)];
     }
     public PortalRunner? Get(string id) => All.FirstOrDefault(p => p.Id == id);
-    public PortalServerConfig Config() => store.Setting<PortalServerConfig>("portals.server") ?? new PortalServerConfig([]);
+    /// Every portal is kept by the server unless the owner took one off (the choice, once made, is saved and respected).
+    public PortalServerConfig Config() => store.Setting<PortalServerConfig>("portals.server") ?? new PortalServerConfig([.. All.Select(p => p.Id)]);
     public bool Hosted(string id) => Config().Enabled.Contains(id);
+    /// Kept by the server AND signed in: only then the office station steps aside, so no portal is ever left unread
+    /// while it waits for the owner's sign-in.
+    public bool Ready(string id) => Hosted(id) && Get(id)?.Connected == true;
     /// The Windows app's sync station must not send what the server now reads itself (two sessions could log each other out).
-    public bool HostsKind(string kind) => All.Any(p => p.Kinds.Contains(kind) && Hosted(p.Id));
+    public bool HostsKind(string kind) => All.Any(p => p.Kinds.Contains(kind) && Ready(p.Id));
     public List<string> HostedIds() => Config().Enabled.Where(id => Get(id) != null).ToList();
+    public List<string> ReadyIds() => All.Where(p => Ready(p.Id)).Select(p => p.Id).ToList();
 
     public void Begin() { foreach (var p in All) if (Hosted(p.Id)) p.Enable(); }
 
@@ -38,7 +43,7 @@ public sealed class Portals
         var p = Get(id) ?? throw new InvalidDataException("Portale sconosciuto.");
         var c = Config(); var list = c.Enabled.Where(x => x != id).ToList(); if (on) list.Add(id);
         store.SetSetting("portals.server", new PortalServerConfig(list, DateTimeOffset.Now.ToString("O"), who));
-        if (on) { p.Enable(); store.Log("portal", $"{who} ha spostato {p.Name} sul server: la postazione dell'ufficio non serve più per questo portale."); }
+        if (on) { p.Enable(); store.Log("portal", $"{who} ha spostato {p.Name} sul server: dopo l'accesso la postazione dell'ufficio non serve più per questo portale."); }
         else { await p.Disable(); store.Log("portal", $"{who} ha tolto {p.Name} dal server."); }
         hub.Changed();
     }
@@ -78,6 +83,7 @@ public abstract class PortalRunner
     DateTime lastKeep = DateTime.MinValue, lastView = DateTime.MinValue, lastStartFail = DateTime.MinValue, lastSyncTry = DateTime.MinValue;
     int startFails;
 
+    public bool Connected => enabled && authenticated;
     public PortalView View(bool hostedFlag) => new(Id, Name, hostedFlag, browser?.Alive == true, authenticated, running,
         status, LastSyncStored(), error, browser?.Alive == true ? Host(page?.Url) : "", Every.TotalHours >= 1 ? $"ogni {Every.TotalHours:0} ore" : $"ogni {Every.TotalMinutes:0} minuti");
     static string Host(string? url) => Uri.TryCreate(url, UriKind.Absolute, out var u) ? u.Host : "";

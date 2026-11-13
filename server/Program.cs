@@ -588,9 +588,9 @@ app.MapPost("/api/sync/batch",(HttpContext ctx,BatchRequest b)=>
  catch(InvalidDataException ex){store.Log("error",b.Scope+": "+ex.Message);hub.Changed();return Bad(ex.Message);}
 }).RequireRateLimiting("sync").AllowAnonymous();
 app.MapPost("/api/sync/log",(HttpContext ctx,LogRequest r)=>{if(!Station(ctx))return Results.Unauthorized();store.Log(r.Kind is "error" or "portal" or "check"?r.Kind:"portal",r.Message.Length>2000?r.Message[..2000]:r.Message);hub.Changed();return Results.Ok();}).RequireRateLimiting("sync").AllowAnonymous();
-app.MapPost("/api/sync/progress",(HttpContext ctx,ProgressRequest r)=>{if(!Station(ctx))return Results.Unauthorized();if(portals.Hosted("zucchetti"))return Results.Ok();hub.SetProgress(r.Running,r.Connected,r.Text.Length>300?r.Text[..300]:r.Text);return Results.Ok();}).RequireRateLimiting("sync").AllowAnonymous();
+app.MapPost("/api/sync/progress",(HttpContext ctx,ProgressRequest r)=>{if(!Station(ctx))return Results.Unauthorized();if(portals.Ready("zucchetti"))return Results.Ok();hub.SetProgress(r.Running,r.Connected,r.Text.Length>300?r.Text[..300]:r.Text);return Results.Ok();}).RequireRateLimiting("sync").AllowAnonymous();
 // the station asks which portals the server keeps: it closes those windows and stops reading them
-app.MapGet("/api/sync/hosted",(HttpContext ctx)=>Station(ctx)?Results.Ok(portals.HostedIds()):Results.Unauthorized()).RequireRateLimiting("sync").AllowAnonymous();
+app.MapGet("/api/sync/hosted",(HttpContext ctx)=>Station(ctx)?Results.Ok(portals.ReadyIds()):Results.Unauthorized()).RequireRateLimiting("sync").AllowAnonymous();
 
 // ───────────────────────── portals kept by the server (owner only: sign-in, live picture, read now, on/off)
 IResult PortalOwnerOnly()=>Results.Json(new{error="Solo il proprietario gestisce i portali sul server."},statusCode:403);

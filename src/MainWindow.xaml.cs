@@ -309,17 +309,20 @@ public partial class MainWindow : Window
   catch(Exception ex){store.Log("error",ex.Message);await Notify(ex.Message);await Push();}
  }
  ISyncTarget SyncTarget()=>ServerMode&&syncToken.Length>0?new RemoteSyncTarget(serverUrl,syncToken):new LocalSyncTarget(store);
- // ───────── portals kept by the server: this station steps aside (checked at start, every 10 minutes and before opening one)
+ // ───────── portals kept by the server: this station steps aside (checked at start, every 2 minutes and before opening one)
  HashSet<string> hostedPortals=[];DateTime nextHostedCheck=DateTime.MinValue;
  bool ServerHosts(string id)=>hostedPortals.Contains(id);
  async Task CheckHosted()
  {
-  nextHostedCheck=DateTime.Now.AddMinutes(10);
+  nextHostedCheck=DateTime.Now.AddMinutes(2);
   if(!ServerMode||syncToken.Length==0){hostedPortals=[];return;}
   try{
    var ids=await RemoteSyncTarget.Hosted(serverUrl,syncToken);if(ids==null)return; // server unreachable: keep what we knew
-   hostedPortals=[..ids];
+   var before=hostedPortals;hostedPortals=[..ids];
    foreach(var id in hostedPortals)Release(id);
+   // the server lost a session (expired, signed out): this station takes the portal back until the owner signs in again
+   foreach(var id in before.Except(hostedPortals))
+    switch(id){case "dtr" when DtrWindow.Configured:OpenDtr(false);break;case "ital" when ItalRetailWindow.Configured:OpenItal(false);break;case "rch" when RchWindow.Configured:OpenRch(false);break;}
   }catch{}
  }
  /// Closes this PC's window for a portal the server now reads (its saved session stays on disk, harmless).
