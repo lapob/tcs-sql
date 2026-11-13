@@ -66,7 +66,9 @@ import kotlinx.serialization.Serializable
     val status: String = "", val lastSync: String = "", val error: String = "", val url: String = "", val every: String = "",
     /** the portal asks for Cloudflare's robot check: the server cannot pass it, the office station keeps reading it */
     val blocked: Boolean = false)
-@Serializable data class PortalList(val portals: List<PortalView> = emptyList(), val browser: Boolean = false)
+/** The office PC (Windows app as sync station): when it last called the server and whether it is on now. */
+@Serializable data class StationState(val lastContact: String = "", val online: Boolean = false)
+@Serializable data class PortalList(val portals: List<PortalView> = emptyList(), val browser: Boolean = false, val station: StationState? = null)
 @Serializable data class PortalSwitch(val enabled: Boolean)
 @Serializable data class PortalInput(val kind: String, val x: Double = 0.0, val y: Double = 0.0, val dy: Double = 0.0, val text: String? = null)
 /** Income statement and balance sheet from Mastro's general ledger (computed by the server, same as the site). */
@@ -227,7 +229,7 @@ object Catalog {
 @Serializable data class RosterPerson(val name: String = "", val hidden: Boolean = false, val agent: Boolean = false, val username: String = "", val jobs: Int = 0, val group: Boolean = false)
 @Serializable data class RosterView(val people: List<RosterPerson> = emptyList(), val updatedAt: String = "", val updatedBy: String = "")
 /** Open interventions that close by themselves after [days] days (same setting on website, Windows and Android). */
-@Serializable data class AutoCloseRule(val enabled: Boolean = true, val days: Int = 30, val updatedAt: String = "", val updatedBy: String = "", val closed: Int = 0)
+@Serializable data class AutoCloseRule(val enabled: Boolean = true, val days: Int = 15, val updatedAt: String = "", val updatedBy: String = "", val closed: Int = 0)
 @Serializable data class AutoCloseSave(val enabled: Boolean, val days: Int)
 /** Server rule: collections and credit notes recorded in Mastro as interventions move to Accounting (on by default). */
 @Serializable data class MoneyRule(val enabled: Boolean = true, val updatedAt: String = "", val updatedBy: String = "")

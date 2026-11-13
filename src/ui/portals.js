@@ -17,15 +17,15 @@ function psvOf(k){return PSV?.portals?.find(p=>p.id===(PSV_ID[k]||k))||null;}
 /* state text and buttons for one row of "Portali e accessi" when the owner looks at it */
 function psvRow(p){
  const s=psvOf(p.k);if(!s)return null;
- if(!s.enabled)return{text:'Lo legge la postazione dell’ufficio',btn:`<button class="btn sm" data-psv-on="${s.id}">${icon('cloud')}Sposta sul server</button>`};
+ if(!s.enabled)return{where:'pc',state:p.state,text:p.text,btn:`<button class="btn sm" data-psv-on="${s.id}">${icon('cloud')}Sposta sul server</button>`};
  // the portal's Cloudflare robot check stops the server's browser: the office station keeps reading it, its state is shown
- if(s.blocked)return{state:p.state,text:`${p.text} · lo legge la postazione: il portale chiede la verifica anti-robot di Cloudflare, che il server non può superare`,
+ if(s.blocked)return{where:'pc',blocked:true,state:p.state,text:p.text,
   btn:`<button class="btn ghost sm icon-only" data-psv-open="${s.id}" aria-label="Riprova sul server" data-tip="Riprova sul server (lo fa da solo una volta al giorno)">${icon('sync')}</button><button class="btn ghost sm icon-only" data-psv-menu="${s.id}" aria-label="Altre azioni" data-tip="Altre azioni">${icon('more')}</button>`};
  const state=s.running?'ok':s.connected?'ok':'bad';
  const text=s.running?(s.status||'Lettura in corso…'):s.connected?`Sul server · ${s.lastSync?'aggiornato '+dTime(s.lastSync):'prima lettura in arrivo'} · ${s.every}`:(s.error||'Sul server · serve il tuo accesso');
  const btn=s.connected?`<button class="btn ghost sm" data-psv-sync="${s.id}"${s.running?' disabled':''}>${icon('sync')}${s.running?'In lettura':'Aggiorna ora'}</button><button class="btn ghost sm icon-only" data-psv-menu="${s.id}" aria-label="Altre azioni" data-tip="Altre azioni">${icon('more')}</button>`
   :`<button class="btn accent sm" data-psv-open="${s.id}">${icon('external')}Accedi</button><button class="btn ghost sm icon-only" data-psv-menu="${s.id}" aria-label="Altre azioni" data-tip="Altre azioni">${icon('more')}</button>`;
- return{state,text,btn};
+ return{where:'server',state,text,btn};
 }
 document.addEventListener('click',async e=>{
  const on=e.target.closest('[data-psv-on]'),sy=e.target.closest('[data-psv-sync]'),op=e.target.closest('[data-psv-open]'),mn=e.target.closest('[data-psv-menu]');

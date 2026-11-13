@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Refresh
@@ -70,6 +71,7 @@ import androidx.navigation.NavHostController
 import it.topcash.studio.data.AppViewModel
 import it.topcash.studio.data.PortalInput
 import it.topcash.studio.data.PortalView
+import it.topcash.studio.data.StationState
 import it.topcash.studio.data.Tone
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -81,16 +83,31 @@ import kotlinx.coroutines.launch
     var viewing by remember { mutableStateOf<PortalView?>(null) }
     var ask by remember { mutableStateOf<Pair<String, PortalView>?>(null) }
     LaunchedEffect(viewing) { while (viewing == null) { vm.loadPortals(); delay(8000) } }
-    Page(vm, "Portali sul server", "Letti dal server, anche a PC spento", onBack = { nav.popBackStack() }) {
-        item(key = "info") { Text("Il server apre ogni portale con un browser tutto suo e lo legge da solo. L’accesso lo fai tu una volta sola, sulla pagina del portale: la password va direttamente al portale e il server non la salva.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 12.dp)) }
+    Page(vm, "Portali", "Chi li legge: il server o il PC dell’ufficio", onBack = { nav.popBackStack() }) {
         val l = list
         if (l == null) { item(key = "load") { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }; return@Page }
         if (!l.browser) item(key = "nobrowser") { Text("Sul server non c’è Microsoft Edge o Google Chrome: serve uno dei due per leggere i portali.", style = MaterialTheme.typography.bodySmall, color = LocalStatus.current.of(Tone.Bad), modifier = Modifier.padding(bottom = 10.dp)) }
-        items(l.portals.size, key = { l.portals[it].id }) { i ->
-            val p = l.portals[i]
-            PortalCard(p, Modifier.padding(bottom = 10.dp).appear(i),
-                onEnable = { ask = "on" to p }, onSync = { vm.portalAction(p.id, "sync", "Lettura avviata sul server") }, onOpen = { viewing = p },
-                onStop = { vm.portalAction(p.id, "stop", "Lettura interrotta: dati precedenti conservati") }, onOff = { ask = "off" to p }, onForget = { ask = "forget" to p })
+        // two groups: online on the server (works with the office PC off) and on the office PC (Windows app)
+        val online = l.portals.filter { it.enabled && !it.blocked }
+        val pc = l.portals.filter { !it.enabled || it.blocked }
+        val order = online + pc
+        if (online.isNotEmpty()) {
+            item(key = "g-server") { GroupHead(Icons.Rounded.Cloud, Tone.Ok, "Online sul server", online.size, "Si leggono da soli, anche con il PC dell’ufficio spento. L’accesso lo fai tu una volta sola: la password va al portale e il server non la salva.") }
+            items(online.size, key = { online[it].id }) { i -> val p = online[i]
+                PortalCard(p, Modifier.padding(bottom = 10.dp).appear(order.indexOf(p)),
+                    onEnable = { ask = "on" to p }, onSync = { vm.portalAction(p.id, "sync", "Lettura avviata sul server") }, onOpen = { viewing = p },
+                    onStop = { vm.portalAction(p.id, "stop", "Lettura interrotta: dati precedenti conservati") }, onOff = { ask = "off" to p }, onForget = { ask = "forget" to p }) }
+        }
+        if (pc.isNotEmpty()) {
+            item(key = "g-pc") {
+                GroupHead(Icons.Rounded.Computer, Tone.Info, "Sul PC dell’ufficio", pc.size,
+                    "Li legge l’app Windows" + (if (pc.any { it.blocked }) ": il portale chiede la verifica anti-robot di Cloudflare, che il server non può superare" else "") + ". Funzionano finché il PC resta acceso con l’app aperta.",
+                    l.station)
+            }
+            items(pc.size, key = { pc[it].id }) { i -> val p = pc[i]
+                PortalCard(p, Modifier.padding(bottom = 10.dp).appear(order.indexOf(p)),
+                    onEnable = { ask = "on" to p }, onSync = { vm.portalAction(p.id, "sync", "Lettura avviata sul server") }, onOpen = { viewing = p },
+                    onStop = { vm.portalAction(p.id, "stop", "Lettura interrotta: dati precedenti conservati") }, onOff = { ask = "off" to p }, onForget = { ask = "forget" to p }) }
         }
     }
     ask?.let { (k, p) ->
@@ -109,10 +126,36 @@ import kotlinx.coroutines.launch
     viewing?.let { p -> PortalLiveView(vm, p) { done -> viewing = null; if (done) vm.portalDone(p.id) } }
 }
 
+@Composable private fun GroupHead(icon: androidx.compose.ui.graphics.vector.ImageVector, tone: Tone, title: String, count: Int, text: String, station: StationState? = null) {
+    val c = LocalStatus.current.of(tone)
+    Column(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(c.copy(alpha = .16f)), contentAlignment = Alignment.Center) { Icon(icon, null, Modifier.size(20.dp), tint = c) }
+            Spacer(Modifier.size(12.dp))
+            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Pill(count.toString(), Tone.Neutral)
+        }
+        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+        if (station != null) {
+            val (t, s) = when {
+                station.online -> Tone.Ok to "PC acceso · sentito ${agoText(station.lastContact)}"
+                station.lastContact.isNotBlank() -> Tone.Bad to "PC spento o app chiusa da ${agoText(station.lastContact, bare = true)}"
+                else -> Tone.Neutral to "In attesa del PC dell’ufficio"
+            }
+            Box(Modifier.padding(top = 8.dp)) { Pill(s, t) }
+        }
+    }
+}
+
+private fun agoText(iso: String, bare: Boolean = false): String = runCatching {
+    val m = java.time.Duration.between(java.time.OffsetDateTime.parse(iso), java.time.OffsetDateTime.now()).toMinutes()
+    val t = when { m < 1 -> "adesso"; m < 60 -> "$m min"; m < 1440 -> "${m / 60} ore"; else -> "${m / 1440} giorni" }
+    if (bare || m < 1) t else "$t fa"
+}.getOrDefault("")
+
 @Composable private fun PortalCard(p: PortalView, modifier: Modifier, onEnable: () -> Unit, onSync: () -> Unit, onOpen: () -> Unit, onStop: () -> Unit, onOff: () -> Unit, onForget: () -> Unit) {
     val (tone, state) = when {
-        !p.enabled -> Tone.Neutral to "Lo legge la postazione dell’ufficio"
-        p.blocked -> Tone.Due to "Lo legge la postazione dell’ufficio: il portale chiede la verifica anti-robot di Cloudflare, che il server non può superare"
+        !p.enabled || p.blocked -> Tone.Neutral to (if (p.lastSync.isNotBlank()) "Aggiornato dal PC " + whenText(p.lastSync) else "Ancora nessuna lettura dal PC") + (if (p.blocked) " · verifica Cloudflare" else "")
         p.running -> Tone.Info to p.status.ifBlank { "Lettura in corso…" }
         p.connected -> Tone.Ok to "Sul server · ${if (p.lastSync.isNotBlank()) "aggiornato " + whenText(p.lastSync) else "prima lettura in arrivo"} · ${p.every}"
         else -> Tone.Bad to p.error.ifBlank { "Sul server · serve il tuo accesso" }
@@ -124,7 +167,7 @@ import kotlinx.coroutines.launch
                 Text(p.name, style = MaterialTheme.typography.titleMedium)
                 Text(state, style = MaterialTheme.typography.bodySmall, color = if (tone == Tone.Bad) LocalStatus.current.of(Tone.Bad) else MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Pill(when { !p.enabled -> "Postazione"; p.blocked -> "Postazione"; p.running -> "In lettura"; p.connected -> "Collegato"; else -> "Da collegare" }, tone)
+            Pill(when { !p.enabled || p.blocked -> "PC ufficio"; p.running -> "In lettura"; p.connected -> "Collegato"; else -> "Da collegare" }, tone)
         }
         Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             when {

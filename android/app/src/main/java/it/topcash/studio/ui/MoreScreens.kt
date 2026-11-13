@@ -169,7 +169,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
         }
         item(key = "account") {
             MoreGroup("Account") {
-                if (me?.isOwner == true) MoreRow(Icons.Rounded.Cloud, "Portali sul server", "Zucchetti, DTR-Service, Ital Retail e RCH letti dal server, senza PC acceso", Modifier.appear(3)) { nav.navigate("portals") }
+                if (me?.isOwner == true) MoreRow(Icons.Rounded.Cloud, "Portali", "Quali legge il server da solo e quali il PC dell’ufficio", Modifier.appear(3)) { nav.navigate("portals") }
                 if (me?.isAdmin == true) MoreRow(Icons.Rounded.AccountCircle, "Utenti", "Crea, modifica ed elimina gli accessi, compreso il tuo", Modifier.appear(3)) { nav.navigate("users") }
                 MoreRow(Icons.Rounded.AccountCircle, "Account e impostazioni", if (me?.canEdit == true) "Tema, chiusura automatica interventi, server, uscita" else "Tema, server, uscita", Modifier.appear(3)) { nav.navigate("account") }
                 MoreRow(Icons.Rounded.SystemUpdate, "Versione ${vm.appVersion}", "Tocca per controllare gli aggiornamenti", Modifier.appear(3)) { vm.checkUpdate(true) }

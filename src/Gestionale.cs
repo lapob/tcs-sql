@@ -193,7 +193,7 @@ public sealed partial class Store
  }
  /// Open interventions older than N days close by themselves (setting, on by default with 30 days, changeable from every app).
  /// Closed, not deleted: they stay in the client's history; one imported from Mastro becomes the app's own copy, so the next read does not reopen it.
- public static readonly AutoCloseRule DefaultAutoClose = new(true, 30);
+ public static readonly AutoCloseRule DefaultAutoClose = new(true, 15); // 2.10.9: open interventions older than 15 days are closed (the owner asked; editable in Impostazioni → Interventi)
  /// How often the server reads Mastro by itself (owner's setting): every [Minutes] between [From] and [To] o'clock.
  public MastroSchedule MastroAutoRule() => Setting<MastroSchedule>("mastro.auto") ?? new(true, 30, 6, 22);
  public MastroSchedule SaveMastroAuto(bool enabled, int minutes, int from, int to, string who)

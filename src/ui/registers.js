@@ -167,18 +167,33 @@ function accessCard(onlyMissing){
  const list=portalAccess().map(p=>{
   const hosted=typeof serverHosts==='function'&&serverHosts(p.k);
   const s=owner&&typeof psvRow==='function'?psvRow(p):null;
-  if(s)return{...p,state:s.state,text:s.text,btnHtml:s.btn};
+  if(s)return{...p,state:s.state,text:s.text,btnHtml:s.btn,where:s.where,blocked:!!s.blocked};
   // portals kept by the server: nobody needs the office station for them
   if(hosted)return{...p,text:p.state==='ok'?p.text+' · letto dal server':p.text,btnHtml:p.state==='ok'?'':'<small class="muted">accesso dal proprietario</small>'};
-  return p;});
+  return{...p,where:hosted?'server':'pc'};});
  const missing=list.filter(p=>p.state!=='ok');
  if(onlyMissing&&!missing.filter(p=>p.state!=='todo').length)return'';
- const head=missing.length?`${plur(missing.length,'accesso da rifare','accessi da rifare')}`:'Tutti i portali sono collegati';
+ const nSrv=list.filter(p=>p.where==='server').length,nPc=list.length-nSrv;
+ const head=[nSrv?`<b>${nSrv}</b> online sul server`:'',nPc?`<b>${nPc}</b> sul PC dell’ufficio`:'',missing.length?plur(missing.length,'accesso da rifare','accessi da rifare'):'tutti collegati'].filter(Boolean).join(' · ');
  const btn=p=>p.btnHtml!==undefined?p.btnHtml:p.state==='ok'?(WEB?'':`<button class="btn ghost sm" data-action="${p.act}">${icon('external')}Apri</button>`):!p.act?'':WEB?'<small class="muted">dalla postazione dell’ufficio</small>':`<button class="btn accent sm" data-action="${p.act}">${icon('external')}Accedi di nuovo</button>`;
- const note=owner?'I portali spostati sul server si leggono da soli, anche con il PC dell’ufficio spento: accedi una volta da qui, anche da fuori.':WEB?((state.serverPortals||[]).length?'Gli accessi li gestisce il proprietario dal server.':'Gli accessi si rifanno dall’app Windows della postazione di sincronizzazione.'):'Accedi tu nella finestra del portale: Studio non salva le password e poi legge i dati in sola lettura.';
+ const note=owner?'Gli accessi si fanno da qui, anche da fuori.':WEB?((state.serverPortals||[]).length?'Gli accessi li gestisce il proprietario dal server.':'Gli accessi si rifanno dall’app Windows della postazione di sincronizzazione.'):'Accedi tu nella finestra del portale: Studio non salva le password e poi legge i dati in sola lettura.';
  return`<div class="card reveal access-card" style="--i:1"><div class="card-head"><div><h2>Portali e accessi</h2><p>${head}. ${note}</p></div></div>
- <div class="access-list">${list.map(p=>`<div class="access-row s-${p.state}"><span class="bmark" style="--h:${p.hue}">${esc(p.mark)}</span><div class="grow"><strong>${esc(p.name)} <span class="access-dot" aria-hidden="true"></span></strong><small>${esc(p.sub)} · ${esc(p.text)}</small></div><div class="access-btns">${btn(p)}</div></div>`).join('')}</div></div>`;
+ ${accessGroups(list,btn,owner)}</div>`;
 }
+// Who reads each portal, at a glance: "online on the server" (works with the office PC off) or "on the office PC" (the
+// Windows app, needed while a portal blocks the server's browser or the owner keeps it there). Zucchetti counts as
+// online once the server reads it, whatever group it was in before.
+function accessGroups(list,btn,owner){
+ const row=p=>`<div class="access-row s-${p.state}" data-key="acc-${p.k}"><span class="bmark" style="--h:${p.hue}">${esc(p.mark)}</span><div class="grow"><strong>${esc(p.name)} <span class="access-dot" aria-hidden="true"></span></strong><small>${esc(p.sub)} · ${esc(p.text)}</small></div><div class="access-btns">${btn(p)}</div></div>`;
+ const srv=list.filter(p=>p.where==='server'),pc=list.filter(p=>p.where!=='server');
+ const st=owner&&typeof PSV!=='undefined'?PSV?.station:null;
+ const pcState=!st?'':st.online?`<span class="badge ok">PC acceso · sentito ${esc(relAgo(st.lastContact))}</span>`
+  :st.lastContact?`<span class="badge bad">PC spento o app chiusa da ${esc(relAgo(st.lastContact,true))}</span>`:'<span class="badge">In attesa del PC dell’ufficio</span>';
+ const group=(cls,ic,title,sub,extra,items)=>items.length?`<section class="access-group ${cls}" data-key="grp-${cls}"><header><span class="ag-ico">${icon(ic)}</span><div class="grow"><h3>${title} <em>${items.length}</em></h3><p>${sub}</p></div>${extra}</header><div class="access-list">${items.map(row).join('')}</div></section>`:'';
+ return group('ag-server','cloud','Online sul server','Si leggono da soli, anche con il PC dell’ufficio spento.','',srv)
+  +group('ag-pc','monitor','Sul PC dell’ufficio',`Li legge l’app Windows${pc.some(p=>p.blocked)?': il portale chiede la verifica anti-robot di Cloudflare, che il server non può superare':''}. Funzionano finché il PC resta acceso con l’app aperta.`,pcState,pc);
+}
+function relAgo(iso,bare){const d=new Date(iso);if(isNaN(d))return'';const m=Math.round((Date.now()-d)/6e4);const t=m<1?'adesso':m<60?`${m} min`:m<1440?`${Math.round(m/60)} ore`:`${Math.round(m/1440)} giorni`;return bare||m<1?t:t+' fa';}
 
 // ───────────────────────── 2.9.0 machines to check: verification overdue for over a year → "dismessa" or "ancora attiva"
 var MSEL=new Set();

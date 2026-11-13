@@ -534,7 +534,7 @@ app.MapPost("/api/settings/money",(HttpContext ctx,MoneySave r)=>
 app.MapGet("/api/settings/interventions",()=>Results.Ok(store.AutoClose())).RequireAuthorization("export");
 app.MapPost("/api/settings/interventions",(HttpContext ctx,AutoCloseSave r)=>
 {
- AutoCloseRule rule;try{rule=store.SaveAutoClose(r?.Enabled??true,r?.Days??30,Who(ctx));}catch(InvalidDataException ex){return Bad(ex.Message);}
+ AutoCloseRule rule;try{rule=store.SaveAutoClose(r?.Enabled??true,r?.Days??Store.DefaultAutoClose.Days,Who(ctx));}catch(InvalidDataException ex){return Bad(ex.Message);}
  store.Log("interventions",$"{Who(ctx)}: chiusura automatica {(rule.Enabled?$"attiva, dopo {rule.Days} giorni":"disattivata")}.");
  var closed=store.CloseOldInterventions();hub.Changed();
  return Results.Ok(new{rule.Enabled,rule.Days,rule.UpdatedAt,rule.UpdatedBy,closed});
@@ -594,7 +594,9 @@ app.MapGet("/api/sync/hosted",(HttpContext ctx)=>Station(ctx)?Results.Ok(portals
 
 // ───────────────────────── portals kept by the server (owner only: sign-in, live picture, read now, on/off)
 IResult PortalOwnerOnly()=>Results.Json(new{error="Solo il proprietario gestisce i portali sul server."},statusCode:403);
-app.MapGet("/api/portals",(HttpContext ctx)=>ctx.User.IsInRole(Roles.Owner)?Results.Ok(new{portals=portals.Views(),browser=HeadlessBrowser.FindExecutable()!=null}):PortalOwnerOnly()).RequireAuthorization("admin");
+// the office PC (Windows app as sync station) reads the portals the server cannot: when it last called, and whether it is on
+object StationView(){var at=hub.LastStationContact;var seen=at!=default;return new{lastContact=seen?at.ToString("O"):"",online=seen&&DateTimeOffset.Now-at<TimeSpan.FromMinutes(15)};}
+app.MapGet("/api/portals",(HttpContext ctx)=>ctx.User.IsInRole(Roles.Owner)?Results.Ok(new{portals=portals.Views(),browser=HeadlessBrowser.FindExecutable()!=null,station=StationView()}):PortalOwnerOnly()).RequireAuthorization("admin");
 app.MapPost("/api/portals/{id}/enabled",async(HttpContext ctx,string id,PortalSwitch r)=>
 {
  if(!ctx.User.IsInRole(Roles.Owner))return PortalOwnerOnly();
