@@ -24,7 +24,9 @@
   if(!g){g={to:el.scrollLeft,raf:0};glide.set(el,g);}
   g.to=Math.max(0,Math.min(max,(g.raf?g.to:el.scrollLeft)+dx));
   if(matchMedia('(prefers-reduced-motion: reduce)').matches){el.scrollLeft=g.to;return;}
-  if(!g.raf){const step=()=>{const d=g.to-el.scrollLeft;if(Math.abs(d)<1){el.scrollLeft=g.to;g.raf=0;return;}el.scrollLeft+=d*.22;g.raf=requestAnimationFrame(step);};g.raf=requestAnimationFrame(step);}};
+  if(!g.raf){const step=()=>{g.to=Math.min(g.to,el.scrollWidth-el.clientWidth);const d=g.to-el.scrollLeft,was=el.scrollLeft;
+   if(Math.abs(d)<1||!el.isConnected){el.scrollLeft=g.to;g.raf=0;return;}
+   el.scrollLeft+=Math.sign(d)*Math.max(1,Math.abs(d)*.22);if(el.scrollLeft===was){el.scrollLeft=g.to;g.raf=0;return;}g.raf=requestAnimationFrame(step);};g.raf=requestAnimationFrame(step);}};
  const STRIP=160; // a strip of tabs or chips (not a tall table): the wheel and the drag move it sideways
  const sideways=el=>{const c=getComputedStyle(el);return /(auto|scroll)/.test(c.overflowX)&&el.scrollWidth-el.clientWidth>2;};
  const stripAt=t=>{for(let e=t;e&&e!==document.body;e=e.parentElement){if(e.nodeType===1&&sideways(e))return e.clientHeight<=STRIP?e:null;}return null;};
@@ -51,7 +53,7 @@
   if(axis==='x'){const fl=s.getPropertyValue('--fo-l')||'0',fr=s.getPropertyValue('--fo-r')||'0';put(v.a,L,T,VW,H,sticky?'0':fl);put(v.b,L+W-VW,T,VW,H,sticky?'0':fr);
    if(v.l){// arrows: in the middle of a strip; on a tall table, in the middle of the part on screen (they follow the page)
     let cy=T+H/2;if(H>STRIP){const r=el.getBoundingClientRect(),top=Math.max(r.top,60),bot=Math.min(r.bottom,innerHeight-20);cy=bot-top>60?T+(top+bot)/2-r.top:-999;}
-    const AW=30,ay=Math.round(cy-AW/2),show=o=>FINE.matches&&cy>-999&&+o>.05?'1':'0';
+    const AW=30,ay=Math.round(cy-AW/2),show=o=>FINE.matches&&cy>-999&&+o>.42?'1':'0';
     const pa=(b,x,o)=>{const css=`left:${x}px;top:${ay}px;opacity:${show(o)};visibility:${show(o)==='1'?'visible':'hidden'}`;if(b.style.cssText!==css)b.style.cssText=css;};
     pa(v.l,L+4,fl);pa(v.r,L+W-AW-4,fr);}}
   else{put(v.a,L,T,W,VW,s.getPropertyValue('--fo-t')||'0');put(v.b,L,T+H-VW,W,VW,s.getPropertyValue('--fo-b')||'0');}
@@ -69,6 +71,7 @@
    // sticky veils stop at the padding edge: pull them out to the real top / bottom of the box
    if(el.matches(BOX)){const c=getComputedStyle(el),pt='-'+c.paddingTop,pb='-'+c.paddingBottom,mx=h+'px';
     if(s.getPropertyValue('--pad-t')!==pt)s.setProperty('--pad-t',pt);if(s.getPropertyValue('--pad-b')!==pb)s.setProperty('--pad-b',pb);if(s.getPropertyValue('--fe-max')!==mx)s.setProperty('--fe-max',mx);}}
+  if(ox&&el.clientHeight<=STRIP)wheelOn(el);
   placeVeils(el,ox,oy);
  };
  let raf=0;
@@ -90,10 +93,11 @@
  const pageLater=()=>{if(!pageRaf)pageRaf=requestAnimationFrame(page);};
  document.addEventListener('scroll',e=>{if(e.target&&e.target.id==='main'){pageLater();veils.forEach((v,el)=>{if(v.l&&el.clientHeight>STRIP)queue(el);});}},{capture:true,passive:true});
  // mouse wheel over a sideways strip: it scrolls the strip (smoothly) until its end, then the page goes on as usual
- addEventListener('wheel',e=>{if(e.ctrlKey||!FINE.matches)return;const dy=Math.abs(e.deltaY)>Math.abs(e.deltaX)?e.deltaY:0;if(!dy)return;
-  const el=stripAt(e.target);if(!el)return;const max=el.scrollWidth-el.clientWidth,g=glide.get(el),at=g&&g.raf?g.to:el.scrollLeft;
+ const onWheel=e=>{if(e.ctrlKey||e.shiftKey||!FINE.matches)return;const dy=Math.abs(e.deltaY)>Math.abs(e.deltaX)?e.deltaY:0;if(!dy)return;
+  const el=stripAt(e.target);if(!el||el!==e.currentTarget)return;const max=el.scrollWidth-el.clientWidth,g=glide.get(el),at=g&&g.raf?g.to:el.scrollLeft;
   if((dy<0&&at<=0)||(dy>0&&at>=max-1))return;
-  e.preventDefault();glideTo(el,dy*(e.deltaMode===1?32:e.deltaMode===2?el.clientWidth:1));},{passive:false});
+  e.preventDefault();glideTo(el,dy*(e.deltaMode===1?32:e.deltaMode===2?el.clientWidth:1));};
+ const wheeled=new WeakSet(),wheelOn=el=>{if(!wheeled.has(el)){wheeled.add(el);el.addEventListener('wheel',onWheel,{passive:false});}};
  // drag with the mouse: past a few pixels it is a drag (the click that follows is swallowed), below it stays a click
  let drag=null;
  addEventListener('pointerdown',e=>{if(e.pointerType!=='mouse'||e.button!==0||e.target.closest('input,select,textarea,[contenteditable]'))return;
@@ -112,7 +116,7 @@
  // a sticky strip moves inside the box that scrolls: its arrows follow it
  document.addEventListener('scroll',e=>{const t=e.target;if(t&&t.nodeType===1)stuck.forEach(el=>{if(t.contains(el))queue(el);});},{capture:true,passive:true});
  // any other sideways strip gets its arrows the first time the mouse goes over it
- document.addEventListener('pointerover',e=>{if(e.pointerType!=='mouse')return;const el=stripAt(e.target);if(el&&!seen.has(el)){seen.add(el);ro&&ro.observe(el);queue(el);}},{passive:true});
+ document.addEventListener('pointerover',e=>{if(e.pointerType!=='mouse')return;const el=stripAt(e.target);if(!el)return;wheelOn(el);if(!seen.has(el)){seen.add(el);ro&&ro.observe(el);queue(el);}},{passive:true});
  document.addEventListener('scroll',e=>{const t=e.target;if(!t||t.nodeType!==1||t.tagName==='MAIN')return;
   if(!seen.has(t)){if(!scroller(t))return;seen.add(t);ro&&ro.observe(t);}queue(t);},{capture:true,passive:true});
  let scanRaf=0;
