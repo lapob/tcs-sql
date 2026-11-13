@@ -7,7 +7,7 @@ namespace TopCash.Licenze;
 public sealed partial class Store
 {
  /// Tables whose changes never alter the archive sent to devices (or that are always read fresh).
- static readonly HashSet<string> Unwatched=["events","imports","sqlite_sequence","data_changes","users","devices","server_settings"];
+ static readonly HashSet<string> Unwatched=["events","imports","sqlite_sequence","data_changes","users","devices","server_settings","user_prefs"];
  /// Tables that only light sections read (notes, follow-ups, warehouse, photos, routes, portal orders…): checked against
  /// Insights, Analisi, Bilancio, Contabilita, Edits, Gestionale, Dtr, ItalRetail, Rch and Team, which never read them.
  public static readonly HashSet<string> LightTables=["notes","client_meta","route_done","photos","signatures","orders","articles","warehouses","stock_levels","movements","assets","sources","report_numbers","machine_flags"];

@@ -105,6 +105,13 @@ class Api(context: Context) {
     suspend fun portals(): PortalList = json.decodeFromString(get("/api/portals"))
     suspend fun portalEnabled(id: String, on: Boolean) { post("/api/portals/$id/enabled", json.encodeToString(PortalSwitch(on))) }
     suspend fun portalAction(id: String, action: String) { post("/api/portals/$id/$action") }
+    suspend fun pcDaily(on: Boolean, hour: Int): PcDailyRule = json.decodeFromString(post("/api/portals/pc-daily", json.encodeToString(PcDailySave(on, hour))))
+    /** 2.10.12: list choices of this person (same JSON as the site), the server's own update, "Riapri" on auto-closed work. */
+    suspend fun prefs(): String = get("/api/me/prefs")
+    suspend fun savePrefs(body: String) { post("/api/me/prefs", body) }
+    suspend fun selfUpdate(): SelfUpdateState = json.decodeFromString(get("/api/server/selfupdate"))
+    suspend fun selfUpdateRetry(): SelfUpdateState = json.decodeFromString(post("/api/server/selfupdate/retry"))
+    suspend fun reopen(ids: List<String>): ReopenResult = json.decodeFromString(post("/api/interventions/reopen", json.encodeToString(ReopenRequest(ids))))
     suspend fun portalInput(id: String, i: PortalInput) { post("/api/portals/$id/input", json.encodeToString(i)) }
     suspend fun portalView(id: String, w: Int = 0, h: Int = 0): Pair<ByteArray, String> = withContext(Dispatchers.IO) {
         http.newCall(Request.Builder().url(url("/api/portals/$id/view" + if (w > 0) "?w=$w&h=$h" else "")).header("Cache-Control", "no-store").get().build()).execute().use { r ->

@@ -190,7 +190,7 @@ function accessGroups(list,btn,owner){
  const st=owner&&typeof PSV!=='undefined'?PSV?.station:null;
  const pcState=!st?'':st.online?`<span class="badge ok">PC acceso · sentito ${esc(relAgo(st.lastContact))}</span>`
   :st.lastContact?`<span class="badge bad">PC spento o app chiusa da ${esc(relAgo(st.lastContact,true))}</span>`:'<span class="badge">In attesa del PC dell’ufficio</span>';
- const group=(cls,ic,title,sub,extra,items)=>items.length?`<section class="access-group ${cls}" data-key="grp-${cls}"><header><span class="ag-ico">${icon(ic)}</span><div class="grow"><h3>${title} <em>${items.length}</em></h3><p>${sub}</p></div>${extra}</header><div class="access-list">${items.map(row).join('')}</div></section>`:'';
+ const group=(cls,ic,title,sub,extra,items)=>items.length?`<section class="access-group ${cls}" data-key="grp-${cls}"><header><span class="ag-ico">${icon(ic)}</span><div class="grow"><h3>${title} <em>${items.length}</em></h3><p>${sub}</p></div>${extra}</header>${cls==='ag-pc'&&owner&&typeof pcMorningHtml==='function'?pcMorningHtml():''}<div class="access-list">${items.map(row).join('')}</div></section>`:'';
  return group('ag-server','cloud','Online sul server','Si leggono da soli, anche con il PC dell’ufficio spento.','',srv)
   +group('ag-pc','monitor','Sul PC dell’ufficio',`Li legge l’app Windows${pc.some(p=>p.blocked)?': il portale chiede la verifica anti-robot di Cloudflare, che il server non può superare':''}. Funzionano finché il PC resta acceso con l’app aperta.`,pcState,pc);
 }

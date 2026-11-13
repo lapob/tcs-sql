@@ -144,7 +144,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (h.remote && h.status != "approved") { _device.value = h; _screen.value = Screen.Device; return@launch } // outside the office: approved devices only
             val s = api.session()
             if (s.user == null) { _screen.value = Screen.Login; return@launch }
-            _me.value = s.user; prefs.edit().putString("me", json.encodeToString(Me.serializer(), s.user)).apply()
+            _me.value = s.user; prefs.edit().putString("me", json.encodeToString(Me.serializer(), s.user)).apply(); loadViewPrefs(); loadSelfUpdate()
             sendCrashLog()
             learnPublic(s.publicUrl)
             _screen.value = Screen.Main; refresh(); connect(); runCatching { NoticeJob.schedule(getApplication()) }
@@ -298,7 +298,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun changeServer() { stream?.cancel(); stream = null; _screen.value = Screen.Setup }
 
     suspend fun login(user: String, password: String): String? = try {
-        val me = api.login(user.trim(), password); _me.value = me; prefs.edit().putString("last_user", user.trim()).apply(); prefs.edit().putString("me", json.encodeToString(Me.serializer(), me)).apply()
+        val me = api.login(user.trim(), password); _me.value = me; loadViewPrefs(); loadSelfUpdate(); prefs.edit().putString("last_user", user.trim()).apply(); prefs.edit().putString("me", json.encodeToString(Me.serializer(), me)).apply()
         _screen.value = Screen.Main; refresh(); connect(); runCatching { NoticeJob.schedule(getApplication()) }; null
     } catch (e: ApiException) { if (e.device.isNotEmpty()) { _device.value = DeviceStatus(e.device, e.code, true); _screen.value = Screen.Device }; e.message }
     val lastUser: String get() = prefs.getString("last_user", "").orEmpty()
@@ -404,6 +404,53 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun loadPortals() = viewModelScope.launch { try { _portals.value = api.portals() } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Portali non disponibili") } }
     fun portalEnabled(id: String, on: Boolean, then: () -> Unit = {}) = viewModelScope.launch {
         try { api.portalEnabled(id, on); _portals.value = api.portals(); then() } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Impossibile salvare") } }
+    fun pcDaily(on: Boolean, hour: Int) = viewModelScope.launch {
+        try { val r = api.pcDaily(on, hour); _portals.value = _portals.value?.copy(pcDaily = r)
+            _messages.tryEmit(if (r.enabled) "Ogni mattina alle %02d:00 il PC dell’ufficio legge i suoi portali".format(r.hour) else "Lettura del mattino disattivata")
+        } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Impossibile salvare") } }
+
+    // ── 2.10.12 list choices remembered per person and page, the same JSON the site keeps ({"views":{"interventions":{"sort":"Più recenti","tech":"Rossi"}}}):
+    // what is chosen on the phone is there on the site and the Windows app, and the other way round. Kept locally too (no network).
+    private val _views = MutableStateFlow(runCatching { kotlinx.serialization.json.Json.parseToJsonElement(prefs.getString("view_prefs", "") ?: "") as? kotlinx.serialization.json.JsonObject }.getOrNull() ?: kotlinx.serialization.json.JsonObject(emptyMap()))
+    val views = _views.asStateFlow()
+    private var viewsAt = prefs.getString("view_prefs_at", "") ?: ""
+    private var viewsSave: Job? = null
+    fun viewPref(page: String, key: String): String? =
+        ((_views.value["views"] as? kotlinx.serialization.json.JsonObject)?.get(page) as? kotlinx.serialization.json.JsonObject)?.get(key)?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+    fun setViewPref(page: String, key: String, value: String) {
+        val all = _views.value; val vs = all["views"] as? kotlinx.serialization.json.JsonObject ?: kotlinx.serialization.json.JsonObject(emptyMap())
+        val pg = vs[page] as? kotlinx.serialization.json.JsonObject ?: kotlinx.serialization.json.JsonObject(emptyMap())
+        val npg = kotlinx.serialization.json.JsonObject(if (value.isEmpty()) pg - key else pg + (key to kotlinx.serialization.json.JsonPrimitive(value)))
+        if (npg == pg) return
+        val next = kotlinx.serialization.json.JsonObject(all + ("views" to kotlinx.serialization.json.JsonObject(vs + (page to npg))))
+        // "dirty" until the server has it: a choice made without network is sent at the next start instead of being lost
+        _views.value = next; prefs.edit().putString("view_prefs", next.toString()).putBoolean("view_prefs_dirty", true).apply()
+        viewsSave?.cancel(); viewsSave = viewModelScope.launch { delay(1500); runCatching { api.savePrefs(next.toString()) }
+            .onSuccess { prefs.edit().putBoolean("view_prefs_dirty", false).apply() } }
+    }
+    private fun loadViewPrefs() = viewModelScope.launch {
+        runCatching {
+            val r = kotlinx.serialization.json.Json.parseToJsonElement(api.prefs()) as kotlinx.serialization.json.JsonObject
+            val at = (r["at"] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty(); val p = r["prefs"] as? kotlinx.serialization.json.JsonObject
+            if (prefs.getBoolean("view_prefs_dirty", false)) { api.savePrefs(_views.value.toString()); prefs.edit().putBoolean("view_prefs_dirty", false).apply() }
+            else if (p != null && p["views"] is kotlinx.serialization.json.JsonObject && at.isNotEmpty() && at != viewsAt) {
+                _views.value = p; viewsAt = at; prefs.edit().putString("view_prefs", p.toString()).putString("view_prefs_at", at).apply()
+            } else if (at.isEmpty() && (_views.value["views"] as? kotlinx.serialization.json.JsonObject)?.isNotEmpty() == true) api.savePrefs(_views.value.toString())
+        }
+    }
+
+    // ── 2.10.12 the server's own update: owner and administrators see when one went back (with "Riprova")
+    private val _selfUpdate = MutableStateFlow<SelfUpdateState?>(null); val selfUpdate = _selfUpdate.asStateFlow()
+    fun loadSelfUpdate() = viewModelScope.launch { if (_me.value?.isAdmin == true) runCatching { _selfUpdate.value = api.selfUpdate() } }
+    fun retrySelfUpdate() = viewModelScope.launch {
+        try { _selfUpdate.value = api.selfUpdateRetry(); _messages.tryEmit("Aggiornamento del server riavviato: ci vogliono un paio di minuti")
+            delay(90_000); loadSelfUpdate() } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Operazione non riuscita") } }
+
+    // ── 2.10.12 "Riapri" on interventions the automatic rule closed (office and administrators)
+    fun reopen(ids: List<String>) = viewModelScope.launch {
+        try { val r = api.reopen(ids); _messages.tryEmit(if (r.reopened > 0) "Riaperti ${r.reopened} ${if (r.reopened == 1) "intervento" else "interventi"}" else "Nessuno da riaprire (già aperti o firmati)"); refresh(true) }
+        catch (x: ApiException) { _messages.tryEmit(x.message ?: "Operazione non riuscita") } }
+
     fun portalAction(id: String, action: String, done: String) = viewModelScope.launch {
         try { api.portalAction(id, action); _messages.tryEmit(done); kotlinx.coroutines.delay(1500); _portals.value = api.portals() } catch (x: ApiException) { _messages.tryEmit(x.message ?: "Operazione non riuscita") } }
     suspend fun portalView(id: String, w: Int = 0, h: Int = 0) = api.portalView(id, w, h)

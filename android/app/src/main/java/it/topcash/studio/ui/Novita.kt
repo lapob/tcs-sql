@@ -409,3 +409,95 @@ private const val SEARCH_SHOW = 6
         }
     }
 }
+
+// ───────────────────────── 2.10.12 interventions the automatic rule closed this week (office and administrators)
+/** Closed by the automatic rule in the last 7 days, newest work first (same list as the site). */
+fun autoClosed(a: it.topcash.studio.data.Archive): List<it.topcash.studio.data.UIntervention> {
+    val from = java.time.OffsetDateTime.now().minusDays(7)
+    return a.interventions.filter { x -> x.i.status == "Chiuso" && x.i.updatedBy.startsWith("Chiusura automatica") &&
+        runCatching { java.time.OffsetDateTime.parse(x.i.updated).isAfter(from) }.getOrDefault(false) }
+        .sortedByDescending { it.date ?: java.time.LocalDate.MIN }
+}
+/**
+ * "N interventi chiusi in automatico questa settimana": the office reopens with one tap a job still in progress (it then stays
+ * open while someone works on it). Hidden until the next closures: the choice is kept for the person, as on the site.
+ */
+@Composable fun AutoClosedBanner(vm: AppViewModel, a: it.topcash.studio.data.Archive, modifier: Modifier = Modifier) {
+    val me by vm.me.collectAsStateWithLifecycle()
+    val views by vm.views.collectAsStateWithLifecycle()
+    val list = remember(a) { autoClosed(a) }
+    val newest = remember(list) { list.maxOfOrNull { it.i.updated }.orEmpty() }
+    val hidden = remember(views) { vm.viewPref("_hide", "autoclosed").orEmpty() }
+    var open by rememberSaveable { mutableStateOf(false) }
+    val show = me != null && me!!.role != "tecnico" && list.isNotEmpty() && hidden < newest
+    AnimatedVisibility(show, modifier, enter = fadeIn(tween(220)) + scaleIn(tween(260), initialScale = 0.96f), exit = fadeOut(tween(160))) {
+        Row(Modifier.fillMaxWidth().padding(bottom = 10.dp).clip(MaterialTheme.shapes.large).background(MaterialTheme.colorScheme.secondaryContainer).padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.TaskAlt, null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                Text("${list.size} ${if (list.size == 1) "intervento chiuso" else "interventi chiusi"} in automatico", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                Text("Questa settimana, perché aperti da troppi giorni senza modifiche. Riapri quelli ancora in corso.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f))
+            }
+            TextButton({ open = true }) { Text("Rivedi") }
+            IconButton({ vm.setViewPref("_hide", "autoclosed", newest) }) { Icon(Icons.Rounded.Close, "Nascondi fino alle prossime chiusure", tint = MaterialTheme.colorScheme.onSecondaryContainer) }
+        }
+    }
+    if (open) ReopenDialog(list, { open = false }) { ids -> open = false; vm.reopen(ids) }
+}
+
+@Composable private fun ReopenDialog(list: List<it.topcash.studio.data.UIntervention>, onDismiss: () -> Unit, onReopen: (List<String>) -> Unit) {
+    var pick by remember { mutableStateOf(setOf<String>()) }
+    val shown = list.take(300)
+    AlertDialog(onDismissRequest = onDismiss,
+        title = { Text("Chiusi in automatico") },
+        text = {
+            Column {
+                Text("Scegli quelli ancora in corso: tornano “Aperto” e restano aperti finché qualcuno ci lavora.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).clickable { pick = if (pick.size == shown.size) emptySet() else shown.map { it.i.id }.toSet() }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(pick.size == shown.size && shown.isNotEmpty(), null); Text("Seleziona tutti (${shown.size})", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp))
+                }
+                val st = androidx.compose.foundation.lazy.rememberLazyListState()
+                androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxWidth().height(340.dp).fadeEdges(st, vertical = true), state = st) {
+                    items(shown, key = { it.i.id }) { x ->
+                        val on = x.i.id in pick
+                        Row(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).clickable { pick = if (on) pick - x.i.id else pick + x.i.id }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(on, null)
+                            Column(Modifier.padding(start = 8.dp)) {
+                                Text(x.i.title.ifBlank { "Intervento" }, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(listOfNotNull(x.clientName.takeIf { it.isNotBlank() }, x.i.technician.takeIf { it.isNotBlank() }, x.date?.let { "%02d/%02d/%d".format(it.dayOfMonth, it.monthValue, it.year) }).joinToString(" · "),
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { Button({ onReopen(pick.toList()) }, enabled = pick.isNotEmpty()) { Text(if (pick.isEmpty()) "Riapri" else "Riapri ${pick.size}") } },
+        dismissButton = { TextButton(onDismiss) { Text("Annulla") } })
+}
+
+// ───────────────────────── 2.10.12 the server's own update went back, or does not start (owner and administrators)
+@Composable fun ServerUpdateBanner(vm: AppViewModel, modifier: Modifier = Modifier) {
+    val s by vm.selfUpdate.collectAsStateWithLifecycle()
+    val me by vm.me.collectAsStateWithLifecycle()
+    LaunchedEffect(me) { vm.loadSelfUpdate() }
+    val st = s
+    val problem = when {
+        me?.isAdmin != true || st == null -> null
+        st.failed.isNotEmpty() -> "Aggiornamento del server ${st.failed} non riuscito" to "Il server è tornato da solo alla ${st.version} e funziona normalmente.${if (st.reason.isNotEmpty()) " Motivo: ${st.reason.trimEnd('.', ' ')}." else ""}"
+        st.stuck -> "Il server non prende la versione ${st.waiting}" to "La nuova versione aspetta da oltre 40 minuti: l’attività di aggiornamento non è partita."
+        else -> null
+    }
+    AnimatedVisibility(problem != null, modifier, enter = fadeIn(tween(220)) + scaleIn(tween(260), initialScale = 0.96f), exit = fadeOut(tween(160))) {
+        val p = problem ?: return@AnimatedVisibility
+        Row(Modifier.fillMaxWidth().padding(bottom = 10.dp).clip(MaterialTheme.shapes.large).background(MaterialTheme.colorScheme.errorContainer).padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.CloudUpload, null, tint = MaterialTheme.colorScheme.onErrorContainer)
+            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                Text(p.first, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                Text(p.second, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f))
+            }
+            TextButton({ vm.retrySelfUpdate() }) { Text("Riprova") }
+        }
+    }
+}

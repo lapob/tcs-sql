@@ -68,7 +68,15 @@ import kotlinx.serialization.Serializable
     val blocked: Boolean = false)
 /** The office PC (Windows app as sync station): when it last called the server and whether it is on now. */
 @Serializable data class StationState(val lastContact: String = "", val online: Boolean = false)
-@Serializable data class PortalList(val portals: List<PortalView> = emptyList(), val browser: Boolean = false, val station: StationState? = null, val asked: List<String> = emptyList())
+@Serializable data class PortalList(val portals: List<PortalView> = emptyList(), val browser: Boolean = false, val station: StationState? = null, val asked: List<String> = emptyList(),
+    val pcDaily: PcDailyRule? = null, val pcIds: List<String> = emptyList())
+/** 2.10.12: every morning at [hour] the server asks the office PC to read the portals that are on it. */
+@Serializable data class PcDailyRule(val enabled: Boolean = true, val hour: Int = 7, val lastDay: String = "", val lastRun: String = "", val lastResult: String = "")
+@Serializable data class PcDailySave(val enabled: Boolean, val hour: Int)
+/** 2.10.12: the server's own update (owner and administrators): a build that went back, or one waiting too long. */
+@Serializable data class SelfUpdateState(val version: String = "", val waiting: String = "", val failed: String = "", val reason: String = "", val stuck: Boolean = false, val lastEvent: String = "")
+@Serializable data class ReopenRequest(val ids: List<String>)
+@Serializable data class ReopenResult(val reopened: Int = 0)
 @Serializable data class PortalSwitch(val enabled: Boolean)
 @Serializable data class PortalInput(val kind: String, val x: Double = 0.0, val y: Double = 0.0, val dy: Double = 0.0, val text: String? = null)
 /** Income statement and balance sheet from Mastro's general ledger (computed by the server, same as the site). */

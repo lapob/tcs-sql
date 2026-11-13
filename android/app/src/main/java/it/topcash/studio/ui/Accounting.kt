@@ -1,5 +1,6 @@
 package it.topcash.studio.ui
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import android.content.Intent
@@ -111,9 +112,10 @@ enum class AccView(val route: String, val title: String) { Home("acc", "Contabil
     }
     val go: (AccView, String) -> Unit = { v, f -> nav.openAccounting(v, f) }
     var moneyTab by rememberSaveable { mutableStateOf(moneyTabs[0]) }
-    var moneySort by rememberSaveable { mutableStateOf("Più recenti") }
+    val views by vm.views.collectAsStateWithLifecycle()
+    val moneySort = remember(views) { vm.viewPref("accMoney", "sort")?.takeIf { it in listOf("Più recenti", "Meno recenti", "Importo più alto", "Importo più basso", "Cliente A–Z") } ?: "Più recenti" }
     if (view == AccView.Money) {
-        Page(vm, view.title, subtitle, onBack = if (topLevel) null else ({ nav.popBackStack() })) { moneyRegister(vm, a, moneyTab, { moneyTab = it }, q, { q = it }, moneySort, { moneySort = it }) }
+        Page(vm, view.title, subtitle, onBack = if (topLevel) null else ({ nav.popBackStack() })) { moneyRegister(vm, a, moneyTab, { moneyTab = it }, q, { q = it }, moneySort, { vm.setViewPref("accMoney", "sort", it) }) }
         return
     }
     Page(vm, view.title, subtitle, onBack = if (topLevel) null else ({ nav.popBackStack() })) {

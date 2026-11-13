@@ -230,12 +230,33 @@ public sealed partial class Store
    if (i.Status == "Chiuso" || !string.IsNullOrEmpty(i.SignedAt)) continue;
    if (MoneyWork.IsMoney(MoneyWork.Apply(i, money).Kind)) continue; // an unpaid bill does not go away by itself
    if (!DateTime.TryParseExact((i.Date ?? "").Length >= 10 ? i.Date![..10] : "", "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d) || d >= limit) continue;
-   var rec = i with { Status = "Chiuso", Source = "app", Origin = src == "mastro" ? "mastro" : i.Origin ?? "", Updated = now, UpdatedBy = $"Chiusura automatica (oltre {rule.Days} giorni)" };
+   // someone worked on it lately (reopened it, changed it): it is alive, it closes only after the same days without changes
+   if (src == "app" && !string.IsNullOrWhiteSpace(i.UpdatedBy) && !i.UpdatedBy.StartsWith(AutoClosedBy, StringComparison.Ordinal)
+       && DateTimeOffset.TryParse(i.Updated, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var up) && up.LocalDateTime >= limit) continue;
+   var rec = i with { Status = "Chiuso", Source = "app", Origin = src == "mastro" ? "mastro" : i.Origin ?? "", Updated = now, UpdatedBy = $"{AutoClosedBy} (oltre {rule.Days} giorni)" };
    using var u = c.CreateCommand(); u.Transaction = tx; u.CommandText = "UPDATE interventions SET source='app',data=$d WHERE id=$i";
    u.Parameters.AddWithValue("$d", JsonSerializer.Serialize(rec)); u.Parameters.AddWithValue("$i", id); n += u.ExecuteNonQuery();
   }
   tx.Commit();
   if (n > 0) Log("interventions", $"Chiusi in automatico {n} interventi aperti da oltre {rule.Days} giorni (Impostazioni → Interventi per cambiare i giorni o disattivare).");
+  return n;
+ }
+ /// Who closed an intervention by itself (the apps recognise these to offer "Riapri").
+ public const string AutoClosedBy = "Chiusura automatica";
+ /// Reopens interventions the automatic rule closed (or any closed, unsigned one): they become "Aperto" again, saved by [who],
+ /// so the rule leaves them alone until they again go [days] days without changes. Returns how many were reopened.
+ public int ReopenInterventions(IEnumerable<string> ids, string who)
+ {
+  var want = (ids ?? []).Select(x => (x ?? "").Trim()).Where(x => x.Length is > 0 and <= 80).Distinct().Take(2000).ToHashSet();
+  if (want.Count == 0) throw new InvalidDataException("Nessun intervento scelto.");
+  var n = 0;
+  // the stored record as it is (not the view the apps get, where collections may carry another kind)
+  foreach (var i in ReadAll<Intervention>("SELECT data FROM interventions WHERE source<>'deleted'").Where(x => want.Contains(x.Id)))
+  {
+   if (i.Status != "Chiuso" || !string.IsNullOrEmpty(i.SignedAt)) continue;
+   SaveIntervention(i with { Status = "Aperto" }, who); n++;
+  }
+  if (n > 0) Log("interventions", $"{Trim(who, 80)} ha riaperto {n} {(n == 1 ? "intervento" : "interventi")} chiusi in automatico.");
   return n;
  }
  public void DeleteIntervention(string id)

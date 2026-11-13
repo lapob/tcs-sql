@@ -146,3 +146,19 @@ function openPortalView(id){
   }
  });
 }
+
+/* 2.10.12 morning read: every day at the chosen hour the server asks the office PC to read the portals that are on it
+   (only those it has read before). The owner switches it on or off and picks the hour; it tries for four hours if the PC is late. */
+function pcMorningHtml(){const r=PSV?.pcDaily;if(!r)return'';const ids=PSV.pcIds||[];
+ const hh=h=>String(h).padStart(2,'0')+':00',now=new Date(),todayIso=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+ const hours=[...Array(21).keys()].map(h=>`<option value="${h}"${h===r.hour?' selected':''}>${hh(h)}</option>`).join('');
+ const next=!r.enabled?'Disattivata: i portali sul PC si leggono solo con “Aggiorna sul PC” o dall’app Windows':!ids.length?'Nessun portale da leggere sul PC: sono tutti sul server o mai collegati'
+  :(r.lastDay===todayIso||now.getHours()>r.hour+3)?`Prossima: domani alle ${hh(r.hour)}`:now.getHours()<r.hour?`Prossima: oggi alle ${hh(r.hour)}`:'Prossima: entro un minuto';
+ const last=r.lastRun?` · ultima ${dTime(r.lastRun)}${r.lastResult?': '+r.lastResult:''}`:'';
+ return`<div class="pc-morning"><label class="check"><input type="checkbox" data-pcd-on${r.enabled?' checked':''}> <span><b>Leggi ogni mattina</b> alle</span></label><select class="select" data-pcd-hour aria-label="Ora della lettura del mattino"${r.enabled?'':' disabled'}>${hours}</select><small>${esc(next+last)}</small></div>`;}
+document.addEventListener('change',async e=>{const t=e.target;if(!t.matches?.('[data-pcd-on],[data-pcd-hour]'))return;
+ const box=t.closest('.pc-morning');const on=box.querySelector('[data-pcd-on]').checked,hour=+box.querySelector('[data-pcd-hour]').value;
+ box.querySelectorAll('input,select').forEach(x=>x.disabled=true);
+ try{const r=await api('/api/portals/pc-daily',{method:'POST',body:JSON.stringify({enabled:on,hour})});if(PSV)PSV={...PSV,pcDaily:r};
+  toast(r.enabled?`Ogni mattina alle ${String(r.hour).padStart(2,'0')}:00 il PC dell’ufficio legge i suoi portali`:'Lettura del mattino disattivata','sync');}
+ catch(x){toast(x.message,'alert');}render(false);});

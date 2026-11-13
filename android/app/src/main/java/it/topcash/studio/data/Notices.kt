@@ -30,6 +30,7 @@ object Notifier {
     private fun channels(nm: NotificationManager) {
         nm.createNotificationChannel(NotificationChannel("assigned", "Interventi assegnati", NotificationManager.IMPORTANCE_HIGH).apply { description = "Quando qualcuno ti assegna o modifica un tuo intervento" })
         nm.createNotificationChannel(NotificationChannel("urgent", "Interventi urgenti", NotificationManager.IMPORTANCE_HIGH).apply { description = "Quando arriva un nuovo intervento urgente" })
+        nm.createNotificationChannel(NotificationChannel("system", "Server dell’ufficio", NotificationManager.IMPORTANCE_DEFAULT).apply { description = "Quando un aggiornamento del server non riesce (proprietario e amministratori)" })
     }
 
     /** Already announced? Keys are kept three days ("kind:id" → time). */
@@ -44,16 +45,23 @@ object Notifier {
         return true
     }
 
-    private fun openIntent(ctx: Context, id: String): PendingIntent? {
-        val i = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.setAction(OPEN)?.putExtra(EXTRA_ID, id)?.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP) ?: return null
+    private fun openIntent(ctx: Context, id: String, intervention: Boolean = true): PendingIntent? {
+        val base = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP) ?: return null
+        val i = if (intervention) base.setAction(OPEN).putExtra(EXTRA_ID, id) else base
         return PendingIntent.getActivity(ctx, id.hashCode(), i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
-    /** [kind]: "assigned", "updated", "urgent". */
+    /** [kind]: "assigned", "updated", "urgent"; "server" = the server's update went back (title and text come ready from the server). */
     fun show(ctx: Context, kind: String, id: String, title: String, client: String, by: String) {
         if (!allowed(ctx) || !firstTime(ctx, "$kind:$id")) return
         val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
         channels(nm)
+        if (kind == "server") {
+            val n = Notification.Builder(ctx, "system").setSmallIcon(it.topcash.studio.R.mipmap.ic_launcher).setContentTitle(title).setContentText(client)
+                .setStyle(Notification.BigTextStyle().bigText(client)).setAutoCancel(true).setOnlyAlertOnce(true).setCategory(Notification.CATEGORY_STATUS)
+                .setContentIntent(openIntent(ctx, id, intervention = false)).build()
+            runCatching { nm.notify(id.hashCode(), n) }; return
+        }
         val head = when (kind) { "urgent" -> "Nuovo intervento urgente"; "updated" -> "Intervento aggiornato"; else -> "Nuovo intervento assegnato a te" }
         val text = listOf(client, title).filter { it.isNotBlank() }.joinToString(" · ") + if (by.isNotBlank()) " — da $by" else ""
         val n = Notification.Builder(ctx, if (kind == "urgent") "urgent" else "assigned").setSmallIcon(it.topcash.studio.R.mipmap.ic_launcher)

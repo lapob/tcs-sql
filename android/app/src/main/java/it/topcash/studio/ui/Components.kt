@@ -351,7 +351,8 @@ fun Modifier.bleed(h: Dp): Modifier = this.layout { m, c ->
 fun Modifier.fadeEdges(state: androidx.compose.foundation.gestures.ScrollableState, vertical: Boolean, length: Dp = 28.dp): Modifier = composed {
     val start = animateFloatAsState(if (state.canScrollBackward) 1f else 0f, tween(220), label = "fadeStart")
     val end = animateFloatAsState(if (state.canScrollForward) 1f else 0f, tween(220), label = "fadeEnd")
-    val blurred = if (android.os.Build.VERSION.SDK_INT >= 31) androidx.compose.ui.graphics.rememberGraphicsLayer() else null
+    // light graphics (weak phone, battery saver): the fade alone, as on the site
+    val blurred = if (android.os.Build.VERSION.SDK_INT >= 31 && !LiteGraphics.on.value) androidx.compose.ui.graphics.rememberGraphicsLayer() else null
     val radius = with(androidx.compose.ui.platform.LocalDensity.current) { 6.dp.toPx() }
     LaunchedEffect(blurred, radius) { blurred?.renderEffect = androidx.compose.ui.graphics.BlurEffect(radius, radius, androidx.compose.ui.graphics.TileMode.Clamp) }
     this.graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }

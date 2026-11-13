@@ -92,9 +92,12 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
 @Composable fun InterventionsScreen(vm: AppViewModel, a: Archive, onOpen: (String) -> Unit, onNew: () -> Unit) {
     var tab by rememberSaveable { mutableStateOf("Da fare") }
     var q by rememberSaveable { mutableStateOf("") }
-    var tech by rememberSaveable { mutableStateOf("") }
+    // order and technician are remembered for the person (same choice on the site and the Windows app);
     // "Automatico": the open lists put the most urgent first, the others the most recent
-    var sort by rememberSaveable { mutableStateOf("Automatico") }
+    val views by vm.views.collectAsStateWithLifecycle()
+    val tech = remember(views, a.technicians) { vm.viewPref("interventions", "tech")?.takeIf { it in a.technicians }.orEmpty() }
+    val sort = remember(views) { vm.viewPref("interventions", "sort")?.takeIf { it in INT_SORTS } ?: "Automatico" }
+    fun setTech(t: String) = vm.setViewPref("interventions", "tech", t)
     val state = rememberLazyListState()
     val expanded by remember { derivedStateOf { state.firstVisibleItemIndex < 2 } }
     val me by vm.me.collectAsStateWithLifecycle()
@@ -121,16 +124,17 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
     Page(vm, "Interventi", "${a.openInterventions.size} da completare", state = state,
         fab = { ExtendedFloatingActionButton(onClick = onNew, expanded = expanded, icon = { Icon(Icons.Rounded.Add, null) }, text = { Text("Nuovo intervento") }) }) {
         item(key = "pending") { PendingBanner(vm) }
+        item(key = "autoclosed") { AutoClosedBanner(vm, a) }
         item(key = "search") { SearchField(q, { q = it }, "Cerca cliente, lavoro, tecnico", Modifier.padding(top = 2.dp)) }
         item(key = "tabs") { ChoiceChips(itabs, tab, { tab = it }, Modifier.padding(top = 10.dp)) }
         if (a.technicians.isNotEmpty()) item(key = "techs") {
             val st = androidx.compose.foundation.lazy.rememberLazyListState()
             LazyRow(Modifier.bleed(16.dp).fadeEdges(st, vertical = false).padding(vertical = 10.dp), state = st, horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp)) {
-                item { FilterChip(tech.isEmpty(), { tech = "" }, label = { Text("Tutti i tecnici") }) }
-                items(a.technicians) { t -> FilterChip(tech == t, { tech = if (tech == t) "" else t }, label = { Text(t) }) }
+                item { FilterChip(tech.isEmpty(), { setTech("") }, label = { Text("Tutti i tecnici") }) }
+                items(a.technicians) { t -> FilterChip(tech == t, { setTech(if (tech == t) "" else t) }, label = { Text(t) }) }
             }
         }
-        item(key = "sort") { SortBar("${list.size} ${if (tab == "Verifiche") "verifiche" else if (list.size == 1) "intervento" else "interventi"}", listOf("Automatico", "Più recenti", "Meno recenti", "Priorità più alta", "Cliente A–Z"), sort, { sort = it }) }
+        item(key = "sort") { SortBar("${list.size} ${if (tab == "Verifiche") "verifiche" else if (list.size == 1) "intervento" else "interventi"}", listOf("Automatico") + INT_SORTS, sort, { vm.setViewPref("interventions", "sort", if (it == "Automatico") "" else it) }) }
         if (list.isEmpty()) item(key = "empty") { Empty(Icons.Rounded.Build, "Nessun intervento", if (tab == "Da fare") "Non ci sono interventi da fare. Ottimo!" else if (tab == "Verifiche") "Nessuna verifica periodica registrata." else "Modifica i filtri o crea un nuovo intervento.") }
         items(list.size.coerceAtMost(800), key = { list[it].i.id }) { i -> InterventionRow(list[i], a, Modifier.padding(bottom = 8.dp).animateItem(), vm = vm) { onOpen(list[i].i.id) } }
     }
@@ -430,3 +434,6 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
         confirmButton = { TextButton({ confirmDelete = false; vm.deleteIntervention(existing!!.i.id); close() }) { Text("Elimina", color = MaterialTheme.colorScheme.error) } },
         dismissButton = { TextButton({ confirmDelete = false }) { Text("Annulla") } })
 }
+
+/** The orders the phone offers for interventions; the site uses the same words, so a choice made there shows here. */
+private val INT_SORTS = listOf("Più recenti", "Meno recenti", "Priorità più alta", "Cliente A–Z")

@@ -604,8 +604,8 @@ main{view-transition-name:main-content}
 [data-perf="lite"] .shell::after{backdrop-filter:none;-webkit-backdrop-filter:none}
 [data-perf="lite"] .banner .btn{backdrop-filter:none}
 [data-perf="lite"] .kpi::after,[data-perf="lite"] .banner::after{display:none}
-[data-perf="lite"] .anim .reveal{animation-duration:.35s;animation-delay:calc(var(--i,0)*25ms)}
-[data-perf="lite"] .anim tbody tr.reveal{animation:none}
+
+
 [data-perf="lite"] .card,[data-perf="lite"] .btn{box-shadow:var(--shadow-sm)}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after,::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}.aurora{display:none}}
 
@@ -1478,7 +1478,7 @@ html.sal-vt::view-transition-new(root){animation:sal-new .32s cubic-bezier(.2,.8
 .ana-week small{font-size:11px;color:var(--text-3);white-space:nowrap}.ana-week b{font-size:11px;font-weight:620;font-variant-numeric:tabular-nums;color:var(--ok);white-space:nowrap}.ana-week b.neg{color:var(--bad)}
 .ana-legend{display:flex;gap:8px;align-items:center;margin-top:12px}.ana-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-left:8px}
 @keyframes ana-grow{from{transform:scaleY(0)}}
-[data-perf="lite"] .ana-bars i{animation:none}
+
 @media (max-width:760px){
  .ana-kpis{grid-template-columns:1fr 1fr 1fr;gap:6px}.ana-kpi strong{font-size:16px}
  .ana-weeks{overflow-x:auto;grid-template-columns:repeat(13,46px);scrollbar-width:none;padding-bottom:4px}
@@ -1693,3 +1693,47 @@ html:not([data-perf="lite"]) .topbar{backdrop-filter:none;-webkit-backdrop-filte
 }
 /* the page itself anchors the veils of its strips: they scroll with the page instead of staying still over it */
 #main{position:relative}
+/* 2.10.12 light mode keeps every animation: it only drops blur and background glow (see Impostazioni → Prestazioni) */
+/* server update that went back: warm banner, it needs a look but nothing is broken */
+.srv-banner{background:linear-gradient(120deg,#4a1608,#b7410e 58%,#e8792b)}
+.srv-banner .btn,.ac-banner .btn{flex:none}
+.ac-banner .btn.ghost{color:#fff;background:rgba(255,255,255,.12);border-color:transparent}
+.ac-banner .btn.ghost:hover{background:rgba(255,255,255,.22)}
+.ac-banner .btn-row{display:flex;gap:8px;align-items:center;margin:0}
+/* "Chiusi in automatico": the list to reopen from */
+.ac-all{margin:4px 0 10px;font-weight:600;color:var(--text)}
+.ac-list{max-height:min(52vh,460px);overflow:auto;display:flex;flex-direction:column;gap:2px;margin:0 -6px 6px;padding:0 6px;overscroll-behavior:contain}
+.ac-row{padding:9px 10px;border-radius:12px;align-items:center;transition:background .15s}
+.ac-row:hover{background:var(--surface-2,rgba(127,127,127,.08))}
+.ac-row span{display:flex;flex-direction:column;min-width:0}
+.ac-row strong{font-weight:580;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ac-row small{color:var(--text-3,var(--text-2));font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ac-row input,.ac-all input{width:18px;height:18px;flex:none;accent-color:var(--accent,#0a6bda);margin:0}
+/* morning read on the office PC (Portali e accessi, owner) */
+.pc-morning{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 10px;padding:10px 12px;border-radius:14px;background:var(--surface-2,rgba(127,127,127,.07));font-size:13px;color:var(--text-2)}
+.pc-morning b{color:var(--text);font-weight:600}
+.pc-morning .select{height:34px;width:auto;min-width:92px;padding-block:0}
+.pc-morning label.check{align-items:center;margin:0}
+.pc-morning small{flex-basis:100%;color:var(--text-3,var(--text-2));font-size:12px}
+/* banner buttons stay readable on the warm and the blue gradient: solid white, clear text, a soft lift on hover */
+.srv-banner .btn,.ac-banner .btn:not(.ghost){background:rgba(255,255,255,.94);color:#14213a;border-color:transparent;font-weight:600;box-shadow:0 6px 18px -8px rgba(0,0,0,.45)}
+.srv-banner .btn:hover,.ac-banner .btn:not(.ghost):hover{background:#fff}
+.srv-banner .btn svg,.ac-banner .btn:not(.ghost) svg{color:inherit}
+/* 2.10.12 sideways strips with a mouse: round glass arrows on the sides that still hide something (edges.js) */
+.fx-arrow{position:absolute;z-index:4;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;padding:0;cursor:pointer;
+ color:var(--text);background:color-mix(in srgb,var(--surface,#fff) 82%,transparent);border:1px solid var(--line,rgba(127,127,127,.18));
+ box-shadow:0 6px 16px -6px rgba(10,20,40,.35);backdrop-filter:blur(10px) saturate(1.4);-webkit-backdrop-filter:blur(10px) saturate(1.4);
+ transition:opacity .18s,transform .18s cubic-bezier(.2,.8,.2,1),background .15s}
+.fx-arrow svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.fx-arrow:hover{background:var(--surface,#fff);transform:scale(1.08)}
+.fx-arrow:active{transform:scale(.94)}
+[data-perf="lite"] .fx-arrow{backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--surface,#fff)}
+.fx-drag{cursor:grabbing;user-select:none;-webkit-user-select:none}
+.fx-drag *{pointer-events:none}
+@media (hover:none),(pointer:coarse){.fx-arrow{display:none}}
+/* 2.10.12 the Interventi / Contabilità switch always fits its column, whatever the font of the PC: tighter first, then no icons */
+.area-switch{container-type:inline-size}
+.area-switch button{min-width:0}
+.area-switch button span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+@container (max-width:250px){.area-switch button{padding:0 6px;gap:5px}}
+@container (max-width:205px){.area-switch button svg{display:none}}

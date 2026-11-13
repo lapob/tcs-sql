@@ -209,6 +209,12 @@ public static class WeeklyReport
    hot.Count > 12 ? $"e altri {hot.Count - 12}" : ""));
   if (closed.Count > 0)
    blocks.Add(new("Chiusi negli ultimi 7 giorni", closed.Count.ToString(It), string.Join(" · ", closed.GroupBy(i => i.Technician.Length > 0 ? i.Technician : "senza tecnico").OrderByDescending(g => g.Count()).Select(g => $"{g.Key} {g.Count()}")), [], ""));
+  // the ones the automatic rule closed: listed apart, so whoever reads can reopen a job still in progress (Interventi → Riapri)
+  var auto = closed.Where(i => (i.UpdatedBy ?? "").StartsWith(Store.AutoClosedBy, StringComparison.Ordinal)).OrderByDescending(i => i.Date, StringComparer.Ordinal).ToList();
+  if (auto.Count > 0)
+   blocks.Add(new("Chiusi in automatico", auto.Count.ToString(It), "Aperti da troppi giorni senza modifiche: se uno è ancora in corso, riaprilo da Interventi con un tocco.",
+    auto.Take(10).Select(i => new Line(i.Title, string.Join(" · ", new[] { i.ClientName.Length > 0 ? i.ClientName : Client(i.ClientCode.TrimStart('M')), i.Technician, i.Date }.Where(x => !string.IsNullOrEmpty(x))), "", "")).ToList(),
+    auto.Count > 10 ? $"e altri {auto.Count - 10}" : ""));
   // periodic verifications (machines marked as gone or very late are left out: see "Macchine da controllare")
   var machines = mv.Machines.Where(m => m.Active && flags.GetValueOrDefault(m.Id)?.State != "dismessa").ToList();
   var ver = machines.Select(m => (m, next: Store.NextVerification(m))).Where(x => x.next != null).Select(x => (x.m, next: x.next!.Value, days: (int)(x.next!.Value - today).TotalDays)).ToList();

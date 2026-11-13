@@ -31,7 +31,7 @@ public sealed partial class Store
   InitDtr(c);
   InitItal(c);InitRch(c);
   InitEdits(c);InitWork(c);InitNovita(c);
-  InitDataGen(c);
+  InitPrefs(c);InitDataGen(c);
  }
  public List<ClientRecord> Clients(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM clients";using var r=q.ExecuteReader();var list=new List<ClientRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<ClientRecord>(r.GetString(0))!);return list;}
  public List<OrderRecord> Orders(){using var c=Open();using var q=c.CreateCommand();q.CommandText="SELECT data FROM orders";using var r=q.ExecuteReader();var list=new List<OrderRecord>();while(r.Read())list.Add(JsonSerializer.Deserialize<OrderRecord>(r.GetString(0))!);return list;}
@@ -188,6 +188,9 @@ public sealed partial class Store
   if(store.CloseOldInterventions(new DateTime(2026,11,13))!=1||store.Interventions().Single(i=>i.Id=="mi2").Status!="Chiuso"||store.Interventions().Single(i=>i.Id==app.Id).Status!="Aperto")throw new Exception("Chiusura automatica interventi vecchi");
   store.ImportMastro(new([mc],[mm],[mi1,mi2],"t","test"),"test");
   if(store.Interventions().Single(i=>i.Id=="mi2").Status!="Chiuso")throw new Exception("La lettura di Mastro riapre gli interventi chiusi in automatico");
+  // "Riapri" on one the rule closed: it stays open (someone just worked on it) and the next round does not close it again
+  if(!store.Interventions().Single(i=>i.Id=="mi2").UpdatedBy.StartsWith(Store.AutoClosedBy)||store.ReopenInterventions(["mi2","nessuno"],"test")!=1
+   ||store.Interventions().Single(i=>i.Id=="mi2").Status!="Aperto"||store.CloseOldInterventions(new DateTime(2026,11,13))!=0||store.Interventions().Single(i=>i.Id=="mi2").Status!="Aperto")throw new Exception("Riapertura degli interventi chiusi in automatico");
   store.SaveAutoClose(false,30,"test");if(store.AutoClose().Enabled)throw new Exception("Chiusura automatica: impostazione");
   store.SaveAutoClose(true,30,"test");store.DeleteIntervention("mi2");
   try{store.SaveIntervention(app with{Status="Boh"},"test");throw new Exception("Stato non validato");}catch(InvalidDataException){}

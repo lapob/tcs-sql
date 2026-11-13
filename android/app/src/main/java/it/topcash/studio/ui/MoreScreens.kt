@@ -239,7 +239,8 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
     editing?.let { l -> LicenseEditSheet(vm, a, l) { editing = null } }
     var tab by rememberSaveable { mutableStateOf("Correnti") }
     var q by rememberSaveable { mutableStateOf("") }
-    var sort by rememberSaveable { mutableStateOf("Scadenza più vicina") }
+    val views by vm.views.collectAsStateWithLifecycle()
+    val sort = remember(views) { vm.viewPref("licenses", "sort")?.takeIf { it in listOf("Scadenza più vicina", "Scadenza più lontana", "Cliente A–Z") } ?: "Scadenza più vicina" }
     val list = remember(a, tab, q, sort) {
         val n = norm(q.trim())
         a.licenses.filter { (if (tab == "Correnti") it.current else if (tab == "Storico") !it.current else true) && (n.isEmpty() || norm(it.r.client + " " + it.r.serial + " " + it.r.vat).contains(n)) }
@@ -251,7 +252,7 @@ private val mtabs = listOf("Attive", "Verificazioni", "Abbonamenti", "Tutte")
     Page(null, "Licenze", "${list.size} licenze", onBack = { nav.popBackStack() }) {
         item(key = "tabs") { val tabs = listOf("Correnti", "Storico", "Tutte"); SegmentedPicker(tabs, tabs.indexOf(tab), { tab = tabs[it] }) }
         item(key = "search") { SearchField(q, { q = it }, "Cerca cliente, matricola, P.IVA", Modifier.padding(vertical = 10.dp)) }
-        item(key = "sort") { SortBar("${list.size} licenze", listOf("Scadenza più vicina", "Scadenza più lontana", "Cliente A–Z"), sort, { sort = it }) }
+        item(key = "sort") { SortBar("${list.size} licenze", listOf("Scadenza più vicina", "Scadenza più lontana", "Cliente A–Z"), sort, { vm.setViewPref("licenses", "sort", it) }) }
         a.state.licenseCleanup.let { k -> if (k.red + k.old + k.hidden > 0) item(key = "clean") { Text("Non compaiono ${listOfNotNull(k.red.takeIf { it > 0 }?.let { "$it licenze non valide sul portale" }, k.old.takeIf { it > 0 }?.let { "$it non rinnovate da oltre ${if (k.keepMonths == 1) "1 mese" else "${k.keepMonths} mesi"}" }, k.hidden.takeIf { it > 0 }?.let { "$it tolte a mano" }).joinToString(", ")}.${if (admin) " Tocca una licenza per correggerla." else ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 10.dp)) } }
         items(list.size.coerceAtMost(1500), key = { list[it].r.id }) { i ->
             val l = list[i]

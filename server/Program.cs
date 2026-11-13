@@ -19,6 +19,7 @@ var users=new Users(store.DatabasePath);
 if(users.PromotedOwner)store.Log("users","Il primo amministratore del server è diventato Proprietario (nuovo ruolo con poteri illimitati).");
 var hub=new Hub(store);
 var portals=new Portals(store,hub);
+var selfUpd=new SelfUpdate(AppContext.BaseDirectory);
 hub.ServerPortals=portals.HostedIds;
 hub.Team=()=>store.Team().Select(u=>(object)new{name=u.Name,username=u.Username,role=u.Role}).ToArray();
 var devices=new Devices(store.DatabasePath);
@@ -493,8 +494,31 @@ app.MapGet("/api/notices",(HttpContext ctx,string? since)=>
  var now=DateTimeOffset.Now;
  var from=DateTimeOffset.TryParse(since,System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.None,out var s)?s:now.AddMinutes(-20);
  if(now-from>TimeSpan.FromDays(2))from=now.AddDays(-2);
- return Results.Ok(new{now=now.ToString("O"),items=store.Notices(Who(ctx),from,!ctx.User.IsInRole(Roles.Tech))});
+ var items=store.Notices(Who(ctx),from,!ctx.User.IsInRole(Roles.Tech));
+ // owner and administrators: a server update that went back to the previous version (the phone announces it once)
+ if(ctx.User.IsInRole(Roles.Admin)&&selfUpd.Failed() is {Length:>0} bad)
+  items.Insert(0,new Notice("server-"+bad,"server",$"Aggiornamento del server {bad} non riuscito","Il server è tornato alla versione precedente e funziona: apri Impostazioni per riprovare","","Server",now.ToString("O")));
+ return Results.Ok(new{now=now.ToString("O"),items});
 }).RequireAuthorization("read");
+// ── 2.10.12: how each person orders and filters the lists, the same on the site, the Windows app and the phone
+app.MapGet("/api/me/prefs",(HttpContext ctx)=>
+{
+ ctx.Response.Headers.CacheControl="no-store";
+ var(json,at)=store.Prefs(ctx.User.Identity?.Name??"");
+ return Results.Text("{\"at\":"+System.Text.Json.JsonSerializer.Serialize(at)+",\"prefs\":"+json+"}","application/json");
+}).RequireAuthorization("read");
+app.MapPost("/api/me/prefs",async(HttpContext ctx)=>
+{
+ if(ctx.Request.ContentLength is > Store.MaxPrefsBytes)return Bad("Preferenze troppo grandi.");
+ string body;using(var rd=new StreamReader(ctx.Request.Body))body=await rd.ReadToEndAsync();
+ try{return Results.Ok(new{at=store.SavePrefs(ctx.User.Identity?.Name??"",body)});}
+ catch(InvalidDataException ex){return Bad(ex.Message);}catch(System.Text.Json.JsonException){return Bad("Preferenze non valide.");}
+}).RequireAuthorization("read");
+// "Riapri" on interventions the automatic rule closed (office and administrators)
+app.MapPost("/api/interventions/reopen",(HttpContext ctx,ReopenRequest r)=>
+{
+ try{var n=store.ReopenInterventions(r?.Ids??[],Who(ctx));if(n>0)hub.Changed();return Results.Ok(new{reopened=n});}catch(InvalidDataException ex){return Bad(ex.Message);}
+}).RequireAuthorization("export");
 app.MapGet("/api/settings/weekly",()=>Results.Ok(store.Weekly())).RequireAuthorization("admin");
 app.MapPost("/api/settings/weekly",(HttpContext ctx,WeeklyRequest r)=>{try{return Results.Ok(store.SaveWeekly(r?.Enabled??false,r?.To??"",Who(ctx)));}catch(InvalidDataException ex){return Bad(ex.Message);}}).RequireAuthorization("admin");
 app.MapPost("/api/settings/weekly/send",async(HttpContext ctx,WeeklyRequest r)=>
@@ -617,7 +641,49 @@ app.MapGet("/api/sync/asks",(HttpContext ctx)=>
  var ids=StationAsks();foreach(var id in ids)stationAsks.TryRemove(id,out _);
  return Results.Ok(ids);
 }).RequireRateLimiting("sync").AllowAnonymous();
-app.MapGet("/api/portals",(HttpContext ctx)=>ctx.User.IsInRole(Roles.Owner)?Results.Ok(new{portals=portals.Views(),browser=HeadlessBrowser.FindExecutable()!=null,station=StationView(),asked=StationAsks()}):PortalOwnerOnly()).RequireAuthorization("admin");
+app.MapGet("/api/portals",(HttpContext ctx)=>ctx.User.IsInRole(Roles.Owner)?Results.Ok(new{portals=portals.Views(),browser=HeadlessBrowser.FindExecutable()!=null,station=StationView(),asked=StationAsks(),pcDaily=PcDaily(),pcIds=PcReadIds()}):PortalOwnerOnly()).RequireAuthorization("admin");
+// ── 2.10.12: every morning the server asks the office PC to read the portals that are on it (owner's setting, on by default at 7)
+PcDailyRule PcDaily()=>store.Setting<PcDailyRule>("portals.pcdaily")??new PcDailyRule();
+// the portals the office PC reads (not ready on the server) and has read at least once: one never set up is not opened for nothing
+List<string> PcReadIds()
+{
+ var res=new List<string>();
+ if(!portals.Ready("zucchetti")&&store.Sources().Any(x=>!string.IsNullOrEmpty(x.CapturedAt)))res.Add("zucchetti");
+ if(!portals.Ready("dtr")&&!string.IsNullOrEmpty(store.DtrState().LastSync))res.Add("dtr");
+ if(!portals.Ready("ital")&&!string.IsNullOrEmpty(store.ItalState().LastSync))res.Add("ital");
+ if(!portals.Ready("rch")&&!string.IsNullOrEmpty(store.RchState().LastSync))res.Add("rch");
+ return res;
+}
+app.MapPost("/api/portals/pc-daily",(HttpContext ctx,PcDailySave r)=>
+{
+ if(!ctx.User.IsInRole(Roles.Owner))return PortalOwnerOnly();
+ var hour=r?.Hour??7;if(hour is < 0 or > 20)return Bad("Ora non valida (da 0 a 20).");
+ var old=PcDaily();var rule=old with{Enabled=r?.Enabled??true,Hour=hour,UpdatedAt=DateTimeOffset.Now.ToString("O"),UpdatedBy=Who(ctx)};
+ // a new, later time today: the read of today is still to do
+ if(rule.Hour!=old.Hour&&DateTime.Now.Hour<rule.Hour)rule=rule with{LastDay=""};
+ store.SetSetting("portals.pcdaily",rule);
+ store.Log("portal",rule.Enabled?$"{Who(ctx)}: lettura del mattino dal PC dell'ufficio alle {rule.Hour}:00.":$"{Who(ctx)} ha disattivato la lettura del mattino dal PC dell'ufficio.");
+ return Results.Ok(rule);
+}).RequireAuthorization("admin");
+void PcDailyTick()
+{
+ var r=PcDaily();if(!r.Enabled)return;
+ var now=DateTime.Now;var today=now.ToString("yyyy-MM-dd");
+ if(r.LastDay==today||now.Hour<r.Hour||now.Hour>r.Hour+3)return; // from the chosen hour, for up to four hours (PC switched on late)
+ var at=hub.LastStationContact;
+ if(at==default||DateTimeOffset.Now-at>TimeSpan.FromMinutes(15))
+ {
+  // still off at the end of the window: today is skipped, the log says so once
+  if(now.Hour==r.Hour+3&&now.Minute>=50){store.SetSetting("portals.pcdaily",r with{LastDay=today,LastRun=DateTimeOffset.Now.ToString("O"),LastResult="PC spento: lettura del mattino saltata"});store.Log("portal","Lettura del mattino saltata: il PC dell'ufficio è rimasto spento o con l'app chiusa.");}
+  return;
+ }
+ var ids=PcReadIds();
+ foreach(var id in ids)stationAsks[id]=DateTimeOffset.Now;
+ var names=string.Join(", ",ids.Select(id=>id switch{"zucchetti"=>"MY Zucchetti","dtr"=>"DTR-Service","ital"=>"Ital Retail","rch"=>"RCH XDealer",_=>id}));
+ var done=ids.Count==0?"Nessun portale sul PC da leggere":"Chiesto al PC: "+names;
+ store.SetSetting("portals.pcdaily",r with{LastDay=today,LastRun=DateTimeOffset.Now.ToString("O"),LastResult=done});
+ if(ids.Count>0)store.Log("portal","Lettura del mattino: chiesto al PC dell'ufficio di aggiornare "+names+".");
+}
 app.MapPost("/api/portals/{id}/enabled",async(HttpContext ctx,string id,PortalSwitch r)=>
 {
  if(!ctx.User.IsInRole(Roles.Owner))return PortalOwnerOnly();
@@ -669,9 +735,14 @@ app.MapGet("/api/lan",(HttpContext ctx)=>{
 app.MapGet("/api/health",()=>Results.Ok(new{ok=true,version=hub.Version,server=typeof(Hub).Assembly.GetName().Version?.ToString(3)})).AllowAnonymous();
 // ───────────────────────── the server updates itself: as soon as a newer build lands in ..\server-update it asks the
 // "Top Cash Studio - Aggiornamento server" task (SYSTEM) to swap it in, instead of waiting for the task's 10-minute round.
-var selfUpd=new SelfUpdate(AppContext.BaseDirectory);
 _=Task.Run(async()=>{await Task.Delay(TimeSpan.FromMinutes(1));while(true){selfUpd.Tick();await Task.Delay(TimeSpan.FromSeconds(45));}});
-app.MapGet("/api/server/selfupdate",(HttpContext ctx)=>{ctx.Response.Headers.CacheControl="no-store";return Results.Ok(selfUpd.Status());}).RequireAuthorization();
+app.MapGet("/api/server/selfupdate",(HttpContext ctx)=>{ctx.Response.Headers.CacheControl="no-store";return Results.Ok(selfUpd.Status());}).RequireAuthorization("admin");
+app.MapPost("/api/server/selfupdate/retry",(HttpContext ctx)=>
+{
+ if(!selfUpd.Retry())return Bad("Non c'è una nuova versione da riprovare.");
+ store.Log("update",$"{Who(ctx)} ha chiesto di riprovare l'aggiornamento del server.");
+ return Results.Ok(selfUpd.Status());
+}).RequireAuthorization("admin");
 
 // ───────────────────────── app updates over the network: the administrator uploads a build once, every PC and phone picks it up.
 // Downloads are open (same files as the public GitHub release, no data inside); only an administrator can upload.
@@ -709,6 +780,8 @@ app.Lifetime.ApplicationStopping.Register(()=>mastroTimer.Dispose());
 // open interventions older than the chosen days close by themselves (checked every hour, also right after start)
 var autoCloseTimer=new Timer(_=>{try{if(store.CloseOldInterventions()>0)hub.Changed();}catch(Exception ex){store.Log("error","Chiusura automatica interventi: "+ex.Message);}},null,TimeSpan.FromMinutes(2),TimeSpan.FromHours(1));
 app.Lifetime.ApplicationStopping.Register(()=>autoCloseTimer.Dispose());
+var pcDailyTimer=new Timer(_=>{try{PcDailyTick();}catch(Exception ex){store.Log("error","Lettura del mattino dal PC: "+ex.Message);}},null,TimeSpan.FromMinutes(2),TimeSpan.FromMinutes(1));
+app.Lifetime.ApplicationStopping.Register(()=>pcDailyTimer.Dispose());
 // The Windows app (Mastro import, portals on this PC) and other tools write the same archive directly, without going through
 // this server: SQLite's data_version (on one connection kept open) changes whenever another connection commits, so every
 // device gets the new data within a few seconds instead of waiting for the next change made here.
@@ -780,3 +853,7 @@ record MachineFlagRequest(List<string>? Ids,string? State);
 record PhotoRequest(string? Data);
 record WeeklyRequest(bool Enabled,string? To);
 record PortalSwitch(bool Enabled);
+record ReopenRequest(List<string>? Ids);
+record PcDailySave(bool? Enabled,int? Hour);
+/// The morning read on the office PC: on/off, the hour, and how the last one went.
+record PcDailyRule(bool Enabled=true,int Hour=7,string LastDay="",string LastRun="",string LastResult="",string UpdatedAt="",string UpdatedBy="");

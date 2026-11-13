@@ -46,6 +46,7 @@ import java.time.LocalTime
         actions = { androidx.compose.material3.IconButton({ nav.navigate("search") { launchSingleTop = true } }) { Icon(Icons.Rounded.Search, "Cerca in tutto l'archivio") } }) {
         item(key = "update") { UpdateCard(vm) }
         item(key = "pending") { PendingBanner(vm) }
+        item(key = "server-update") { ServerUpdateBanner(vm) }
         item(key = "kpi") {
             Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

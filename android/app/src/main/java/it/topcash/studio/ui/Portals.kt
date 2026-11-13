@@ -100,11 +100,12 @@ import kotlinx.coroutines.launch
                     asked = p.id in l.asked, pcOn = l.station?.online, onPcSync = { vm.portalAction(p.id, "station-sync", "Richiesta inviata al PC dell’ufficio: la lettura parte entro 20 secondi") }) }
         }
         if (pc.isNotEmpty()) {
-            item(key = "g-pc") {
+            item(key = "g-pc") { Column {
                 GroupHead(Icons.Rounded.Computer, Tone.Info, "Sul PC dell’ufficio", pc.size,
                     "Li legge l’app Windows" + (if (pc.any { it.blocked }) ": il portale chiede la verifica anti-robot di Cloudflare, che il server non può superare" else "") + ". Funzionano finché il PC resta acceso con l’app aperta.",
                     l.station)
-            }
+                l.pcDaily?.let { r -> PcMorning(r, l.pcIds.size) { on, h -> vm.pcDaily(on, h) } }
+            } }
             items(pc.size, key = { pc[it].id }) { i -> val p = pc[i]
                 PortalCard(p, Modifier.padding(bottom = 10.dp).appear(order.indexOf(p)),
                     onEnable = { ask = "on" to p }, onSync = { vm.portalAction(p.id, "sync", "Lettura avviata sul server") }, onOpen = { viewing = p },
@@ -271,5 +272,34 @@ private fun whenText(iso: String): String = runCatching {
                 Button({ typed = ""; onClose(true) }, Modifier.fillMaxWidth().padding(vertical = 10.dp)) { Text("Ho fatto l’accesso") }
             }
         }
+    }
+}
+
+/**
+ * 2.10.12 morning read: every day at the chosen hour the server asks the office PC to read its portals (those it has read
+ * before), trying for four hours if the PC is switched on late. Owner's setting, the same as on the site.
+ */
+@Composable private fun PcMorning(r: it.topcash.studio.data.PcDailyRule, count: Int, onSave: (Boolean, Int) -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    val hh = { h: Int -> "%02d:00".format(h) }
+    val now = java.time.LocalDateTime.now()
+    val next = when {
+        !r.enabled -> "Disattivata: i portali sul PC si leggono solo con “Aggiorna sul PC” o dall’app Windows"
+        count == 0 -> "Nessun portale da leggere sul PC: sono tutti sul server o mai collegati"
+        r.lastDay == java.time.LocalDate.now().toString() || now.hour > r.hour + 3 -> "Prossima: domani alle ${hh(r.hour)}"
+        now.hour < r.hour -> "Prossima: oggi alle ${hh(r.hour)}"
+        else -> "Prossima: entro un minuto"
+    }
+    val last = runCatching { java.time.OffsetDateTime.parse(r.lastRun).let { " · ultima %02d/%02d %02d:%02d".format(it.dayOfMonth, it.monthValue, it.hour, it.minute) + if (r.lastResult.isNotBlank()) ": ${r.lastResult}" else "" } }.getOrDefault("")
+    Column(Modifier.fillMaxWidth().padding(bottom = 10.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Leggi ogni mattina", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            Box {
+                TextButton({ menu = true }, enabled = r.enabled) { Text("alle ${hh(r.hour)}") }
+                DropdownMenu(menu, { menu = false }) { (0..20).forEach { h -> DropdownMenuItem({ Text(hh(h)) }, { menu = false; if (h != r.hour) onSave(true, h) }) } }
+            }
+            androidx.compose.material3.Switch(r.enabled, { onSave(it, r.hour) })
+        }
+        Text(next + last, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
