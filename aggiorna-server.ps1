@@ -30,6 +30,9 @@ function StopServer { Stop-Service TopCashStudio -Force -ErrorAction SilentlyCon
 function CopyAll($from, $to) { for ($i = 0; $i -lt 4; $i++) { $out = robocopy $from $to /MIR /NFL /NDL /NJH /NJS /R:10 /W:3; if ($LASTEXITCODE -lt 8) { return $true }
   $why = ($out | Where-Object { $_ -match 'ERROR|ERRORE' } | Select-Object -First 2) -join ' / '; if ($why) { Log "Copia: $($why.Trim())" }
   Start-Sleep 5; StopServer }; return $false }
+# the new build must be readable before the server stops: right after it is copied the antivirus may still hold the files
+function WaitFree($dir) { for ($t = 0; $t -lt 240; $t += 5) { $busy = @(Get-ChildItem $dir -File -Recurse | Where-Object { try { $s = [IO.File]::Open($_.FullName, 'Open', 'Read', 'Read'); $s.Close(); $false } catch { $true } })
+  if (-not $busy) { return $true }; Start-Sleep 5 }; Log "File ancora in uso dopo 4 minuti: $($busy[0].Name)"; return $false }
 function Ver($dir) { $f = Join-Path $dir 'TopCash.Server.exe'; if (Test-Path $f) { try { [version]((Get-Item $f).VersionInfo.FileVersion) } catch { [version]'0.0' } } else { $null } }
 function Healthy { for ($i = 0; $i -lt 15; $i++) { try { Invoke-RestMethod http://127.0.0.1:8470/api/health -TimeoutSec 5 | Out-Null; return $true } catch { Start-Sleep 2 } }; return $false }
 
@@ -64,6 +67,7 @@ $s1 = Sign; Start-Sleep 20; if ((Sign) -ne $s1) { $lock.ReleaseMutex(); exit 0 }
 
 Log "Aggiorno il server da $vCur a $vNew"
 if (Test-Path (Join-Path $dst 'TopCash.Server.exe')) { robocopy $dst $bak /MIR /NFL /NDL /NJH /NJS /R:2 /W:1 | Out-Null }
+if (-not (WaitFree $new)) { $lock.ReleaseMutex(); exit 0 } # next round tries again, the running server is untouched
 StopServer
 $copied = CopyAll $new $dst
 if ($copied) {
