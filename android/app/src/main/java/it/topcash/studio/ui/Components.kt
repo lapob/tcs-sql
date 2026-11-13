@@ -45,6 +45,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.composed
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.graphics.Color
@@ -324,7 +325,7 @@ fun teamOptions(team: List<it.topcash.studio.data.TeamMember>, current: String):
         val inside = seen != null && seen.offset >= row.layoutInfo.viewportStartOffset && seen.offset + seen.size <= row.layoutInfo.viewportEndOffset - 16
         if (!inside) row.animateScrollToItem(maxOf(0, i - 1))
     }
-    androidx.compose.foundation.lazy.LazyRow(modifier.bleed(16.dp), state = row, horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
+    androidx.compose.foundation.lazy.LazyRow(modifier.bleed(16.dp).fadeEdges(row, vertical = false), state = row, horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
         items(options.size) { i -> val o = options[i]
             androidx.compose.material3.FilterChip(selected == o, { onSelect(o) }, label = { Text(o, maxLines = 1) }, shape = MaterialTheme.shapes.small,
                 leadingIcon = if (selected == o) { { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.Check, null, Modifier.size(16.dp)) } } else null)
@@ -337,6 +338,30 @@ fun Modifier.bleed(h: Dp): Modifier = this.layout { m, c ->
     val extra = h.roundToPx() * 2
     val p = m.measure(c.copy(minWidth = (c.minWidth + extra).coerceAtLeast(0), maxWidth = if (c.hasBoundedWidth) c.maxWidth + extra else c.maxWidth))
     layout((p.width - extra).coerceIn(c.minWidth, c.maxWidth), p.height) { p.place(-h.roundToPx(), 0) }
+}
+
+/**
+ * Soft edges (same as the site): a scrolling row or column fades out over [length] on the sides that still hide content,
+ * so a list never ends with a hard cut. The fade comes in and out softly as you reach the start or the end.
+ * Put it before verticalScroll / on the Lazy list, after bleed().
+ */
+fun Modifier.fadeEdges(state: androidx.compose.foundation.gestures.ScrollableState, vertical: Boolean, length: Dp = 24.dp): Modifier = composed {
+    val start = animateFloatAsState(if (state.canScrollBackward) 1f else 0f, tween(220), label = "fadeStart")
+    val end = animateFloatAsState(if (state.canScrollForward) 1f else 0f, tween(220), label = "fadeEnd")
+    this.graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+        .drawWithContent {
+            drawContent()
+            val l = length.toPx(); val a = start.value; val b = end.value
+            val ink = { k: Float -> Color.Black.copy(alpha = k) }
+            if (a > 0f) drawRect(
+                if (vertical) androidx.compose.ui.graphics.Brush.verticalGradient(listOf(ink(a), Color.Transparent), 0f, l)
+                else androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(ink(a), Color.Transparent), 0f, l),
+                blendMode = androidx.compose.ui.graphics.BlendMode.DstOut)
+            if (b > 0f) drawRect(
+                if (vertical) androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Transparent, ink(b)), size.height - l, size.height)
+                else androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color.Transparent, ink(b)), size.width - l, size.width),
+                blendMode = androidx.compose.ui.graphics.BlendMode.DstOut)
+        }
 }
 
 /**

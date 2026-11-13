@@ -112,7 +112,8 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
         item(key = "search") { SearchField(q, { q = it }, "Cerca cliente, lavoro, tecnico", Modifier.padding(top = 2.dp)) }
         item(key = "tabs") { ChoiceChips(itabs, tab, { tab = it }, Modifier.padding(top = 10.dp)) }
         if (a.technicians.isNotEmpty()) item(key = "techs") {
-            LazyRow(Modifier.padding(vertical = 10.dp).bleed(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp)) {
+            val st = androidx.compose.foundation.lazy.rememberLazyListState()
+            LazyRow(Modifier.bleed(16.dp).fadeEdges(st, vertical = false).padding(vertical = 10.dp), state = st, horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp)) {
                 item { FilterChip(tech.isEmpty(), { tech = "" }, label = { Text("Tutti i tecnici") }) }
                 items(a.technicians) { t -> FilterChip(tech == t, { tech = if (tech == t) "" else t }, label = { Text(t) }) }
             }
@@ -251,7 +252,8 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
         status = status, technician = tech.trim(), priority = priority, total = existing?.i?.total.orEmpty(), parts = parts, hours = existing?.i?.hours.orEmpty(), kind = existing?.i?.kind.orEmpty()) }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
+        val sheetScroll = rememberScrollState()
+        Column(Modifier.fillMaxWidth().fadeEdges(sheetScroll, vertical = true).verticalScroll(sheetScroll).imePadding().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
             Text(if (signed) "Rapportino n. ${existing.i.reportNo}" else if (ro) "Intervento dallo storico Mastro" else if (imported) "Modifica intervento importato" else if (existing != null) "Modifica intervento" else "Nuovo intervento", style = MaterialTheme.typography.headlineSmall)
             if (signed) existing.i.let { e ->
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {

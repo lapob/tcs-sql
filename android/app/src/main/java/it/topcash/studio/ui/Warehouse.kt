@@ -220,7 +220,8 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
     val close: () -> Unit = { scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss() } }
     val n = amount.replace(',', '.').toDoubleOrNull() ?: 0.0
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
+        val sheetScroll = rememberScrollState()
+        Column(Modifier.fillMaxWidth().fadeEdges(sheetScroll, vertical = true).verticalScroll(sheetScroll).imePadding().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
             Text("Movimento di magazzino", style = MaterialTheme.typography.headlineSmall)
             Gap(14.dp)
             val types = listOf("carico" to "Carico", "scarico" to "Scarico")
@@ -328,7 +329,8 @@ private fun androidx.compose.ui.graphics.Color.luminanceDark() = (0.2126f * red 
     fun d(s: String) = s.replace(',', '.').toDoubleOrNull() ?: 0.0
     val cats = remember(wh) { wh.articles.map { it.a.category }.filter { it.isNotBlank() }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key }.take(8) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        val sheetScroll = rememberScrollState()
+        Column(Modifier.fillMaxWidth().fadeEdges(sheetScroll, vertical = true).verticalScroll(sheetScroll).imePadding().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(if (isNew) "Nuovo articolo" else "Modifica articolo", style = MaterialTheme.typography.headlineSmall)
             OutlinedTextField(name, { name = it; if (!codeTouched) code = autoCode(it) }, Modifier.fillMaxWidth(), label = { Text("Descrizione") }, singleLine = true,
                 shape = MaterialTheme.shapes.medium, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences))

@@ -385,7 +385,8 @@ fun LazyListScope.clientAccounting(a: Archive, c: UClient, onDue: (String) -> Un
     fun close(after: () -> Unit = {}) = scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss(); after() }
     val email = d.client?.emails?.firstOrNull().orEmpty()
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
+        val sheetScroll = rememberScrollState()
+        Column(Modifier.fadeEdges(sheetScroll, vertical = true).verticalScroll(sheetScroll).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
             Text(d.name, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text("${if (d.d.party == "F") "Pagamento a fornitore" else "Incasso da cliente"} · doc. ${d.d.docNumber.ifBlank { "—" }}${d.docDate?.let { " del " + Dates.short(it) } ?: ""}",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
@@ -160,6 +162,11 @@ import it.topcash.studio.data.AppViewModel
     androidx.compose.foundation.layout.Box {
         androidx.compose.foundation.layout.Box(Modifier.matchParentSize().graphicsLayer { alpha = g }.glass(haze))
         bar()
+        // no hard line under the glass: a short soft fade carries it into the page (like the site)
+        val veil = MaterialTheme.colorScheme.surfaceContainer
+        androidx.compose.foundation.layout.Box(Modifier.align(Alignment.BottomCenter).offset { androidx.compose.ui.unit.IntOffset(0, 14.dp.roundToPx()) }
+            .fillMaxWidth().height(14.dp).graphicsLayer { alpha = g }
+            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(veil.copy(alpha = 0.55f), veil.copy(alpha = 0f)))))
     }
 }
 

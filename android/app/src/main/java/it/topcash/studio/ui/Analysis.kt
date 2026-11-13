@@ -88,7 +88,8 @@ private fun tabsOf(x: Analysis): List<AnaTab> {
         if (x == null) { item(key = "none") { Empty(Icons.Rounded.Insights, "Le analisi stanno arrivando", "Si calcolano alla prossima lettura di Mastro, ogni mezz’ora.") }; return@Page }
         val tabs = tabsOf(x)
         item(key = "tiles") {
-            LazyRow(Modifier.padding(top = 4.dp, bottom = 12.dp).bleed(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
+            val st = androidx.compose.foundation.lazy.rememberLazyListState()
+            LazyRow(Modifier.bleed(16.dp).fadeEdges(st, vertical = false).padding(top = 4.dp, bottom = 12.dp), state = st, horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
                 items(tabs.size) { k -> val t = tabs[k]; AnaTileView(t, tab == t.key, Modifier.width(176.dp).appear(k)) { tab = t.key; q = ""; sub = when (t.key) { "abc" -> "A"; "disc" -> "Per cliente"; "machines" -> "Per modello"; else -> "" } } }
             }
         }

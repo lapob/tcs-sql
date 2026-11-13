@@ -79,7 +79,8 @@ private class InsLine(val key: String, val code: String, val name: String, val t
         if (ins == null) { item(key = "none") { Empty(Icons.Rounded.AutoAwesome, "Le priorità stanno arrivando", "Il server legge Mastro da solo ogni mezz’ora: gli elenchi compaiono alla prossima lettura.") }; return@Page }
         val tabs = tabsOf(ins)
         item(key = "tiles") {
-            LazyRow(Modifier.padding(top = 4.dp, bottom = 12.dp).bleed(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
+            val st = androidx.compose.foundation.lazy.rememberLazyListState()
+            LazyRow(Modifier.bleed(16.dp).fadeEdges(st, vertical = false).padding(top = 4.dp, bottom = 12.dp), state = st, horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
                 items(tabs.size) { k -> val t = tabs[k]; InsTile(t, tab == t.key, Modifier.width(170.dp).appear(k)) { tab = t.key; q = "" } }
             }
         }

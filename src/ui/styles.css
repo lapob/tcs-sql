@@ -677,13 +677,53 @@ tbody tr[data-client]:active,tbody tr[data-int]:active,.card[data-go]:active{tra
 .more-item em{position:absolute;top:8px;right:10px;font:700 10.5px/1 var(--font);font-style:normal;padding:3px 6px;border-radius:99px;background:var(--bad);color:#fff}
 [data-perf="lite"] .sheet-box{backdrop-filter:none;background:var(--surface)}
 
-/* horizontally scrollable segmented filters: soft fade on the side that has more options (scroll-driven, no JS) */
-@property --fl{syntax:"<length>";inherits:false;initial-value:0px}
-@property --fr{syntax:"<length>";inherits:false;initial-value:0px}
+/* Soft edges (edges.js): anything that scrolls fades out on the sides that still hide content, never a hard cut.
+   Strips and inner lists use a mask; boxes with their own background (sheets, dialogs, side panel) get a sticky veil
+   in their surface colour instead, so the box itself keeps its edges. --fe-* grow 0→28px with the distance left. */
+.fx-x:not(.sheet-box,.modal-box,.drawer){
+ -webkit-mask-image:linear-gradient(to right,transparent,#000 var(--fe-l,0px),#000 calc(100% - var(--fe-r,0px)),transparent);
+ mask-image:linear-gradient(to right,transparent,#000 var(--fe-l,0px),#000 calc(100% - var(--fe-r,0px)),transparent)}
+.fx-y:not(.sheet-box,.modal-box,.drawer){
+ -webkit-mask-image:linear-gradient(to bottom,transparent,#000 var(--fe-t,0px),#000 calc(100% - var(--fe-b,0px)),transparent);
+ mask-image:linear-gradient(to bottom,transparent,#000 var(--fe-t,0px),#000 calc(100% - var(--fe-b,0px)),transparent)}
+.fx-x.fx-y:not(.sheet-box,.modal-box,.drawer){
+ -webkit-mask-image:linear-gradient(to right,transparent,#000 var(--fe-l,0px),#000 calc(100% - var(--fe-r,0px)),transparent),linear-gradient(to bottom,transparent,#000 var(--fe-t,0px),#000 calc(100% - var(--fe-b,0px)),transparent);
+ mask-image:linear-gradient(to right,transparent,#000 var(--fe-l,0px),#000 calc(100% - var(--fe-r,0px)),transparent),linear-gradient(to bottom,transparent,#000 var(--fe-t,0px),#000 calc(100% - var(--fe-b,0px)),transparent);
+ -webkit-mask-composite:source-in;mask-composite:intersect}
+/* boxes: a progressive blur veil blurs and softens what scrolls under the top / bottom edge, taking no room.
+   Sheets and the side panel (block layout): sticky veils pulled out to the real edge of the box (--pad-*).
+   Dialogs (grid with gap: an extra item would add a gap): absolute veils that follow the scroll on the compositor
+   (scroll-driven translate 0 → --fe-max), so they never lag behind a fast flick. */
+.sheet-box.fx-y::before,.sheet-box.fx-y::after,.modal-box.fx-y::before,.modal-box.fx-y::after,.drawer.fx-y::after{
+ content:"";z-index:2;display:block;height:30px;pointer-events:none;--veil:var(--surface);
+ backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);transition:opacity .18s}
+.sheet-box.fx-y::before,.sheet-box.fx-y::after,.drawer.fx-y::after{position:sticky}
+.sheet-box.fx-y::before,.sheet-box.fx-y::after{--veil:color-mix(in srgb,var(--surface) 45%,transparent)}
+.sheet-box.fx-y::before,.modal-box.fx-y::before{opacity:var(--fo-t,0);
+ background:linear-gradient(var(--veil) 15%,transparent);-webkit-mask-image:linear-gradient(#000 35%,transparent);mask-image:linear-gradient(#000 35%,transparent)}
+.sheet-box.fx-y::after,.modal-box.fx-y::after,.drawer.fx-y::after{opacity:var(--fo-b,0);
+ background:linear-gradient(transparent,var(--veil) 85%);-webkit-mask-image:linear-gradient(transparent,#000 65%);mask-image:linear-gradient(transparent,#000 65%)}
+.sheet-box.fx-y::before{top:var(--pad-t,0px);margin-bottom:-30px}
+.sheet-box.fx-y::after,.drawer.fx-y::after{bottom:var(--pad-b,0px);margin-top:-30px}
 @supports (animation-timeline:scroll()){
- .seg{mask-image:linear-gradient(to right,transparent 0,#000 var(--fl),#000 calc(100% - var(--fr)),transparent 100%);animation:segfade linear both;animation-timeline:scroll(self inline)}
- @keyframes segfade{0%{--fl:0px;--fr:30px}10%{--fl:30px}90%{--fr:30px}100%{--fl:30px;--fr:0px}}
+ .modal-box.fx-y{position:relative}
+ .modal-box.fx-y::before,.modal-box.fx-y::after{position:absolute;left:0;right:0;margin:0;animation:veil-follow linear both;animation-timeline:scroll(nearest block)}
+ .modal-box.fx-y::before{top:0}
+ .modal-box.fx-y::after{bottom:0}
+ @keyframes veil-follow{from{transform:translateY(0)}to{transform:translateY(var(--fe-max,0px))}}
 }
+@supports not (animation-timeline:scroll()){.modal-box.fx-y::before,.modal-box.fx-y::after{display:none}}
+[data-perf="lite"] .fx-y::before,[data-perf="lite"] .fx-y::after{backdrop-filter:none;-webkit-backdrop-filter:none}
+[data-perf="lite"] .sheet-box.fx-y::before,[data-perf="lite"] .sheet-box.fx-y::after{--veil:var(--surface)}
+/* the page itself: a soft frosted fade just under the top bar while scrolling, instead of a line */
+.shell::before{content:"";position:absolute;z-index:3;left:0;right:var(--sbw,0px);top:68px;height:22px;pointer-events:none;opacity:0;transition:opacity .3s;
+ background:linear-gradient(color-mix(in srgb,var(--bg) 55%,transparent),transparent);
+ backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+ -webkit-mask-image:linear-gradient(#000,transparent);mask-image:linear-gradient(#000,transparent)}
+.shell:has(.topbar.scrolled)::before{opacity:1}
+.topbar.scrolled{border-bottom-color:transparent}
+@media (max-width:760px){.shell::before{top:calc(56px + env(safe-area-inset-top));height:18px}}
+[data-perf="lite"] .shell::before{backdrop-filter:none;-webkit-backdrop-filter:none}
 /* long lists: rows outside the screen are not laid out or painted until they scroll into view */
 .month{content-visibility:auto;contain-intrinsic-size:auto 420px}
 .list-row{content-visibility:auto;contain-intrinsic-size:auto 72px}

@@ -138,7 +138,8 @@ private fun renTone(s: String) = when (s) { "Rinnovato" -> Tone.Ok; "Perso" -> T
     var purchased by remember { mutableStateOf(Dates.parse(x.purchased)) }; var warranty by remember { mutableStateOf(Dates.parse(x.warrantyTo)) }; var expiry by remember { mutableStateOf(Dates.parse(x.expiry)) }
     var active by remember { mutableStateOf(x.active) }; var confirm by remember { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
+        val sheetScroll = rememberScrollState()
+        Column(Modifier.fadeEdges(sheetScroll, vertical = true).verticalScroll(sheetScroll).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
             Text(if (asset == null) "Nuovo elemento" else asset.name, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text("Le password non si salvano qui: tienile nel gestore delle password.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
             if (!fixedClient) {
@@ -257,7 +258,8 @@ private fun renTone(s: String) = when (s) { "Rinnovato" -> Tone.Ok; "Perso" -> T
     var note by remember { mutableStateOf(m?.note.orEmpty()) }; var next by remember { mutableStateOf(Dates.parse(m?.nextContact)) }
     val c = d.client
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
+        val sheetScroll = rememberScrollState()
+        Column(Modifier.fadeEdges(sheetScroll, vertical = true).verticalScroll(sheetScroll).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
             Text(d.clientName, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text("${d.kind} · ${d.detail} · scade il ${Dates.short(d.date)} (${Dates.relative(d.days)})", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

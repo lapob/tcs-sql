@@ -93,7 +93,8 @@ private fun current(c: UClient, k: String) = when (k) { "name" -> c.name; "vat" 
     var confirmDelete by remember { mutableStateOf(false) }
     fun close(after: () -> Unit = {}) = scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss(); after() }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
+        val sheetScroll = rememberScrollState()
+        Column(Modifier.fadeEdges(sheetScroll, vertical = true).verticalScroll(sheetScroll).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
             Text(if (c == null) "Nuovo cliente" else c.name, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(if (manual) "Il cliente compare subito per tutto il team." else "I dati di portali e Mastro sono già qui: correggi solo quello che serve. Quello che cambi ha la precedenza e resta anche dopo ogni sincronizzazione e lettura di Mastro; un campo svuotato torna al valore di origine.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
@@ -134,7 +135,8 @@ private fun current(c: UClient, k: String) = when (k) { "name" -> c.name; "vat" 
     var pick by remember { mutableStateOf(false) }
     fun close() = scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss() }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
+        val sheetScroll = rememberScrollState()
+        Column(Modifier.fadeEdges(sheetScroll, vertical = true).verticalScroll(sheetScroll).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
             Text(l.r.serial, style = MaterialTheme.typography.titleLarge)
             Text("${Catalog.family(l.family)} · ${l.r.client}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -285,7 +287,8 @@ private fun genPassword(): String { val a = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLM
     val ctx = androidx.compose.ui.platform.LocalContext.current
     fun close() = scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss() }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
+        val sheetScroll = rememberScrollState()
+        Column(Modifier.fadeEdges(sheetScroll, vertical = true).verticalScroll(sheetScroll).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
             Text(u.name, style = MaterialTheme.typography.titleLarge); Text(u.username, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedTextField(name, { if (it.length <= 80) name = it }, Modifier.fillMaxWidth().padding(top = 12.dp), label = { Text("Nome e cognome") }, singleLine = true, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Words))
             if (!locked) {
@@ -344,7 +347,8 @@ private fun genPassword(): String { val a = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLM
     val ctx = androidx.compose.ui.platform.LocalContext.current
     fun close() = scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss() }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
+        val sheetScroll = rememberScrollState()
+        Column(Modifier.fadeEdges(sheetScroll, vertical = true).verticalScroll(sheetScroll).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
             Text("Nuovo utente", style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(name, { if (it.length <= 80) name = it }, Modifier.fillMaxWidth().padding(top = 12.dp), label = { Text("Nome e cognome") }, singleLine = true, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Words))
             OutlinedTextField(user, { user = cleanLogin(it) }, Modifier.fillMaxWidth().padding(top = 6.dp), label = { Text("Nome utente per accedere") }, placeholder = { Text("es. Mario.Rossi") }, singleLine = true, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None, autoCorrectEnabled = false, keyboardType = androidx.compose.ui.text.input.KeyboardType.Email),

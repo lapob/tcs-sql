@@ -184,7 +184,8 @@ private fun thumb(bytes: ByteArray, px: Int): ImageBitmap? = runCatching {
         Text("Foto" + if (shots.isNotEmpty()) " (${shots.size})" else "", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
         if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
     }
-    if (shots.isNotEmpty()) LazyRow(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    val shotRow = androidx.compose.foundation.lazy.rememberLazyListState()
+    if (shots.isNotEmpty()) LazyRow(Modifier.fillMaxWidth().fadeEdges(shotRow, vertical = false).padding(top = 8.dp), state = shotRow, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(shots.size, key = { shots[it].id }) { i -> val s = shots[i]
             val img = rememberShot(vm, s, 240)
             val alpha by animateFloatAsState(if (img != null) 1f else 0f, tween(260), label = "thumb")

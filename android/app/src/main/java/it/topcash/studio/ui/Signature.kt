@@ -95,7 +95,8 @@ private fun exportPng(strokes: List<List<Offset>>, size: IntSize, strokePx: Floa
     val close: () -> Unit = { scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss() } }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, sheetGesturesEnabled = false, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
+        val sheetScroll = rememberScrollState()
+        Column(Modifier.fillMaxWidth().fadeEdges(sheetScroll, vertical = true).verticalScroll(sheetScroll).imePadding().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
             Text("Firma del rapportino", style = MaterialTheme.typography.headlineSmall)
             Text(clientName + " · " + iv.title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
             Gap(14.dp)
