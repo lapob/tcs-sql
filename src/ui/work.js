@@ -144,7 +144,7 @@ function routeStops(){
 }
 const NO_TECH='Senza tecnico';
 // a technician opens the round on his own stops (his name contains the technician's name, e.g. "Marco Chiti" → "Chiti")
-function routeMine(techs){if(me?.role!=='tecnico')return'';const n=norm(me.name||'').trim();if(n.length<3)return'';return techs.find(t=>norm(t).trim().length>=3&&(n.includes(norm(t).trim())||norm(t).includes(n)))||'';}
+function routeMine(techs){if(me?.role!=='tecnico')return'';const n=norm(me.tech||me.name||'').trim();if(n.length<3)return'';return techs.find(t=>norm(t).trim().length>=3&&(n.includes(norm(t).trim())||norm(t).includes(n)))||'';}
 function routePage(){
  const all=routeStops();const techs=[...new Set(all.map(s=>s.tech).filter(Boolean))].sort();
  if(WK.route===undefined)WK.route=routeMine(techs);if(WK.route&&WK.route!==NO_TECH&&!techs.includes(WK.route))WK.route='';

@@ -113,7 +113,7 @@ public static class MastroReader
   }
   static string Nice(string s)=>s.Any(char.IsLower)?s:System.Globalization.CultureInfo.GetCultureInfo("it-IT").TextInfo.ToTitleCase(s.ToLowerInvariant());
   await Pairs(Tab("operai"),"CODI","NOME",techNames);await Pairs(Tab("servizi"),"NUME","DESCRI",services);
-  string Tech(string code)=>code.Length==0||code=="0"?"":techNames.TryGetValue(code,out var n)?n:code.All(char.IsDigit)?"":code;
+  string Tech(string code)=>Store.TechName(code.Length==0||code=="0"?"":techNames.TryGetValue(code,out var n)?n:code.All(char.IsDigit)?"":code); // by surname, one per person
   async Task<List<Dictionary<string,string>>> All(string table,int max)
   {
    var rows=new List<Dictionary<string,string>>();

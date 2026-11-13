@@ -223,6 +223,7 @@ public sealed partial class Store
    iv = iv.Select(i => HiddenTech(i.Technician, roster) ? i with { Technician = "" } : i).ToList();
    cl = cl.Select(c => HiddenTech(c.Agent, roster) ? c with { Agent = "" } : c).ToList();
   }
+  cl = cl.Select(c => c.Agent.Length > 0 ? c with { Agent = TechName(c.Agent) } : c).ToList(); // people by surname, everywhere
   (everything, iv) = SplitVerifications(everything, iv);
   var all = everything.Where(m => m.Active).ToList();
   var withActive = all.Select(m => m.ClientCode).ToHashSet(StringComparer.OrdinalIgnoreCase);

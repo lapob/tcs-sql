@@ -69,8 +69,8 @@ object Notifier {
             if (i.source != "app" || i.status == "Chiuso") continue
             val by = i.updatedBy.ifBlank { i.createdBy }; if (n(by) == n(me.name)) continue
             val old = was[i.id]
-            val mine = n(i.technician) == n(me.name) && me.name.isNotBlank()
-            if (mine && (old == null || n(old.technician) != n(me.name))) show(ctx, "assigned", i.id, i.title, i.clientName, by)
+            val mine = n(i.technician) == n(me.techName) && me.techName.isNotBlank()
+            if (mine && (old == null || n(old.technician) != n(me.techName))) show(ctx, "assigned", i.id, i.title, i.clientName, by)
             else if (old == null && i.priority == "Urgente" && (me.role != "tecnico" || i.technician.isBlank())) show(ctx, "urgent", i.id, i.title, i.clientName, by)
         }
     }

@@ -156,7 +156,7 @@ app.UseAuthentication();app.UseRateLimiter();app.UseAuthorization();
 
 string Who(HttpContext c)=>c.User.FindFirstValue("display")??c.User.Identity?.Name??"?";
 static string Cut(string? s,int n)=>(s??"").Length>n?(s??"")[..n]:(s??"");
-object Me(UserInfo u)=>new{u.Username,u.Name,u.Role,roleLabel=Roles.Label(u.Role),admin=Roles.IsAdmin(u.Role),accounting=Roles.SeesAccounting(u.Role),owner=u.Role==Roles.Owner};
+object Me(UserInfo u)=>new{u.Username,u.Name,tech=Store.TechName(u.Name),u.Role,roleLabel=Roles.Label(u.Role),admin=Roles.IsAdmin(u.Role),accounting=Roles.SeesAccounting(u.Role),owner=u.Role==Roles.Owner};
 // an owner carries the admin role too, so every administrator permission applies to them
 ClaimsIdentity Identity(UserInfo u,string stamp)
 {

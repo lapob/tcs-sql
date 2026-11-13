@@ -117,28 +117,30 @@ public sealed partial class Store
   var given=new List<(ClientSale s,decimal g)>();
   foreach(var s in eligible)if(usual.TryGetValue(s.Code,out var u)&&u>0&&s.Revenue/s.Qty<u*.9m)given.Add((s,s.Qty*u-s.Revenue));
   var agentNames=Agents().GroupBy(a=>a.Code).ToDictionary(g=>g.Key,g=>g.First().Name);
-  string AgentName(string c)=>c.Length==0||c=="0"?"Senza agente":agentNames.GetValueOrDefault(c,"Agente "+c);
+  // removed people (hidden in the team list) are not shown: their invoices count as "Senza agente", like everywhere else
+  var roster=Roster();
+  string AgentName(string c){if(c.Length==0||c=="0")return "Senza agente";var n=agentNames.GetValueOrDefault(c,"Agente "+c);return HiddenTech(n,roster)?"Senza agente":TechName(n);}
   var discClients=given.GroupBy(x=>x.s.Client).Select(g=>new AnaDiscount(g.Key,Name(g.Key),AgentName(g.First().s.Agent),Math.Round(g.Sum(x=>x.g)),Math.Round(g.Sum(x=>x.s.Revenue)),g.Count()))
    .OrderByDescending(d=>d.Given).Take(60).ToList();
   var discArticles=given.GroupBy(x=>x.s.Code).Select(g=>new AnaDiscount(g.Key,g.First().s.Name,$"prezzo abituale {usual[g.Key]:0.00} €",Math.Round(g.Sum(x=>x.g)),Math.Round(g.Sum(x=>x.s.Revenue)),g.Count()))
    .OrderByDescending(d=>d.Given).Take(60).ToList();
-  var discByAgent=given.GroupBy(x=>x.s.Agent).ToDictionary(g=>g.Key,g=>g.Sum(x=>x.g));
+  var discByAgent=given.GroupBy(x=>AgentName(x.s.Agent)).ToDictionary(g=>g.Key,g=>g.Sum(x=>x.g));
 
   // ── 4. agents (from the invoices they are on)
-  var agents=sales.Where(s=>Last12(s.Month)||Prev12(s.Month)).GroupBy(s=>s.Agent).Select(g=>
+  var agents=sales.Where(s=>Last12(s.Month)||Prev12(s.Month)).GroupBy(s=>AgentName(s.Agent)).Select(g=>
   {
    var l=g.Where(s=>Last12(s.Month)).ToList();var rev=l.Sum(s=>s.Revenue);var cr=l.Sum(s=>s.CostedRevenue);var margin=cr-l.Sum(s=>s.Cost);
    var top=l.GroupBy(s=>s.Family).OrderByDescending(f=>f.Sum(s=>s.Revenue)).FirstOrDefault()?.Key??"";
-   return new AnaAgent(g.Key,AgentName(g.Key),Math.Round(rev),Math.Round(g.Where(s=>Prev12(s.Month)).Sum(s=>s.Revenue)),Math.Round(margin),cr>0?Math.Round(margin/cr*100,1):0,
+   return new AnaAgent(g.First().Agent,g.Key,Math.Round(rev),Math.Round(g.Where(s=>Prev12(s.Month)).Sum(s=>s.Revenue)),Math.Round(margin),cr>0?Math.Round(margin/cr*100,1):0,
     l.Select(s=>s.Client).Distinct().Count(),top,Math.Round(discByAgent.GetValueOrDefault(g.Key)));
   }).Where(a=>a.Revenue>0||a.Prev>0).OrderByDescending(a=>a.Revenue).ToList();
 
   // ── 5. technicians: closed work of the last 12 months (Mastro history + app), periodic verifications counted apart
-  var techs=mv.Interventions.Concat(Interventions().Where(i=>i.Source=="app")).DistinctBy(i=>i.Id).Where(i=>i.Technician.Length>0)
-   .GroupBy(i=>i.Technician.Trim(),StringComparer.OrdinalIgnoreCase).Select(g=>
+  var techs=mv.Interventions.Concat(Interventions().Where(i=>i.Source=="app")).DistinctBy(i=>i.Id).Where(i=>i.Technician.Length>0&&!HiddenTech(i.Technician,roster))
+   .GroupBy(i=>TechName(i.Technician),StringComparer.OrdinalIgnoreCase).Select(g=>
    {
     var done=g.Where(i=>i.Status=="Chiuso"&&Day(i.Date) is DateTime d&&d>y1&&d<=today).ToList();
-    return new AnaTech(g.First().Technician.Trim(),done.Count(i=>i.Kind!="Verifica"),done.Count(i=>i.Kind=="Verifica"),Math.Round(done.Sum(i=>Dec(i.Total))),
+    return new AnaTech(g.Key,done.Count(i=>i.Kind!="Verifica"),done.Count(i=>i.Kind=="Verifica"),Math.Round(done.Sum(i=>Dec(i.Total))),
      Math.Round(done.Sum(i=>Dec(i.Hours)),1),done.Select(i=>i.ClientCode).Distinct().Count(),g.Count(i=>i.Status!="Chiuso"));
    }).Where(t=>t.Jobs+t.Verifications+t.Open>0).OrderByDescending(t=>t.Amount).ThenByDescending(t=>t.Jobs).ToList();
 

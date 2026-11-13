@@ -1,5 +1,8 @@
 package it.topcash.studio.ui
 
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
@@ -97,7 +100,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
         val n = norm(q.trim())
         (if (tab == "Verifiche") a.verifications else a.interventions).filter { x ->
             when (tab) { "Da fare" -> x.i.status != "Chiuso"
-                "I miei" -> x.i.status != "Chiuso" && x.i.source == "app" && me != null && norm(x.i.technician) == norm(me!!.name)
+                "I miei" -> x.i.status != "Chiuso" && x.i.source == "app" && me != null && norm(x.i.technician) == norm(me!!.techName)
                 "Oggi e in ritardo" -> x.i.status != "Chiuso" && x.date?.let { !it.isAfter(LocalDate.now()) } == true "Chiusi" -> x.i.status == "Chiuso"; else -> true } &&
                 (n.isEmpty() || norm(x.clientName + " " + x.i.title + " " + x.i.work + " " + x.i.technician).contains(n)) && (tech.isEmpty() || x.i.technician == tech)
         }.let { l -> if (tab == "Da fare" || tab == "I miei" || tab == "Oggi e in ritardo") l.sortedWith(compareBy({ Catalog.priorities.indexOf(it.i.priority) * -1 }, { it.date ?: LocalDate.MAX })) else l }
@@ -118,46 +121,90 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
     }
 }
 
+/** One intervention. Quick gestures (same as on the website from the phone): swipe right = print, swipe left = close,
+ *  long press = the everyday actions (sign, print, close, postpone). A tap opens it. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable fun InterventionRow(x: UIntervention, a: Archive, modifier: Modifier = Modifier, showClient: Boolean = true, vm: AppViewModel? = null, onClick: () -> Unit) {
     val tone = prioTone(x.i.priority) ?: Archive.toneOf(x.i.status)
     val stripe = LocalStatus.current.of(tone)
-    CardBox(modifier, onClick = onClick, padding = PaddingValues(0.dp)) {
-        Row(Modifier.heightIn(min = 72.dp).height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
-            Box(Modifier.width(5.dp).fillMaxHeight().background(stripe.copy(alpha = if (x.i.status == "Chiuso") 0.25f else 0.9f)))
-            Column(Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(x.i.title.ifBlank { "Intervento" }, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    prioTone(x.i.priority)?.let { Pill(x.i.priority, it, Modifier.padding(start = 8.dp, end = 6.dp)) }
-                    Pill(if (x.i.id in a.pending) "Da inviare" else x.i.status, if (x.i.id in a.pending) Tone.Info else Archive.toneOf(x.i.status), if (prioTone(x.i.priority) == null) Modifier.padding(start = 8.dp) else Modifier)
+    val me = vm?.me?.collectAsStateWithLifecycle()?.value
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    // imported from Mastro: the office and administrators may act on it too (it becomes the app's own), technicians only look
+    val ownable = x.i.source == "app" || (x.i.source == "mastro" && me?.canEdit == true)
+    val canPrint = vm != null && ownable && !x.i.id.startsWith("local-")
+    val canClose = vm != null && ownable && x.i.signedAt.isBlank() && x.i.status != "Chiuso"
+    var menu by rememberSaveable(x.i.id) { mutableStateOf(false) }
+    val card: @Composable () -> Unit = {
+        CardBox(Modifier, onClick = onClick, padding = PaddingValues(0.dp), onLongClick = if (canClose || canPrint) ({ haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress); menu = !menu }) else null) {
+            Row(Modifier.heightIn(min = 72.dp).height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
+                Box(Modifier.width(5.dp).fillMaxHeight().background(stripe.copy(alpha = if (x.i.status == "Chiuso") 0.25f else 0.9f)))
+                Column(Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(x.i.title.ifBlank { "Intervento" }, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        prioTone(x.i.priority)?.let { Pill(x.i.priority, it, Modifier.padding(start = 8.dp, end = 6.dp)) }
+                        Pill(if (x.i.id in a.pending) "Da inviare" else x.i.status, if (x.i.id in a.pending) Tone.Info else Archive.toneOf(x.i.status), if (prioTone(x.i.priority) == null) Modifier.padding(start = 8.dp) else Modifier)
+                    }
+                    if (showClient) Text(x.clientName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+                    Text(listOf(x.date?.let { Dates.short(it) + " · " + Dates.relative(Dates.daysFromToday(it)) }, x.i.technician.takeIf { it.isNotBlank() },
+                        x.i.reportNo.takeIf { x.i.signedAt.isNotBlank() }?.let { "firmato n. $it" }).filterNotNull().joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+                    androidx.compose.animation.AnimatedVisibility(menu && vm != null && (canClose || canPrint),
+                        enter = androidx.compose.animation.expandVertically(androidx.compose.animation.core.spring(dampingRatio = 0.85f, stiffness = 500f)) + androidx.compose.animation.fadeIn(),
+                        exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut()) {
+                        if (vm != null) QuickActions(vm, x.i, canClose, canPrint, onSign = onClick, onDone = { menu = false })
+                    }
                 }
-                if (showClient) Text(x.clientName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
-                Text(listOf(x.date?.let { Dates.short(it) + " · " + Dates.relative(Dates.daysFromToday(it)) }, x.i.technician.takeIf { it.isNotBlank() },
-                    x.i.reportNo.takeIf { x.i.signedAt.isNotBlank() }?.let { "firmato n. $it" }).filterNotNull().joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
-                if (vm != null && x.i.source == "app" && x.i.signedAt.isBlank() && x.i.status != "Chiuso") QuickActions(vm, x.i, onSign = onClick)
             }
         }
     }
+    if (!canPrint && !canClose) { Box(modifier) { card() }; return }
+    val state = androidx.compose.material3.rememberSwipeToDismissBoxState(positionalThreshold = { it * 0.32f })
+    androidx.compose.material3.SwipeToDismissBox(
+        state = state, modifier = modifier,
+        enableDismissFromStartToEnd = canPrint, enableDismissFromEndToStart = canClose,
+        onDismiss = { v ->
+            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
+            if (v == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) vm?.printReport(x.i, ctx)
+            else if (v == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) vm?.saveIntervention(x.i.copy(status = "Chiuso"), quiet = true) { vm.notify("Intervento chiuso") }
+            scope.launch { state.reset() }
+        },
+        backgroundContent = {
+            val dir = state.dismissDirection
+            val toPrint = dir == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd
+            val st = LocalStatus.current
+            val bg = if (toPrint) MaterialTheme.colorScheme.primary else st.ok
+            val reached = state.targetValue != androidx.compose.material3.SwipeToDismissBoxValue.Settled
+            val scale by androidx.compose.animation.core.animateFloatAsState(if (reached) 1.15f else 0.9f, androidx.compose.animation.core.spring(dampingRatio = 0.5f), label = "swipe-icon")
+            Row(Modifier.fillMaxSize().clip(MaterialTheme.shapes.large).background(if (dir == androidx.compose.material3.SwipeToDismissBoxValue.Settled) Color.Transparent else bg.copy(alpha = if (reached) 1f else 0.75f)).padding(horizontal = 24.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = if (toPrint) Arrangement.Start else Arrangement.End) {
+                if (dir != androidx.compose.material3.SwipeToDismissBoxValue.Settled) {
+                    Icon(if (toPrint) Icons.Rounded.Print else Icons.Rounded.Verified, null, tint = Color.White, modifier = Modifier.size(24.dp).graphicsLayer { scaleX = scale; scaleY = scale })
+                    Text(if (toPrint) "Stampa" else "Chiudi", color = Color.White, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 10.dp))
+                }
+            }
+        }) { card() }
 }
 
 /** Everyday actions one tap away: sign (opens the intervention), print to take along, close, postpone. */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-@Composable private fun QuickActions(vm: AppViewModel, i: Intervention, onSign: () -> Unit) {
+@Composable private fun QuickActions(vm: AppViewModel, i: Intervention, canClose: Boolean, canPrint: Boolean, onSign: () -> Unit, onDone: () -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var later by remember { mutableStateOf(false) }
     FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        androidx.compose.material3.AssistChip(onSign, { Text("Firma") }, leadingIcon = { Icon(Icons.Rounded.Draw, null, Modifier.size(16.dp)) })
-        if (!i.id.startsWith("local-")) androidx.compose.material3.AssistChip({ vm.printReport(i, ctx) }, { Text("Stampa") }, leadingIcon = { Icon(Icons.Rounded.Print, null, Modifier.size(16.dp)) })
-        androidx.compose.material3.AssistChip({ vm.saveIntervention(i.copy(status = "Chiuso"), quiet = true) { vm.notify("Intervento chiuso") } }, { Text("Chiudi") },
+        if (canClose) androidx.compose.material3.AssistChip({ onDone(); onSign() }, { Text("Firma") }, leadingIcon = { Icon(Icons.Rounded.Draw, null, Modifier.size(16.dp)) })
+        if (canPrint) androidx.compose.material3.AssistChip({ onDone(); vm.printReport(i, ctx) }, { Text("Stampa") }, leadingIcon = { Icon(Icons.Rounded.Print, null, Modifier.size(16.dp)) })
+        if (canClose) androidx.compose.material3.AssistChip({ onDone(); vm.saveIntervention(i.copy(status = "Chiuso"), quiet = true) { vm.notify("Intervento chiuso") } }, { Text("Chiudi") },
             leadingIcon = { Icon(Icons.Rounded.Verified, null, Modifier.size(16.dp)) })
-        Box {
+        if (canClose) Box {
             androidx.compose.material3.AssistChip({ later = true }, { Text("Posticipa") }, leadingIcon = { Icon(Icons.Rounded.CalendarMonth, null, Modifier.size(16.dp)) })
             androidx.compose.material3.DropdownMenu(later, { later = false }, shape = RoundedCornerShape(18.dp), containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
                 val today = LocalDate.now()
                 listOf("Domani" to today.plusDays(1), "Dopodomani" to today.plusDays(2), "Lunedì prossimo" to today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.MONDAY)),
                     "Tra una settimana" to today.plusWeeks(1), "Tra due settimane" to today.plusWeeks(2), "Tra un mese" to today.plusMonths(1)).forEach { (l, d) ->
                     DropdownMenuItem({ Column { Text(l); Text(Dates.short(d), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }, {
-                        later = false
+                        later = false; onDone()
                         vm.saveIntervention(i.copy(date = d.toString(), status = if (i.status == "Aperto") "Pianificato" else i.status), quiet = true) { vm.notify("Intervento spostato a ${Dates.short(d)}") }
                     })
                 }
@@ -188,7 +235,7 @@ private val itabs = listOf("Da fare", "I miei", "Oggi e in ritardo", "Chiusi", "
     var work by remember { mutableStateOf(existing?.i?.work.orEmpty()) }
     var status by remember { mutableStateOf(existing?.i?.status ?: "Aperto") }
     var priority by remember { mutableStateOf(existing?.i?.priority ?: "Normale") }
-    var tech by remember { mutableStateOf(existing?.i?.technician ?: me?.name.orEmpty()) }
+    var tech by remember { mutableStateOf(existing?.i?.technician ?: me?.techName.orEmpty()) }
     var date by remember { mutableStateOf(existing?.i?.date?.takeIf { it.isNotBlank() } ?: LocalDate.now().toString()) }
     var machine by remember { mutableStateOf(existing?.i?.machine.orEmpty().let { raw -> // Mastro stores the bare machine number: match it to the customer's machine
         if (raw.isBlank()) raw else existing?.client?.machines?.firstOrNull { it.m.id == raw || it.m.id == "m$raw" || it.m.serial == raw }?.m?.id ?: raw }) }

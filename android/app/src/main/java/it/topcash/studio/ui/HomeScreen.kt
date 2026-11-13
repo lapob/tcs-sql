@@ -38,6 +38,9 @@ import java.time.LocalTime
     val greet = if (h < 13) "Buongiorno" else if (h < 18) "Buon pomeriggio" else "Buonasera"
     val first = me?.name?.split(" ")?.firstOrNull().orEmpty()
     val deadlines = remember(a) { a.deadlines(-7, 60).take(8) }
+    // under "Clienti" what matters today: how many customers are waiting for us (open work), else how many are followed
+    val clientsWaiting = remember(a) { val n = a.openInterventions.map { it.i.clientCode }.distinct().size
+        if (n > 0) (if (n == 1) "1 aspetta un intervento" else "$n aspettano un intervento") else "nessuno in attesa" }
     val open = remember(a) { a.openInterventions.sortedWith(compareBy({ it.i.priority != "Urgente" }, { it.i.priority != "Alta" }, { it.date })).take(5) }
     Page(vm, "$greet${if (first.isNotBlank()) ", $first" else ""}", "Top Cash Service · ${Dates.short(java.time.LocalDate.now())}",
         actions = { androidx.compose.material3.IconButton({ nav.navigate("search") { launchSingleTop = true } }) { Icon(Icons.Rounded.Search, "Cerca in tutto l'archivio") } }) {
@@ -46,7 +49,7 @@ import java.time.LocalTime
         item(key = "kpi") {
             Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Kpi("Clienti", a.clients.size, "${a.clients.count { it.phones.isNotEmpty() }} con telefono", Icons.Rounded.Groups, Tone.Accent, Modifier.weight(1f).appear(0)) { nav.switchTab("clients") }
+                    Kpi("Clienti", a.clients.size, clientsWaiting, Icons.Rounded.Groups, Tone.Accent, Modifier.weight(1f).appear(0)) { nav.switchTab("clients") }
                     Kpi("Licenze", a.currentLicenses.size, "attive · ${a.licenses.size - a.currentLicenses.size} storiche", Icons.Rounded.Key, Tone.Ok, Modifier.weight(1f).appear(1)) { nav.navigate("licenses") }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -11,6 +11,20 @@ public sealed partial class Store
 {
  public static readonly TechRoster DefaultRoster = new(["Croce", "Fiorenzo Croce"], ["Giacomo Corezzi"]);
  public TechRoster Roster() => Setting<TechRoster>("techs.roster") ?? DefaultRoster;
+ /// The team by surname only (one name per person, whatever Mastro, the portals or an account call them: "BARTOLI A.", "Andrea Bartoli"
+ /// and "A.Bartoli" are all "Bartoli"); the two groups that are not people keep their own words.
+ public static readonly string[] TechSurnames = ["Bardi", "Chiti", "Bartoli", "Bianco", "Corezzi", "Zucchini", "Cappellini", "Innocenti", "Meriggi", "Gheri", "Papi", "Pistolesi"];
+ public static string TechName(string? raw)
+ {
+  var t = (raw ?? "").Trim(); if (t.Length == 0) return "";
+  var low = t.ToLowerInvariant();
+  if (low.Contains("rivendit")) return "Rivenditori";
+  if (low.Contains("partner")) return "Aziende Partner";
+  var words = low.Split([' ', '.', ',', '-', '/', '_', '(', ')'], StringSplitOptions.RemoveEmptyEntries);
+  foreach (var s in TechSurnames) if (words.Contains(s.ToLowerInvariant())) return s;
+  // someone not in the list: kept, written properly ("ROSSI MARIO" → "Rossi Mario")
+  return string.Join(' ', t.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(w => w.Length > 1 && w.All(ch => !char.IsLetter(ch) || char.IsUpper(ch)) ? char.ToUpper(w[0]) + w[1..].ToLowerInvariant() : w));
+ }
  static string TechKey(string? s) => string.Join(' ', (s ?? "").Trim().ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries));
  /// True when a technician name is one of the removed ones ("Croce" also matches "Fiorenzo Croce" and "CROCE F.").
  public static bool HiddenTech(string? name, TechRoster r)
@@ -32,7 +46,9 @@ public sealed partial class Store
   }
   catch (SqliteException) { }   // the Windows app on its own has no users table
   foreach (var n in r.Added)
-   if (n.Trim().Length > 0 && !list.Any(u => TechKey(u.Name) == TechKey(n))) list.Add(new(n.Trim(), "", "tecnico"));
-  return list.Where(u => !HiddenTech(u.Name, r)).ToList();
+   if (n.Trim().Length > 0 && !list.Any(u => TechName(u.Name) == TechName(n))) list.Add(new(n.Trim(), "", "tecnico"));
+  // work is assigned by surname: one entry per person (an account and a hand-added name of the same person are one)
+  return list.Where(u => !HiddenTech(u.Name, r)).Select(u => u with { Name = TechName(u.Name) })
+   .GroupBy(u => u.Name, StringComparer.OrdinalIgnoreCase).Select(g => g.OrderByDescending(u => u.Username.Length > 0).First()).ToList();
  }
 }

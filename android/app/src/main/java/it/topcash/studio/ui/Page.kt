@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import it.topcash.studio.data.AppViewModel
 
@@ -86,7 +87,7 @@ import it.topcash.studio.data.AppViewModel
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             GlassBar(state, pageHaze) { LargeTopAppBar(
-                title = { Column { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis); if (subtitle != null && scroll.state.collapsedFraction < 0.5f) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
+                title = { Column { FitTitle(title); if (subtitle != null && scroll.state.collapsedFraction < 0.5f) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
                 navigationIcon = { if (onBack != null) IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Indietro") } },
                 actions = { if (onBack == null) LocalAreaSwitch.current?.invoke(); actions() }, scrollBehavior = scroll,
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = clear, scrolledContainerColor = clear),
@@ -160,4 +161,13 @@ import it.topcash.studio.data.AppViewModel
         androidx.compose.foundation.layout.Box(Modifier.matchParentSize().graphicsLayer { alpha = g }.glass(haze))
         bar()
     }
+}
+
+/** A page title on one line that shrinks to fit (down to 20 sp) instead of being cut ("Buongiorno, Lapo" on a narrow phone). */
+@Composable private fun FitTitle(text: String) {
+    val style = androidx.compose.material3.LocalTextStyle.current
+    val color = androidx.compose.material3.LocalContentColor.current
+    val max = if (style.fontSize.isSp) style.fontSize else 28.sp
+    androidx.compose.foundation.text.BasicText(text, style = style.copy(color = color), maxLines = 1, overflow = TextOverflow.Ellipsis,
+        autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = minOf(20f, max.value).sp, maxFontSize = max, stepSize = 1.sp))
 }

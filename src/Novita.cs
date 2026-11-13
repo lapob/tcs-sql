@@ -157,7 +157,7 @@ public sealed partial class Store
    var by = string.IsNullOrWhiteSpace(i.UpdatedBy) ? i.CreatedBy : i.UpdatedBy;
    if (NameKey(by) == key) continue; // my own change
    var created = DateTimeOffset.TryParse(i.Created, CultureInfo.InvariantCulture, DateTimeStyles.None, out var cr) && cr > since;
-   var mine = NameKey(i.Technician) == key;
+   var mine = NameKey(TechName(i.Technician)) == NameKey(TechName(me)); // work is assigned by surname, accounts carry the full name
    if (mine) res.Add(new(i.Id, created ? "assigned" : "updated", i.Title, i.ClientName, i.Priority, by, i.Updated));
    else if (created && i.Priority == "Urgente" && (everyUrgent || i.Technician.Trim().Length == 0)) res.Add(new(i.Id, "urgent", i.Title, i.ClientName, i.Priority, by, i.Updated));
   }

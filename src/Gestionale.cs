@@ -54,7 +54,7 @@ public sealed partial class Store
   using var q=c.CreateCommand();q.CommandText="SELECT data FROM mastro_extra WHERE kind=$k";q.Parameters.AddWithValue("$k",kind);
   return q.ExecuteScalar() is string s?JsonSerializer.Deserialize<List<T>>(s)??[]:[];
  }
- public List<RtInfo> RtInfos()=>MastroExtra<RtInfo>("rt");
+ public List<RtInfo> RtInfos()=>MastroExtra<RtInfo>("rt").Select(r=>r with{Verifications=r.Verifications.Select(v=>v with{Technician=TechName(v.Technician)}).ToList()}).ToList();
  public MastroSync? LastMastroSync()=>MastroExtra<MastroSync>("auto").FirstOrDefault();
  public void SaveMastroSync(MastroSync s)
  {
@@ -74,8 +74,8 @@ public sealed partial class Store
  public List<InsUnbilled> MastroUnbilled()=>MastroExtra<InsUnbilled>("unbilled");
  public List<InsSdi> MastroSdi()=>MastroExtra<InsSdi>("sdi");
  public List<MastroClient> MastroClients()=>ReadAll<MastroClient>("SELECT data FROM mastro_clients");
- public List<Machine> Machines()=>ReadAll<Machine>("SELECT data FROM machines");
- public List<Intervention> Interventions()=>ReadAll<Intervention>("SELECT data FROM interventions WHERE source<>'deleted'");
+ public List<Machine> Machines()=>ReadAll<Machine>("SELECT data FROM machines").Select(m=>m.Technician.Length>0?m with{Technician=TechName(m.Technician)}:m).ToList();
+ public List<Intervention> Interventions()=>ReadAll<Intervention>("SELECT data FROM interventions WHERE source<>'deleted'").Select(i=>i.Technician is {Length:>0} t?i with{Technician=TechName(t)}:i).ToList();
 
  /// Replaces the Mastro snapshot atomically. Interventions created in the app are never touched by an import.
  public string ImportMastro(MastroBatch b,string who)
@@ -138,18 +138,20 @@ public sealed partial class Store
   if(i.Date.Length>0&&!DateTime.TryParseExact(i.Date,"yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.None,out _))throw new InvalidDataException("Data non valida.");
   var now=DateTimeOffset.Now.ToString("O");
   using var c=Open();
-  using(var ex=c.CreateCommand())
-  {
-   // the customer must exist: Zucchetti code, registry code, or "M"+Mastro code for customers known only to Mastro
-   ex.CommandText="SELECT EXISTS(SELECT 1 FROM licenses WHERE client_code=$c) OR EXISTS(SELECT 1 FROM clients WHERE code=$c) OR EXISTS(SELECT 1 FROM mastro_clients WHERE 'M'||code=$c)";
-   ex.Parameters.AddWithValue("$c",i.ClientCode);if(Convert.ToInt64(ex.ExecuteScalar())==0)throw new InvalidDataException("Cliente non trovato nell'archivio.");
-  }
   Intervention? old=null;
   if(!string.IsNullOrEmpty(i.Id)){using var g=c.CreateCommand();g.CommandText="SELECT data FROM interventions WHERE id=$i AND source<>'deleted'";g.Parameters.AddWithValue("$i",i.Id);if(g.ExecuteScalar() is string s)old=JsonSerializer.Deserialize<Intervention>(s);}
+  // the customer must exist: Zucchetti code, registry code, or "M"+Mastro code for customers known only to Mastro.
+  // An existing intervention that keeps its customer (e.g. one imported from Mastro with the Mastro code) is not re-checked.
+  if(old==null||!string.Equals(old.ClientCode,i.ClientCode,StringComparison.Ordinal))
+  using(var ex=c.CreateCommand())
+  {
+   ex.CommandText="SELECT EXISTS(SELECT 1 FROM licenses WHERE client_code=$c) OR EXISTS(SELECT 1 FROM clients WHERE code=$c) OR EXISTS(SELECT 1 FROM mastro_clients WHERE 'M'||code=$c OR code=$c)";
+   ex.Parameters.AddWithValue("$c",i.ClientCode);if(Convert.ToInt64(ex.ExecuteScalar())==0)throw new InvalidDataException("Cliente non trovato nell'archivio.");
+  }
   if(!string.IsNullOrEmpty(old?.SignedAt))throw new InvalidDataException("Rapportino già firmato dal cliente: per modificarlo l'ufficio deve prima annullare la firma.");
   if(i.Hours is {Length:>0} h&&(!decimal.TryParse(h.Replace(',','.'),System.Globalization.NumberStyles.Number,System.Globalization.CultureInfo.InvariantCulture,out var hv)||hv<0||hv>200))throw new InvalidDataException("Ore lavorate non valide.");
   var rec=i with{Id=old?.Id??("app-"+Guid.NewGuid().ToString("N")[..12]),Source="app",Origin=old?.Source=="mastro"?"mastro":old?.Origin??"",Kind=i.Kind??old?.Kind??"",Created=old?.Created??now,CreatedBy=old?.CreatedBy??who,Updated=now,UpdatedBy=who,
-   Work=i.Work??"",Technician=(i.Technician??"").Trim(),Machine=i.Machine??"",Total=i.Total??"",ClientName=i.ClientName??"",
+   Work=i.Work??"",Technician=TechName(i.Technician),Machine=i.Machine??"",Total=i.Total??"",ClientName=i.ClientName??"",
    Hours=(i.Hours??"").Replace(',','.'),Signer=old?.Signer??"",SignedAt=old?.SignedAt??"",ReportNo=old?.ReportNo??"",SentTo=old?.SentTo??"",SentAt=old?.SentAt??""}; // signature fields only change via SignIntervention
   rec=rec with{Parts=(i.Parts??[]).Where(p=>p!=null&&!string.IsNullOrWhiteSpace(p.Article)&&p.Qty>0).Select(p=>p with{Article=p.Article.Trim(),Warehouse=p.Warehouse??"",Serial=p.Serial??""}).ToList()};
   if(rec.Parts!.Count>100)throw new InvalidDataException("Troppi ricambi in un intervento.");

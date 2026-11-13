@@ -329,7 +329,7 @@ private val routeKinds = listOf("Intervento" to "Interventi", "Verificazione" to
     val techs = remember(stops) { stops.map { it.tech }.filter { it.isNotBlank() }.distinct().sorted() }
     val unassigned = remember(stops) { stops.count { it.tech.isBlank() } }
     // a technician opens the page on his own stops (name match), everyone else on the whole team
-    val mine = remember(me, techs) { me?.takeIf { it.role == "tecnico" }?.name?.trim()?.lowercase()?.takeIf { it.length >= 3 }?.let { n -> techs.firstOrNull { t -> val x = t.trim().lowercase(); x.length >= 3 && (n.contains(x) || x.contains(n)) } } }
+    val mine = remember(me, techs) { me?.takeIf { it.role == "tecnico" }?.techName?.trim()?.lowercase()?.takeIf { it.length >= 3 }?.let { n -> techs.firstOrNull { t -> val x = t.trim().lowercase(); x.length >= 3 && (n.contains(x) || x.contains(n)) } } }
     var tech by rememberSaveable(mine) { mutableStateOf(mine ?: "Tutti") }
     var kind by rememberSaveable { mutableStateOf("Tutto") }
     var open by remember { mutableStateOf(setOf<String>()) }

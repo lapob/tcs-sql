@@ -127,7 +127,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class DtrStatus(val connected: Boolean = false, val lastSync: String = "", val checkedAt: String = "", val error: String = "")
 /** A person of the team (name and role only): interventions are assigned to them. */
 @Serializable data class TeamMember(val name: String = "", val username: String = "", val role: String = "")
-@Serializable data class Me(val username: String = "", val name: String = "", val role: String = "", val roleLabel: String = "", val admin: Boolean = false, val accounting: Boolean = true, val owner: Boolean = false) {
+@Serializable data class Me(val username: String = "", val name: String = "", val tech: String = "", val role: String = "", val roleLabel: String = "", val admin: Boolean = false, val accounting: Boolean = true, val owner: Boolean = false) {
     /** Owner and administrator can do everything; the owner also manages other administrators. */
     val isAdmin get() = admin || role == "admin" || role == "owner"
     val isOwner get() = owner || role == "owner"
@@ -135,6 +135,8 @@ import kotlinx.serialization.Serializable
     val seesAccounting get() = accounting && role != "tecnico"
     /** Owner, administrators and office create and edit customers and their machines; technicians only look. */
     val canEdit get() = role != "tecnico"
+    /** How work is assigned to me: by surname ("Bartoli"), the same on the website and in Mastro. */
+    val techName get() = tech.ifBlank { name }
 }
 @Serializable data class Session(val setupNeeded: Boolean = false, val user: Me? = null, val version: Long = 0, val publicUrl: String = "")
 @Serializable data class ServerError(val error: String = "", val device: String = "", val code: String = "")

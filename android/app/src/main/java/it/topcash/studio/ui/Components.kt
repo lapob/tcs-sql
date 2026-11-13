@@ -128,14 +128,14 @@ fun hueColor(key: String, dark: Boolean = false): Color { var h = 0; key.forEach
         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
 
-@Composable fun CardBox(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, padding: PaddingValues = PaddingValues(18.dp), content: @Composable ColumnScope.() -> Unit) {
+@Composable fun CardBox(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, padding: PaddingValues = PaddingValues(18.dp), onLongClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     val src = remember { MutableInteractionSource() }
     Surface(
         modifier = modifier.fillMaxWidth().then(if (onClick != null) Modifier.pressScale(src) else Modifier),
         shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 0.dp, shadowElevation = 0.dp,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Column(Modifier.then(if (onClick != null) Modifier.clickable(src, indication = androidx.compose.material3.ripple(), onClick = onClick) else Modifier).padding(padding), content = content)
+        Column(Modifier.then(if (onClick != null) Modifier.combinedClickable(interactionSource = src, indication = androidx.compose.material3.ripple(), onLongClick = onLongClick, onClick = onClick) else Modifier).padding(padding), content = content)
     }
 }
 
