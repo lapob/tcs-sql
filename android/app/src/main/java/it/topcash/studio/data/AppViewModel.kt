@@ -193,7 +193,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             // (before, the pull was ignored and the indicator stayed stuck half-way)
             if (userInitiated && !_refreshing.value) viewModelScope.launch {
                 _refreshing.value = true; val t0 = System.currentTimeMillis()
-                try { running.join() } finally { delay((MIN_SPIN - (System.currentTimeMillis() - t0)).coerceAtLeast(0)); _refreshing.value = false }
+                try { running.join(); if (_online.value) _messages.tryEmit("Aggiornato: arrivate le ultime modifiche") } finally { delay((MIN_SPIN - (System.currentTimeMillis() - t0)).coerceAtLeast(0)); _refreshing.value = false }
             }
             againNow = true // asked while another update runs (e.g. right after saving): one more, straight after it
             return
@@ -230,6 +230,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 _online.value = true
                 flushOutbox()
+                if (userInitiated) {
+                    // a pull says what it did; the live link, if it had dropped, comes back now instead of after the back-off
+                    _messages.tryEmit(if (tag != null) "Aggiornato: arrivate le ultime modifiche" else "Tutto già aggiornato")
+                    if (stream == null && foreground) { reconnect?.cancel(); backoff = 2_000L; connect() }
+                }
             } catch (e: ApiException) {
                 if (e.status == 401) { signedOut(); return@launch }
                 if (e.device.isNotEmpty()) { stream?.cancel(); stream = null; _device.value = DeviceStatus(e.device, e.code, true); _screen.value = Screen.Device; return@launch }
