@@ -171,7 +171,8 @@ private val accRoutes = setOf("acc", "accSal", "accRec", "accInv", "accPay", "ac
     val haze = dev.chrisbanes.haze.rememberHazeState()
     WatchLiteGraphics()
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
+        // the bar's soft blur band rises 22dp above it and is drawn after the snackbar: the message sits above the band
+        snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = androidx.compose.ui.unit.Dp(if (topLevel) 26f else 0f))) },
         bottomBar = {
             // leaving a tab the glass bar fades away at once (before the next page slides under it); it comes back softly
             // once the tab page has arrived: pages never pass through the bar half-way
